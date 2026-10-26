@@ -57,6 +57,14 @@ test('Mountain raises three supplied visible points to maximum height with valid
   assert.ok(surface.changedPoints.length>3);
 });
 
+test('targeted Mountain always prioritizes the nearest corner to the clicked tile',()=>{
+  const surface=new TerrainSurface(24,new Uint8Array(625),0.65);
+  const candidates=[{x:0,z:0},{x:3,z:0},{x:6,z:0},{x:20,z:20}];
+  assert.equal(mountain(surface,candidates,()=>0,{x:20.5,z:20.5}),true);
+  assert.equal(surface.level(20,20),8);
+  assertSlopes(surface);
+});
+
 test('Mountain cannot modify terrain when no eligible points are in view',()=>{
   const surface=new TerrainSurface(4,new Uint8Array(25).fill(8),0.65);
   const before=surface.levels.slice();

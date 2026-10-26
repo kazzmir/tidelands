@@ -30,10 +30,15 @@ export function earthquake(surface: TerrainSurface, center: GridPoint, random: (
   return recordChanges(surface, before);
 }
 
-export function mountain(surface: TerrainSurface, visible: readonly GridPoint[], random: () => number): boolean {
+export function mountain(surface: TerrainSurface, visible: readonly GridPoint[], random: () => number, target?: GridPoint): boolean {
   const before = surface.levels.slice();
   const candidates = visible.filter(point => surface.level(point.x, point.z) < 8);
   const selected: GridPoint[] = [];
+  if (target && candidates.length) {
+    candidates.sort((a, b) => Math.hypot(a.x - target.x, a.z - target.z) - Math.hypot(b.x - target.x, b.z - target.z));
+    const nearest = candidates.shift();
+    if (nearest) selected.push(nearest);
+  }
   while (candidates.length && selected.length < 3) {
     const index = Math.min(candidates.length - 1, Math.floor(random() * candidates.length));
     const point = candidates.splice(index, 1)[0];

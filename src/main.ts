@@ -83,6 +83,7 @@ const SIZE = 38;
 const STEP = 0.65;
 const SEA = 0.08;
 const powerMeter = new PowerMeter(5, 10_000);
+let selectedSpell: Spell | null = null;
 let seed = 34;
 let randomState = seed;
 function random(): number {
@@ -465,6 +466,8 @@ function updatePowerDisplay(): void {
     const spell = button.dataset.spell as Spell;
     const affordable = powerMeter.value >= SPELL_COSTS[spell];
     button.classList.toggle('affordable', affordable);
+    button.classList.toggle('selected', selectedSpell === spell);
+    button.setAttribute('aria-pressed', String(selectedSpell === spell));
     button.setAttribute('aria-disabled', String(!affordable));
   });
 }
@@ -593,9 +596,10 @@ function updateHover(event: Pick<PointerEvent, 'clientX' | 'clientY'>): void {
     ? tiles[Math.floor(hit.faceIndex / 2)]
     : hit ? tileAt(Math.floor(hit.point.x + SIZE / 2), Math.floor(hit.point.z + SIZE / 2)) ?? null : null;
   hoveredCorner = hovered && hit ? surface.nearestCorner(hit.point.x + SIZE / 2, hit.point.z + SIZE / 2) : null;
-  hoverTarget = !shiftHeld && hoveredCorner ? 1 : 0;
-  surfaceTarget = shiftHeld && hovered ? 1 : 0;
-  if (shiftHeld) {
+  const surfaceSelection = shiftHeld || selectedSpell !== null;
+  hoverTarget = !surfaceSelection && hoveredCorner ? 1 : 0;
+  surfaceTarget = surfaceSelection && hovered ? 1 : 0;
+  if (surfaceSelection) {
     cornerMarker.visible = false;
     hoverStrength = 0;
     if (hovered) {
@@ -620,7 +624,7 @@ function updateHover(event: Pick<PointerEvent, 'clientX' | 'clientY'>): void {
     surfaceStrength = 0;
     glowingSurface = null;
   }
-  if (!shiftHeld && hoveredCorner) {
+  if (!surfaceSelection && hoveredCorner) {
     if (!glowingCorner || glowingCorner.x !== hoveredCorner.x || glowingCorner.z !== hoveredCorner.z) {
       hoverStrength = 0;
       cornerMaterial.opacity = 0;
@@ -631,8 +635,8 @@ function updateHover(event: Pick<PointerEvent, 'clientX' | 'clientY'>): void {
     cornerMarker.position.set(hoveredCorner.x - SIZE / 2, Math.max(SEA, surface.corner(hoveredCorner.x, hoveredCorner.z)) + 0.035, hoveredCorner.z - SIZE / 2);
   }
   const info = element('#tile-info');
-  info.hidden = tool !== 'inspect' || !hovered;
-  if (hovered && tool === 'inspect') {
+  info.hidden = selectedSpell !== null || tool !== 'inspect' || !hovered;
+  if (!selectedSpell && hovered && tool === 'inspect') {
     const kind = hovered.height === 0 ? 'Open water' : hovered.reserved ? 'Castle grounds' : hovered.house ? 'A settler’s cottage' : hasTree(hovered) ? 'Woodland' : fertileTiles.has(hovered) ? 'Fertile farmland' : hovered.height === 1 ? 'Sandy shore' : 'Grassy highlands';
     const walkers = settlers.filter(s => s.tile === hovered && !s.home);
     const visitors = walkers.length;
@@ -643,7 +647,7 @@ function updateHover(event: Pick<PointerEvent, 'clientX' | 'clientY'>): void {
     const cornerInfo = shiftHeld ? 'Surface selected · All four corners' : hoveredCorner ? `Corner ${hoveredCorner.x}, ${hoveredCorner.z} · Height ${surface.level(hoveredCorner.x, hoveredCorner.z)}` : '';
     info.innerHTML = `<strong>${kind}</strong>${cornerInfo}<br>Tile ${hovered.x}, ${hovered.z} · Corners ${surface.level(hovered.x, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z + 1)}, ${surface.level(hovered.x, hovered.z + 1)}<br>${resident ? `${buildingInfo}<br>1 settler lives here.` : visitors ? `${visitors} settler${visitors > 1 ? 's' : ''} here · Power ${walkerPower}` : 'Select a corner to shape the land.'}`;
   }
-  canvas.style.cursor = hovered ? (tool === 'inspect' ? 'help' : 'crosshair') : 'grab';
+  canvas.style.cursor = hovered ? (tool === 'inspect' && !selectedSpell ? 'help' : 'crosshair') : 'grab';
 }
 function setShift(held: boolean): void {
   if (shiftHeld === held) return;
@@ -664,6 +668,11 @@ canvas.addEventListener('pointerup', event => {
   if ((event.button !== 0 && event.button !== 2) || Math.hypot(event.clientX - pointerDown.x, event.clientY - pointerDown.y) > 5) return;
   setShift(event.shiftKey);
   updateHover(event);
+  if (selectedSpell) {
+    if (event.button === 2) cancelSpell();
+    else if (hovered) castSpell(selectedSpell, hovered);
+    return;
+  }
   if (!hovered || !hoveredCorner) return;
   // Mouse buttons directly choose elevation; touch keeps the selected toolbar tool.
   const action = event.pointerType === 'touch' ? tool : event.button === 2 ? 'lower' : 'raise';
@@ -695,7 +704,24 @@ function refreshTerrainAfterEdit(): void {
   if (lastPointer) updateHover(lastPointer);
 }
 let shakeTimer: ReturnType<typeof setTimeout>;
-function castSpell(spell: Spell): void {
+function cancelSpell(): void {
+  selectedSpell = null;
+  updatePowerDisplay();
+  selectTool(tool);
+  if (lastPointer) updateHover(lastPointer);
+}
+function selectSpell(spell: Spell): void {
+  if (selectedSpell === spell) { cancelSpell(); return; }
+  if (powerMeter.value < SPELL_COSTS[spell]) {
+    toast(`${spell === 'earthquake' ? 'Earthquake' : 'Mountain'} needs ${SPELL_COSTS[spell].toLocaleString()} power.`);
+    return;
+  }
+  selectedSpell = spell;
+  updatePowerDisplay();
+  selectTool(tool);
+  if (lastPointer) updateHover(lastPointer);
+}
+function castSpell(spell: Spell, target: Tile): void {
   const cost = SPELL_COSTS[spell];
   if (powerMeter.value < cost) {
     toast(`${spell === 'earthquake' ? 'Earthquake' : 'Mountain'} needs ${cost.toLocaleString()} power.`);
@@ -705,25 +731,22 @@ function castSpell(spell: Spell): void {
   camera.updateMatrixWorld();
   const preview = new TerrainSurface(SIZE, cornerLevels.slice(), STEP);
   let changed = false;
+  const center = { x: target.x + 0.5, z: target.z + 0.5 };
   if (spell === 'earthquake') {
-    const focusRay = new THREE.Raycaster();
-    focusRay.setFromCamera(new THREE.Vector2(), camera);
-    const hit = focusRay.intersectObjects([ground, water])[0];
-    const center = hit ? { x: hit.point.x + SIZE / 2, z: hit.point.z + SIZE / 2 } : null;
-    if (center && center.x >= 0 && center.z >= 0 && center.x <= SIZE && center.z <= SIZE) changed = earthquake(preview, center, random);
+    changed = earthquake(preview, center, random);
   } else {
-    const visible: GridPoint[] = [];
-    const projected = new THREE.Vector3();
-    for (let z = 0; z <= SIZE; z++) {
-      for (let x = 0; x <= SIZE; x++) {
-        projected.set(x - SIZE / 2, surface.corner(x, z), z - SIZE / 2).project(camera);
-        if (Math.abs(projected.x) < 0.85 && Math.abs(projected.y) < 0.85 && Math.abs(projected.z) <= 1) visible.push({ x, z });
+    const nearby: GridPoint[] = [];
+    for (let z = Math.max(0, target.z - 2); z <= Math.min(SIZE, target.z + 3); z++) {
+      for (let x = Math.max(0, target.x - 2); x <= Math.min(SIZE, target.x + 3); x++) {
+        if (Math.hypot(x - center.x, z - center.z) <= 3) nearby.push({ x, z });
       }
     }
-    changed = mountain(preview, visible, random);
+    changed = mountain(preview, nearby, random, center);
   }
-  if (!changed) { toast('Bring some land into view to cast this spell.'); return; }
+  if (!changed) { toast('There are no points left to raise around this tile.'); return; }
   if (!powerMeter.spend(cost)) return;
+  selectedSpell = null;
+  selectTool(tool);
   cornerLevels.set(preview.levels);
   surface.changedPoints.length = 0;
   surface.changedPoints.push(...preview.changedPoints);
@@ -738,7 +761,7 @@ function castSpell(spell: Spell): void {
   }
 }
 document.querySelectorAll<HTMLButtonElement>('[data-spell]').forEach(button => {
-  button.addEventListener('click', () => castSpell(button.dataset.spell as Spell));
+  button.addEventListener('click', () => selectSpell(button.dataset.spell as Spell));
 });
 function selectTool(next: Tool): void {
   tool = next;
@@ -751,11 +774,13 @@ function selectTool(next: Tool): void {
     lower: [shiftHeld ? 'Lower a surface' : 'Lower a corner', shiftHeld ? 'All four corners · Left raises · Right lowers' : 'Left raises · Right lowers · Shift selects surface'],
     inspect: ['Explore your world', 'Hover a tile to discover what lives there'],
   };
-  element('#tool-hint').innerHTML = `<strong>${hints[next][0]}</strong><span class="hint-detail">${hints[next][1]}</span>`;
+  element('#tool-hint').innerHTML = selectedSpell
+    ? `<strong>Cast ${selectedSpell === 'earthquake' ? 'Earthquake' : 'Mountain'}</strong><span class="hint-detail">Click a tile to cast · Esc or right-click to cancel</span>`
+    : `<strong>${hints[next][0]}</strong><span class="hint-detail">${hints[next][1]}</span>`;
   element('#tile-info').hidden = true;
 }
 document.querySelectorAll<HTMLButtonElement>('[data-tool]').forEach(button => {
-  button.addEventListener('click', () => selectTool(button.dataset.tool as Tool));
+  button.addEventListener('click', () => { cancelSpell(); selectTool(button.dataset.tool as Tool); });
 });
 let paused = false;
 let speed = 1;
@@ -778,6 +803,8 @@ element('#reset-view').addEventListener('click', resetCamera);
 element('#new-world').addEventListener('click', () => {
   clearTimeout(shakeTimer);
   document.body.classList.remove('earthquake-shake');
+  selectedSpell = null;
+  selectTool(tool);
   seed += 17; simulationTime = 0; generateWorld(); resetCamera();
   hovered = null; hoveredCorner = null; cornerMarker.visible = false; lastPointer = null;
   glowingSurface = null; surfaceStrength = 0; surfaceTarget = 0;
@@ -798,6 +825,8 @@ window.addEventListener('keydown', event => {
     event.preventDefault();
     panKeys.add(event.code);
   }
+  if (event.key === 'Escape') { cancelSpell(); return; }
+  if (['1', '2', '3'].includes(event.key)) cancelSpell();
   if (event.key === 'Shift') setShift(true);
   if (event.target instanceof HTMLButtonElement && event.code === 'Space') return;
   if (event.code === 'Space') { event.preventDefault(); togglePause(); }
