@@ -54,16 +54,16 @@ test('paused time earns nothing and speed multiplies simulation time', () => {
   assert.equal(fast.value,8);
 });
 
-test('player budgets start and reset at 500, and cannot be overspent', () => {
-  const meter = new PowerMeter(5,500);
-  assert.equal(meter.value,500);
+test('player budgets start and reset at 10000, and cannot be overspent', () => {
+  const meter = new PowerMeter(5,10_000);
+  assert.equal(meter.value,10_000);
   assert.equal(meter.spend(1),true);
-  assert.equal(meter.value,499);
-  assert.equal(meter.spend(500),false);
+  assert.equal(meter.value,9_999);
+  assert.equal(meter.spend(10_000),false);
   assert.equal(meter.spend(-1),false);
-  assert.equal(meter.value,499);
+  assert.equal(meter.value,9_999);
   meter.reset();
-  assert.equal(meter.value,500);
+  assert.equal(meter.value,10_000);
 });
 
 test('corner cascades are charged in full and reject unaffordable edits atomically', () => {

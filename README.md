@@ -75,7 +75,7 @@ Newborns appear on the nearest reachable dry, unobstructed walking tile outside 
 
 ## Accumulated power
 
-The upper-right HUD shows total population and accumulated **Power**. Each world starts with **500 power**. Every **5 simulation seconds**, power increases by the sum of all occupied building power levels (houses 1–4, castles 5). For example, two power-2 houses and a castle produce 9 power per collection. Roaming settlers produce none. Pausing stops collection; 2×/4× speed accelerates it. Existing power is retained if a building is lost; creating a new world resets the balance to 500 and resets the collection timer. Hover the Power number to see the current income rate.
+The upper-right HUD shows total population and accumulated **Power**. Each world starts with **10,000 power**. Every **5 simulation seconds**, power increases by the sum of all occupied building power levels (houses 1–4, castles 5). For example, two power-2 houses and a castle produce 9 power per collection. Roaming settlers produce none. Pausing stops collection; 2×/4× speed accelerates it. Existing power is retained if a building is lost; creating a new world resets the balance to 10,000 and resets the collection timer. Hover the Power number to see the current income rate.
 
 ### Terraforming costs
 

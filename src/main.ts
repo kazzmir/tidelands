@@ -82,7 +82,7 @@ scene.add(sun);
 const SIZE = 38;
 const STEP = 0.65;
 const SEA = 0.08;
-const powerMeter = new PowerMeter(5, 500);
+const powerMeter = new PowerMeter(5, 10_000);
 let seed = 34;
 let randomState = seed;
 function random(): number {
