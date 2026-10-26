@@ -2,6 +2,7 @@ import './style.css';
 import { TerrainSurface, type GridPoint } from './terrain-surface';
 import { PowerMeter } from './power';
 import { elevationContours } from './terrain-contours';
+import { advanceSurvival, createSurvival, SINKING_SECONDS, type Survival } from './survival';
 import { earthquake, mountain, SPELL_COSTS, type Spell } from './spells';
 import { BIRTH_THRESHOLD, birthInterval, characterGrowthRate, growPopulation, INITIAL_CHARACTER_POWER } from './population';
 import { fertileLand, homeSupport, reconcileSettlements, totalBuildingPower, trySettle, type HousePower, type Resident } from './settlement';
@@ -10,7 +11,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 type Tool = 'raise' | 'lower' | 'inspect';
 interface Tile { x: number; z: number; height: number; tree: boolean; house: boolean; reserved?: boolean; castleGap?: boolean }
-interface Settler extends Resident<Tile> { mesh: THREE.Group; target: Tile | null; progress: number; wait: number; phase: number; legs: THREE.Mesh[] }
+interface Settler extends Resident<Tile> { mesh: THREE.Group; survival: Survival; target: Tile | null; progress: number; wait: number; phase: number; legs: THREE.Mesh[] }
 
 function element<T extends HTMLElement>(selector: string): T {
   const result = document.querySelector<T>(selector);
@@ -430,7 +431,7 @@ function createSettler(tile: Tile, characterPower = INITIAL_CHARACTER_POWER): Se
   mesh.traverse(object => { if (object instanceof THREE.Mesh) object.castShadow = true; });
   mesh.position.copy(position(tile)); mesh.scale.setScalar(1.15);
   people.add(mesh);
-  const settler: Settler = { mesh, tile, home: null, power: 0, homeLevel: null, characterPower,
+  const settler: Settler = { mesh, tile, survival: createSurvival(), home: null, power: 0, homeLevel: null, characterPower,
     target: null, progress: 0, wait: random() * 3, phase: random() * 6, legs };
   settlers.push(settler);
   return settler;
@@ -472,31 +473,72 @@ function updatePowerDisplay(): void {
   });
 }
 function updateSettlementStats(): void {
-  const housed = settlers.filter(settler => settler.home !== null).length;
-  const roaming = settlers.length - housed;
-  element('#population').innerHTML = `${settlers.length} <small>settlers</small>`;
+  const living = settlers.filter(settler => settler.survival.phase === 'alive' || settler.survival.phase === 'drowning');
+  const housed = living.filter(settler => settler.home !== null).length;
+  const drowning = living.filter(settler => settler.survival.phase === 'drowning').length;
+  const roaming = living.length - housed - drowning;
+  element('#population').innerHTML = `${living.length} <small>settlers</small>`;
   const castles = settlers.filter(settler => settler.power === 5).length;
-  element('#population').title = `${roaming} roaming · ${housed} at home${castles ? ` · ${castles} castle${castles > 1 ? 's' : ''}` : ''}`;
+  element('#population').title = `${roaming} roaming · ${housed} at home${drowning ? ` · ${drowning} drowning` : ''}${castles ? ` · ${castles} castle${castles > 1 ? 's' : ''}` : ''}`;
   element('#power').title = `+${totalBuildingPower(settlers)} power every ${powerMeter.interval} simulation seconds · Terrain costs 1 power per affected point`;
+}
+function resetWalkingPose(settler: Settler): void {
+  settler.legs.forEach((limb, i) => {
+    limb.rotation.set(0, 0, 0);
+    if (i % 2 === 1) limb.position.y = 0.25;
+  });
+}
+function anchorDrowningSettler(settler: Settler): void {
+  settler.tile = tileAt(Math.floor(settler.mesh.position.x + SIZE / 2), Math.floor(settler.mesh.position.z + SIZE / 2)) ?? settler.tile;
+  settler.target = null; settler.progress = 0; settler.wait = 0;
+}
+function renderSurvival(settler: Settler): void {
+  const state = settler.survival;
+  settler.mesh.visible = state.phase !== 'dead';
+  if (state.phase === 'drowning') {
+    settler.mesh.position.y = SEA - 0.18 + Math.sin(simulationTime * 7 + settler.phase) * 0.015;
+    settler.legs.forEach((limb, i) => {
+      if (i % 2 === 1) {
+        limb.position.y = 0.38;
+        limb.rotation.z = (i === 1 ? -1 : 1) * (2.4 + Math.sin(simulationTime * 12 + settler.phase) * 0.5);
+        limb.rotation.x = Math.sin(simulationTime * 10 + i) * 0.8;
+      }
+    });
+  } else {
+    resetWalkingPose(settler);
+    settler.mesh.position.y = SEA - 0.18 - (state.elapsed / SINKING_SECONDS) * 0.9;
+  }
 }
 function syncResidentMeshes(affected: ReadonlySet<Tile | undefined> = new Set()): void {
   for (const settler of settlers) {
+    if (settler.survival.phase === 'sinking' || settler.survival.phase === 'dead') continue;
     if (settler.home) {
       settler.mesh.visible = false;
       settler.target = null;
       continue;
     }
-    if (!settler.mesh.visible || !isWalkable(settler.tile) || affected.has(settler.tile)
+    if (!settler.mesh.visible) settler.mesh.position.copy(position(settler.tile));
+    const previous = settler.survival.phase;
+    const ground = surface.sample(settler.mesh.position.x + SIZE / 2, settler.mesh.position.z + SIZE / 2);
+    advanceSurvival(settler.survival, 0, ground <= SEA);
+    if (settler.survival.phase === 'drowning') {
+      anchorDrowningSettler(settler);
+      renderSurvival(settler);
+      continue;
+    }
+    if (previous === 'drowning') { resetWalkingPose(settler); settler.wait = 0; }
+    if (!settler.mesh.visible || affected.has(settler.tile)
       || (settler.target && (!isWalkable(settler.target) || affected.has(settler.target)))) {
       settler.target = null; settler.progress = 0; settler.wait = 0;
-      if (!isWalkable(settler.tile)) {
-        const dry = tiles.filter(isWalkable);
-        dry.sort((a, b) => (a.x - settler.tile.x) ** 2 + (a.z - settler.tile.z) ** 2 - (b.x - settler.tile.x) ** 2 - (b.z - settler.tile.z) ** 2);
-        if (dry[0]) settler.tile = dry[0];
-      }
-      settler.mesh.position.copy(position(settler.tile));
+      // Stay at the actual position: snapping to a former tile center can move a flooded walker.
+      settler.tile = tileAt(Math.floor(settler.mesh.position.x + SIZE / 2), Math.floor(settler.mesh.position.z + SIZE / 2)) ?? settler.tile;
     }
-    settler.mesh.visible = isWalkable(settler.tile);
+    if (!isWalkable(settler.tile) && ground > SEA && (settler.tile.house || settler.tile.reserved || hasTree(settler.tile))) {
+      const dry = tiles.filter(isWalkable);
+      dry.sort((a, b) => (a.x - settler.tile.x) ** 2 + (a.z - settler.tile.z) ** 2 - (b.x - settler.tile.x) ** 2 - (b.z - settler.tile.z) ** 2);
+      if (dry[0]) { settler.tile = dry[0]; settler.mesh.position.copy(position(settler.tile)); }
+    }
+    settler.mesh.visible = true;
     settler.mesh.position.y = surface.sample(settler.mesh.position.x + SIZE / 2, settler.mesh.position.z + SIZE / 2);
   }
 }
@@ -638,14 +680,15 @@ function updateHover(event: Pick<PointerEvent, 'clientX' | 'clientY'>): void {
   info.hidden = selectedSpell !== null || tool !== 'inspect' || !hovered;
   if (!selectedSpell && hovered && tool === 'inspect') {
     const kind = hovered.height === 0 ? 'Open water' : hovered.reserved ? 'Castle grounds' : hovered.house ? 'A settler’s cottage' : hasTree(hovered) ? 'Woodland' : fertileTiles.has(hovered) ? 'Fertile farmland' : hovered.height === 1 ? 'Sandy shore' : 'Grassy highlands';
-    const walkers = settlers.filter(s => s.tile === hovered && !s.home);
+    const walkers = settlers.filter(s => s.tile === hovered && !s.home && (s.survival.phase === 'alive' || s.survival.phase === 'drowning'));
+    const drowning = walkers.some(s => s.survival.phase === 'drowning');
     const visitors = walkers.length;
     const walkerPower = walkers.reduce((sum, walker) => sum + walker.characterPower, 0).toFixed(1);
     const inspected = hovered;
     const resident = settlers.find(s => s.home === inspected || (s.power === 5 && s.home && Math.abs(s.home.x - inspected.x) <= 1 && Math.abs(s.home.z - inspected.z) <= 1));
     const buildingInfo = resident?.home ? `${resident.power === 5 ? 'Castle' : 'House'} · Level ${resident.power} · ${homeSupport(surface, resident.home).count}/9 flat tiles<br>Resident power ${resident.characterPower.toFixed(1)} · Growth +${characterGrowthRate(resident.power).toFixed(3)}/s<br>Birth cycle ~${birthInterval(resident.power)}s · Threshold ${BIRTH_THRESHOLD}` : '';
     const cornerInfo = shiftHeld ? 'Surface selected · All four corners' : hoveredCorner ? `Corner ${hoveredCorner.x}, ${hoveredCorner.z} · Height ${surface.level(hoveredCorner.x, hoveredCorner.z)}` : '';
-    info.innerHTML = `<strong>${kind}</strong>${cornerInfo}<br>Tile ${hovered.x}, ${hovered.z} · Corners ${surface.level(hovered.x, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z + 1)}, ${surface.level(hovered.x, hovered.z + 1)}<br>${resident ? `${buildingInfo}<br>1 settler lives here.` : visitors ? `${visitors} settler${visitors > 1 ? 's' : ''} here · Power ${walkerPower}` : 'Select a corner to shape the land.'}`;
+    info.innerHTML = `<strong>${kind}</strong>${cornerInfo}<br>Tile ${hovered.x}, ${hovered.z} · Corners ${surface.level(hovered.x, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z + 1)}, ${surface.level(hovered.x, hovered.z + 1)}<br>${resident ? `${buildingInfo}<br>1 settler lives here.` : drowning ? 'Drowning — raise the land beneath them to rescue!' : visitors ? `${visitors} settler${visitors > 1 ? 's' : ''} here · Power ${walkerPower}` : 'Select a corner to shape the land.'}`;
   }
   canvas.style.cursor = hovered ? (tool === 'inspect' && !selectedSpell ? 'help' : 'crosshair') : 'grab';
 }
@@ -892,8 +935,20 @@ function animate(): void {
   const dt = paused ? 0 : Math.min(elapsed, 0.05) * speed;
   simulationTime += dt;
   let settlementsChanged = false;
+  let survivalChanged = false;
   for (const settler of settlers) {
-    if (!dt || settler.home) continue;
+    if (settler.home) continue;
+    const previous = settler.survival.phase;
+    const ground = surface.sample(settler.mesh.position.x + SIZE / 2, settler.mesh.position.z + SIZE / 2);
+    advanceSurvival(settler.survival, dt, ground <= SEA);
+    if (settler.survival.phase !== previous) survivalChanged = true;
+    if (settler.survival.phase !== 'alive') {
+      if (settler.survival.phase === 'drowning' && previous === 'alive') anchorDrowningSettler(settler);
+      renderSurvival(settler);
+      continue;
+    }
+    if (previous === 'drowning') { resetWalkingPose(settler); settler.wait = 0; settler.mesh.position.y = ground; }
+    if (!dt) continue;
     // Another settler may have built a house after this walk was planned.
     if (settler.target && !isWalkable(settler.target)) {
       settler.target = null;
@@ -930,6 +985,16 @@ function animate(): void {
     reconcileSettlements(settlers, tiles, surface);
     rebuildBuildings();
     syncResidentMeshes();
+    updateSettlementStats();
+    if (lastPointer) updateHover(lastPointer);
+  }
+  for (let i = settlers.length - 1; i >= 0; i--) {
+    if (settlers[i].survival.phase !== 'dead') continue;
+    people.remove(settlers[i].mesh);
+    settlers.splice(i, 1);
+    survivalChanged = true;
+  }
+  if (survivalChanged) {
     updateSettlementStats();
     if (lastPointer) updateHover(lastPointer);
   }

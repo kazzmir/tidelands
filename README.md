@@ -31,7 +31,7 @@ npm run preview # Serve the production build
 - **Reset camera icon:** return to the original isometric view.
 - **New world:** generate a fresh island and population.
 
-Settlers choose neighboring dry tiles, climb one elevation step at a time, and avoid trees and cottages. After walking onto an unoccupied, treeless tile with four equal, above-water corner heights, they build a house and live inside it, disappearing from the map. Each house belongs to one settler; total population includes both roaming and housed settlers. Making a home’s ground non-flat (including through a cascaded edit) removes it and returns its resident to walking. Moving all four corners together preserves the home if it remains dry. Flooding a home also releases its resident; anyone stranded underwater relocates to the nearest dry ground. Hover the population count to see roaming/housed counts and the castle count; Inspect identifies occupied homes. This is a terrain and settlement sandbox, not yet a full civilization simulation. Worlds are not persisted between reloads.
+Settlers choose neighboring dry tiles, climb one elevation step at a time, and avoid trees and cottages. After walking onto an unoccupied, treeless tile with four equal, above-water corner heights, they build a house and live inside it, disappearing from the map. Each house belongs to one settler; total population includes both roaming and housed settlers. Making a home’s ground non-flat (including through a cascaded edit) removes it and returns its resident to walking. Moving all four corners together preserves the home if it remains dry. Flooding a home also releases its resident. Settlers whose ground disappears stay in place and wave their arms for **2 simulation seconds** while drowning. Raising land under their actual position before that deadline rescues them and restores normal walking. Otherwise they die, leave the population count, and sink below the water over 0.8 seconds. They cannot be revived after death. Pause freezes the timer; speed controls accelerate it. Hover the population count to see roaming, housed, drowning, and castle counts; Inspect identifies occupied homes and drowning settlers. This is a terrain and settlement sandbox, not yet a full civilization simulation. Worlds are not persisted between reloads.
 
 Trees retain their species, size, rotation, and horizontal position through terrain edits. Submerged trees disappear but their locations are remembered, allowing them to return when raised above water. Farming permanently clears trees from cultivated tiles, and castle construction clears all nine footprint tiles.
 
@@ -49,7 +49,7 @@ A home counts flat, same-height surfaces connected by tile edges within the **ce
 
 House size reflects its power. Inspect a house to see its exact power and support count. At power 5, a castle occupies all nine tiles, clears vegetation there, and releases residents of other homes within its footprint or its two-tile surrounding buffer. Houses must leave **at least two clear tiles** between themselves and the castle footprint, including diagonally. Walkers can cross this buffer, but cannot settle there. Roaming settlers cannot enter or build in the castle footprint itself. Existing castles have priority; another home cannot expand a castle footprint into an existing footprint or its required buffer. Downgrading or removing a castle frees its buffer for new houses.
 
-Changing an outer tile recomputes support immediately, downgrading the castle to a house and freeing its footprint when support drops below nine. Making its center non-flat, submerged, or changing the center’s height releases the castle resident instead. Restoring nine connected flat tiles can upgrade a surviving house again. Total population is preserved throughout.
+Changing an outer tile recomputes support immediately, downgrading the castle to a house and freeing its footprint when support drops below nine. Making its center non-flat, submerged, or changing the center’s height releases the castle resident instead. Restoring nine connected flat tiles can upgrade a surviving house again. These building transitions preserve residents, though anyone released into water can subsequently drown.
 
 ### Fertile land
 
@@ -98,6 +98,8 @@ Both spells update homes, castles, farming, trees, and settler positions just li
 - `tests/terrain-contours.test.mjs` — contour placement, flat surfaces, shared edges, and height scaling tests.
 - `src/spells.ts` — Earthquake and Mountain terrain effects and fixed power costs.
 - `tests/spells.test.mjs` — spell costs, effects, maximum peaks, slope limits, and valid targets.
+- `src/survival.ts` — drowning, rescue, death, and sinking lifecycle.
+- `tests/survival.test.mjs` — two-second rescue window, pause, irreversible death, and sinking timing.
 - `src/population.ts` — resident character-power growth, equal-power births, and safe-spawn deferral.
 - `tests/population.test.mjs` — growth scaling, splits, inheritance, pause/speed, and blocked births.
 - `src/power.ts` — periodic simulation-time power collection.
