@@ -1,11 +1,14 @@
+export interface Hill {
+  x: number;
+  z: number;
+  height: number;
+}
 export interface LandMass {
   x: number;
   z: number;
   radiusX: number;
   radiusZ: number;
-  peak: number;
-  offsetX: number;
-  offsetZ: number;
+  hills: Hill[];
   phase: number;
 }
 export interface LandBridge {
@@ -18,7 +21,7 @@ export interface WorldLayout {
   bridges: LandBridge[];
 }
 
-/** Nine compact island bodies; bridges deliberately connect them into a larger archipelago. */
+/** Nine 30–100-tile island bodies, each with several peaks; bridges connect the archipelago. */
 export function generateWorldLayout(size: number, seed: number): WorldLayout {
   let state = seed >>> 0;
   const random = (): number => {
@@ -28,15 +31,28 @@ export function generateWorldLayout(size: number, seed: number): WorldLayout {
   const islands: LandMass[] = [];
   for (let z = -1; z <= 1; z++) {
     for (let x = -1; x <= 1; x++) {
+      // Shore taper leaves at least 30 dry tiles across even the smallest body.
+      const radiusX = 17 + Math.floor(random() * 33);
+      const radiusZ = 17 + Math.floor(random() * 33);
+      const phase = random() * Math.PI * 2;
+      const count = 3 + Math.floor(random() * 2);
+      const baseHeight = 5 + ((islands.length + seed) % 3);
+      const hills: Hill[] = [];
+      for (let i = 0; i < count; i++) {
+        const angle = phase + (i * Math.PI * 2) / count;
+        hills.push({
+          x: Math.cos(angle) * radiusX * 0.46,
+          z: Math.sin(angle) * radiusZ * 0.46,
+          height: baseHeight + Math.floor(random() * 2),
+        });
+      }
       islands.push({
-        x: Math.round(size / 2) + x * 52 + Math.floor(random() * 5) - 2,
-        z: Math.round(size / 2) + z * 52 + Math.floor(random() * 5) - 2,
-        radiusX: 16 + Math.floor(random() * 8),
-        radiusZ: 16 + Math.floor(random() * 8),
-        peak: 3 + ((islands.length + seed) % 6),
-        offsetX: Math.floor(random() * 9) - 4,
-        offsetZ: Math.floor(random() * 9) - 4,
-        phase: random() * Math.PI * 2,
+        x: Math.round(size / 2) + x * 106 + Math.floor(random() * 5) - 2,
+        z: Math.round(size / 2) + z * 106 + Math.floor(random() * 5) - 2,
+        radiusX,
+        radiusZ,
+        hills,
+        phase,
       });
     }
   }
@@ -67,6 +83,23 @@ export function generateWorldLayout(size: number, seed: number): WorldLayout {
   return { islands, bridges };
 }
 
+/** Several separated summit fields create mountains with lower valleys between them. */
+export function landMassHeight(island: LandMass, x: number, z: number): number {
+  const dx = x - island.x;
+  const dz = z - island.z;
+  const shore =
+    (Math.min(island.radiusX, island.radiusZ) *
+      (1 - Math.hypot(dx / island.radiusX, dz / island.radiusZ))) /
+    1.5;
+  let hills = 1;
+  for (const hill of island.hills) {
+    hills = Math.max(hills, hill.height - Math.hypot((dx - hill.x) / 2, (dz - hill.z) / 2.2));
+  }
+  const detail = 0.3 * Math.sin(dx * 0.3 + island.phase) + 0.2 * Math.cos(dz * 0.25);
+  // Each field changes by <1 per diagonal step; min/max retain that bound after quantizing.
+  return Math.min(shore, Math.max(1, hills + detail));
+}
+
 /** Rasterize only island/bridge bounds; the remainder of the million-tile world is sea. */
 export function generateWorldHeights(size: number, seed: number): Uint8Array {
   const levels = new Uint8Array((size + 1) ** 2);
@@ -91,20 +124,7 @@ export function generateWorldHeights(size: number, seed: number): Uint8Array {
       island.z - island.radiusZ,
       island.x + island.radiusX,
       island.z + island.radiusZ,
-      (x, z) => {
-        const dx = x - island.x;
-        const dz = z - island.z;
-        const shore =
-          (Math.min(island.radiusX, island.radiusZ) *
-            (1 - Math.hypot(dx / island.radiusX, dz / island.radiusZ))) /
-          1.5;
-        const hill =
-          island.peak - Math.hypot((dx - island.offsetX) / 3, (dz - island.offsetZ) / 3.5);
-        const secondHill = island.peak - 1.5 - Math.hypot((dx + 5) / 3.5, (dz - 5) / 3);
-        const detail = 0.3 * Math.sin(dx * 0.3 + island.phase) + 0.2 * Math.cos(dz * 0.25);
-        // Every continuous field changes by <1 per diagonal grid step, preserving the slope rule after flooring.
-        return Math.min(shore, Math.max(1, Math.max(hill, secondHill) + detail));
-      },
+      (x, z) => landMassHeight(island, x, z),
     );
   }
   for (const bridge of bridges) {

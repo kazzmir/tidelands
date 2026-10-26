@@ -8,7 +8,7 @@ async function loadModule(path){
   const {outputText}=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}});
   return import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
 }
-const {generateWorldHeights,generateWorldLayout}=await loadModule('../src/world-generation.ts');
+const {generateWorldHeights,generateWorldLayout,landMassHeight}=await loadModule('../src/world-generation.ts');
 const {TerrainSurface}=await loadModule('../src/terrain-surface.ts');
 
 test('a 1000×1000 world starts with compact varied-height islands and surrounding sea',()=>{
@@ -26,19 +26,32 @@ test('a 1000×1000 world starts with compact varied-height islands and surroundi
     }
   }
   assert.ok(land>4000,`${land} land points`);
-  assert.ok(land<25000,'islands should remain compact rather than form broad continents');
+  assert.ok(land<85000,'islands should remain bounded rather than form broad continents');
   assert.ok(startingLand>1000,`${startingLand} dry points near the start`);
   assert.ok(heights.size>=5);
   assert.ok(Math.max(...heights)>=6);
 });
 
-test('island bodies fit within 50×50 and frequent dry bridges connect nearby islands',()=>{
+test('island bodies measure 30–100 tiles across, with several mountain peaks each',()=>{
   const {islands,bridges}=generateWorldLayout(1000,34);
   const levels=generateWorldHeights(1000,34);
   assert.equal(islands.length,9);
   for(const island of islands){
-    assert.ok(island.radiusX*2+2<=50);
-    assert.ok(island.radiusZ*2+2<=50);
+    assert.ok(island.hills.length>=3);
+    let left=Infinity,right=-Infinity,top=Infinity,bottom=-Infinity;
+    for(let z=island.z-island.radiusZ;z<=island.z+island.radiusZ;z++){
+      for(let x=island.x-island.radiusX;x<=island.x+island.radiusX;x++){
+        if(Math.floor(landMassHeight(island,x,z))<1)continue;
+        left=Math.min(left,x);right=Math.max(right,x);top=Math.min(top,z);bottom=Math.max(bottom,z);
+      }
+    }
+    // A dry vertex contributes to both neighboring tile surfaces.
+    assert.ok(right-left+2>=30 && right-left+2<=100);
+    assert.ok(bottom-top+2>=30 && bottom-top+2<=100);
+    for(const hill of island.hills){
+      const height=levels[Math.round(island.z+hill.z)*1001+Math.round(island.x+hill.x)];
+      assert.ok(height>=4,'each hill should produce elevated terrain');
+    }
   }
   assert.ok(bridges.length>=8);
   const visited=new Set([0]),queue=[0];
@@ -51,7 +64,7 @@ test('island bodies fit within 50×50 and frequent dry bridges connect nearby is
     const a=islands[bridge.from],b=islands[bridge.to];
     const x=Math.round((a.x+b.x)/2),z=Math.round((a.z+b.z)/2);
     assert.ok(levels[z*1001+x]>0,'bridge midpoint should be dry');
-    assert.ok(Math.hypot(a.x-b.x,a.z-b.z)<60,'bridges should join nearby islands');
+    assert.ok(Math.hypot(a.x-b.x,a.z-b.z)<115,'bridges should join nearby islands');
   }
 });
 
