@@ -2,7 +2,7 @@ import type { GridPoint, TerrainSurface } from './terrain-surface';
 
 export type HousePower = 0 | 1 | 2 | 3 | 4 | 5;
 export interface SettlementTile { x: number; z: number; tree: boolean; house: boolean; reserved?: boolean }
-export interface Resident<T extends SettlementTile> { tile: T; home: T | null; power: HousePower; homeLevel: number | null }
+export interface Resident<T extends SettlementTile> { tile: T; home: T | null; power: HousePower; homeLevel: number | null; characterPower: number }
 
 export function totalBuildingPower<T extends SettlementTile>(residents: readonly Resident<T>[]): number {
   return residents.reduce((sum, resident) => sum + (resident.home ? resident.power : 0), 0);

@@ -14,7 +14,7 @@ const { TerrainSurface } = await loadModule('../src/terrain-surface.ts');
 const { homeSupport, isHabitable, reconcileSettlements, trySettle, releaseInvalidHomes } = await loadModule('../src/settlement.ts');
 const tile = (x = 1, z = 1) => ({x, z, tree:false, house:false});
 const field = (height = 2) => new TerrainSurface(4, new Uint8Array(25).fill(height), 0.65);
-const walker = tile => ({tile, home:null, power:0, homeLevel:null});
+const walker = tile => ({tile, home:null, power:0, homeLevel:null, characterPower:10});
 
 test('a walker claims a flat dry tile and becomes its resident', () => {
   const surface = field();

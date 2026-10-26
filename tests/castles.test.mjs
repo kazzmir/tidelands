@@ -16,7 +16,7 @@ const world = () => {
   const surface = new TerrainSurface(8, new Uint8Array(81).fill(2), 0.65);
   const tiles = Array.from({length:64}, (_, i) => ({x:i % 8, z:Math.floor(i / 8), tree:false, house:false}));
   const resident = (x, z) => {
-    const settler = {tile:tiles[z * 8 + x], home:null, power:0, homeLevel:null};
+    const settler = {tile:tiles[z * 8 + x], home:null, power:0, homeLevel:null, characterPower:10};
     assert.equal(trySettle(settler, surface), true);
     return settler;
   };

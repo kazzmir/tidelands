@@ -55,6 +55,14 @@ Changing an outer tile recomputes support immediately, downgrading the castle to
 
 Flat tiles at a home’s height within its centered 3×3 influence area receive a transparent black-grid farming texture. Cultivated tiles have their trees permanently removed. The overlay preserves the terrain’s elevation colors, updates after edits and building changes, and disappears when no home influences the tile. Overlapping influence areas share one overlay per tile. Castle courtyards show the same pattern over their foundations. Fertility applies to all qualifying flat tiles in range; house power still requires edge-connected support.
 
+## Character power and births
+
+Every starting settler has **10 character power**, separate from the player’s spendable Power and a building’s terrain-derived level. Character power stays with the settler when they build a home, leave it, or are displaced by a castle.
+
+Housed residents gain **1 × building level character power per simulation second**. When a resident exceeds **20**, their power is divided equally: one half stays in the building, and the other becomes a new walking settler. Higher-level buildings therefore have shorter birth intervals; castles grow residents five times as fast as level-1 houses. New settlers carry their inherited power into any home they later build.
+
+Newborns appear on the nearest reachable dry, unobstructed walking tile outside the building/castle. If no safe tile is available, the resident retains their power and the birth waits. Pause stops growth, and speed controls accelerate it. Inspect shows character power, resident growth, and the birth threshold.
+
 ## Accumulated power
 
 The upper-right HUD shows total population and accumulated **Power**. Each world starts with **500 power**. Every **5 simulation seconds**, power increases by the sum of all occupied building power levels (houses 1–4, castles 5). For example, two power-2 houses and a castle produce 9 power per collection. Roaming settlers produce none. Pausing stops collection; 2×/4× speed accelerates it. Existing power is retained if a building is lost; creating a new world resets the balance to 500 and resets the collection timer. Hover the Power number to see the current income rate.
@@ -69,6 +77,8 @@ Raising or lowering costs **1 power per height level changed per point**. Every 
 - `src/terrain-surface.ts` — shared-corner triangle mesh and matching surface-height sampling.
 - `src/terrain-contours.ts` — elevation contour segments where sloping triangles intersect integer height planes.
 - `tests/terrain-contours.test.mjs` — contour placement, flat surfaces, shared edges, and height scaling tests.
+- `src/population.ts` — resident character-power growth, equal-power births, and safe-spawn deferral.
+- `tests/population.test.mjs` — growth scaling, splits, inheritance, pause/speed, and blocked births.
 - `src/power.ts` — periodic simulation-time power collection.
 - `tests/power.test.mjs` — building income, timing, speed, pause, and reset tests.
 - `src/settlement.ts` — flat-ground house placement, connected-land power, castle footprints, ownership, and resident release.

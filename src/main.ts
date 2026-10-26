@@ -2,6 +2,7 @@ import './style.css';
 import { TerrainSurface, type GridPoint } from './terrain-surface';
 import { PowerMeter } from './power';
 import { elevationContours } from './terrain-contours';
+import { BIRTH_THRESHOLD, growPopulation, INITIAL_CHARACTER_POWER } from './population';
 import { fertileLand, homeSupport, reconcileSettlements, totalBuildingPower, trySettle, type HousePower, type Resident } from './settlement';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -411,28 +412,50 @@ const bodyGeometry = new THREE.BoxGeometry(0.17, 0.21, 0.12);
 const headGeometry = new THREE.BoxGeometry(0.135, 0.14, 0.13);
 const hairGeometry = new THREE.BoxGeometry(0.145, 0.055, 0.14);
 const limbGeometry = new THREE.BoxGeometry(0.055, 0.16, 0.065);
+function createSettler(tile: Tile, characterPower = INITIAL_CHARACTER_POWER): Settler {
+  const mesh = new THREE.Group();
+  const body = new THREE.Mesh(bodyGeometry, shirtMaterials[settlers.length % shirtMaterials.length]); body.position.y = 0.25;
+  const head = new THREE.Mesh(headGeometry, skinMaterial); head.position.y = 0.425;
+  const hair = new THREE.Mesh(hairGeometry, hairMaterial); hair.position.set(0, 0.49, -0.01);
+  const legs: THREE.Mesh[] = [];
+  for (const sign of [-1, 1]) {
+    const leg = new THREE.Mesh(limbGeometry, trouserMaterial); leg.position.set(sign * 0.05, 0.085, 0);
+    const arm = new THREE.Mesh(limbGeometry, skinMaterial); arm.position.set(sign * 0.115, 0.25, 0);
+    legs.push(leg, arm); mesh.add(leg, arm);
+  }
+  mesh.add(body, head, hair);
+  mesh.traverse(object => { if (object instanceof THREE.Mesh) object.castShadow = true; });
+  mesh.position.copy(position(tile)); mesh.scale.setScalar(1.15);
+  people.add(mesh);
+  const settler: Settler = { mesh, tile, home: null, power: 0, homeLevel: null, characterPower,
+    target: null, progress: 0, wait: random() * 3, phase: random() * 6, legs };
+  settlers.push(settler);
+  return settler;
+}
 function spawnSettlers(): void {
   people.clear(); settlers.length = 0;
   const walkable = tiles.filter(t => t.height > 1 && isWalkable(t) && neighbors(t).length > 0);
-  for (let i = 0; i < Math.min(24, walkable.length); i++) {
-    const tile = walkable[Math.floor(random() * walkable.length)];
-    const mesh = new THREE.Group();
-    const body = new THREE.Mesh(bodyGeometry, shirtMaterials[i % shirtMaterials.length]); body.position.y = 0.25;
-    const head = new THREE.Mesh(headGeometry, skinMaterial); head.position.y = 0.425;
-    const hair = new THREE.Mesh(hairGeometry, hairMaterial); hair.position.set(0, 0.49, -0.01);
-    const legs: THREE.Mesh[] = [];
-    for (const sign of [-1, 1]) {
-      const leg = new THREE.Mesh(limbGeometry, trouserMaterial); leg.position.set(sign * 0.05, 0.085, 0);
-      const arm = new THREE.Mesh(limbGeometry, skinMaterial); arm.position.set(sign * 0.115, 0.25, 0);
-      legs.push(leg, arm); mesh.add(leg, arm);
-    }
-    mesh.add(body, head, hair);
-    mesh.traverse(object => { if (object instanceof THREE.Mesh) object.castShadow = true; });
-    mesh.position.copy(position(tile)); mesh.scale.setScalar(1.15);
-    people.add(mesh);
-    settlers.push({ mesh, tile, home: null, power: 0, homeLevel: null, target: null, progress: 0, wait: random() * 3, phase: random() * 6, legs });
-  }
+  for (let i = 0; i < Math.min(24, walkable.length); i++) createSettler(walkable[Math.floor(random() * walkable.length)]);
   updateSettlementStats();
+}
+function findBirthTile(home: Tile): Tile | null {
+  const queue = [home];
+  const visited = new Set(queue);
+  for (let head = 0; head < queue.length; head++) {
+    const tile = queue[head];
+    if (isWalkable(tile) && neighbors(tile).length > 0) return tile;
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const next = tileAt(tile.x + dx, tile.z + dz);
+      if (!next || visited.has(next)) continue;
+      visited.add(next);
+      const ownCastle = home.reserved && Math.abs(next.x - home.x) <= 1 && Math.abs(next.z - home.z) <= 1;
+      if (next.house || (next.reserved && !ownCastle) || hasTree(next)
+        || position(next).y <= SEA || Math.abs(position(next).y - position(tile).y) > STEP + 1e-6
+        || surface.sample(tile.x + 0.5 + dx / 2, tile.z + 0.5 + dz / 2) <= SEA) continue;
+      queue.push(next);
+    }
+  }
+  return null;
 }
 function updateSettlementStats(): void {
   const housed = settlers.filter(settler => settler.home !== null).length;
@@ -600,12 +623,14 @@ function updateHover(event: Pick<PointerEvent, 'clientX' | 'clientY'>): void {
   info.hidden = tool !== 'inspect' || !hovered;
   if (hovered && tool === 'inspect') {
     const kind = hovered.height === 0 ? 'Open water' : hovered.reserved ? 'Castle grounds' : hovered.house ? 'A settler’s cottage' : hasTree(hovered) ? 'Woodland' : fertileTiles.has(hovered) ? 'Fertile farmland' : hovered.height === 1 ? 'Sandy shore' : 'Grassy highlands';
-    const visitors = settlers.filter(s => s.tile === hovered && !s.home).length;
+    const walkers = settlers.filter(s => s.tile === hovered && !s.home);
+    const visitors = walkers.length;
+    const walkerPower = walkers.reduce((sum, walker) => sum + walker.characterPower, 0).toFixed(1);
     const inspected = hovered;
     const resident = settlers.find(s => s.home === inspected || (s.power === 5 && s.home && Math.abs(s.home.x - inspected.x) <= 1 && Math.abs(s.home.z - inspected.z) <= 1));
-    const buildingInfo = resident?.home ? `${resident.power === 5 ? 'Castle' : 'House'} · Power ${resident.power} · ${homeSupport(surface, resident.home).count}/9 connected flat tiles` : '';
+    const buildingInfo = resident?.home ? `${resident.power === 5 ? 'Castle' : 'House'} · Level ${resident.power} · ${homeSupport(surface, resident.home).count}/9 flat tiles<br>Resident power ${resident.characterPower.toFixed(1)} · Growth +${resident.power}/s<br>Birth above ${BIRTH_THRESHOLD} · Splits power equally` : '';
     const cornerInfo = shiftHeld ? 'Surface selected · All four corners' : hoveredCorner ? `Corner ${hoveredCorner.x}, ${hoveredCorner.z} · Height ${surface.level(hoveredCorner.x, hoveredCorner.z)}` : '';
-    info.innerHTML = `<strong>${kind}</strong>${cornerInfo}<br>Tile ${hovered.x}, ${hovered.z} · Corners ${surface.level(hovered.x, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z + 1)}, ${surface.level(hovered.x, hovered.z + 1)}<br>${resident ? `${buildingInfo}<br>1 settler lives here.` : visitors ? `${visitors} settler${visitors > 1 ? 's' : ''} here` : 'Select a corner to shape the land.'}`;
+    info.innerHTML = `<strong>${kind}</strong>${cornerInfo}<br>Tile ${hovered.x}, ${hovered.z} · Corners ${surface.level(hovered.x, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z + 1)}, ${surface.level(hovered.x, hovered.z + 1)}<br>${resident ? `${buildingInfo}<br>1 settler lives here.` : visitors ? `${visitors} settler${visitors > 1 ? 's' : ''} here · Power ${walkerPower}` : 'Select a corner to shape the land.'}`;
   }
   canvas.style.cursor = hovered ? (tool === 'inspect' ? 'help' : 'crosshair') : 'grab';
 }
@@ -810,6 +835,12 @@ function animate(): void {
     reconcileSettlements(settlers, tiles, surface);
     rebuildBuildings();
     syncResidentMeshes();
+    updateSettlementStats();
+    if (lastPointer) updateHover(lastPointer);
+  }
+  const births = growPopulation(settlers, dt, findBirthTile);
+  for (const birth of births) createSettler(birth.tile, birth.characterPower).wait = 0;
+  if (births.length) {
     updateSettlementStats();
     if (lastPointer) updateHover(lastPointer);
   }
