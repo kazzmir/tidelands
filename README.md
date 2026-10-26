@@ -17,6 +17,12 @@ npm run build    # Type-check and produce dist/
 npm run preview # Serve the production build
 ```
 
+## World size and rendering
+
+Worlds contain **1,000 × 1,000 tiles** with a much larger starting mainland, a second island, and broad archipelagos across the rest of the map. Settlers start near the camera on dry ground. Terrain generation is seeded and preserves the one-level neighboring-height limit.
+
+Only a padded camera region is converted into render geometry; that region streams as the camera pans, rotates, or zooms. Tile objects are created lazily and retain their building, farming, and tree state when revisited. Trees are drawn in instanced batches, and settlement updates touch home neighborhoods rather than scanning the million-tile map. Height edits remain global, including cascades beyond the current view. Water, wave detail, lighting, and shadows cover/follow the expanded world.
+
 ## Controls
 
 - **Left-click:** raise the nearest grid corner one level, regardless of the selected tool.
@@ -93,7 +99,9 @@ Both spells update homes, castles, farming, trees, and settler positions just li
 ## Structure
 
 - `src/main.ts` — a single `startGame()` entry point owns game state; named functions create the scene/icons/water, bind terrain/spell/tool/simulation/keyboard input, and start rendering. Terrain, scenery, simulation, and interactions run inside functions rather than module-level initialization.
-- `src/terrain-surface.ts` — shared-corner triangle mesh and matching surface-height sampling.
+- `src/terrain-surface.ts` — shared-corner triangle mesh, bounded camera-region geometry, and matching surface-height sampling.
+- `src/world-generation.ts` — seeded continents and starting mainland across the full 1,000×1,000 map.
+- `tests/world-generation.test.mjs` — world dimensions, land coverage, full-map slope limits, reproducibility, and bounded rendering.
 - `src/terrain-contours.ts` — elevation contour segments where sloping triangles intersect integer height planes.
 - `tests/terrain-contours.test.mjs` — contour placement, flat surfaces, shared edges, and height scaling tests.
 - `src/spells.ts` — Earthquake and Mountain terrain effects and fixed power costs.

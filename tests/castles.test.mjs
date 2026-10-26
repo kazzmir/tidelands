@@ -197,6 +197,20 @@ test('castle expansion releases houses in the buffer, and downgrading frees the 
   assert.equal(trySettle(adjacent,surface),true);
 });
 
+test('settlements can use lazy tile lookup without enumerating the entire world', () => {
+  const {surface,tiles,resident} = world();
+  const owner = resident(4,4);
+  const lookup = (x,z) => x<0 || z<0 || x>=8 || z>=8 ? undefined : tiles[z*8+x];
+  reconcileSettlements([owner],[],surface,lookup);
+  assert.equal(owner.power,5);
+  assert.equal(tiles.filter(tile=>tile.reserved).length,9);
+  assert.equal(tiles.filter(tile=>tile.castleGap).length,40);
+  surface.editCorner(3,3,1);
+  reconcileSettlements([owner],[],surface,lookup);
+  assert.equal(owner.power,4);
+  assert.equal(tiles.some(tile=>tile.reserved || tile.castleGap),false);
+});
+
 test('existing castles keep priority and castle expansions respect the gap', () => {
   const {surface,tiles,resident} = world();
   const castle = resident(2,3);

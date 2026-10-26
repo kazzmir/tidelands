@@ -82,11 +82,21 @@ export function releaseInvalidHomes<T extends SettlementTile>(residents: readonl
 }
 
 /** Recompute powers, reserve castle footprints, and evict homes swallowed by castles. */
-export function reconcileSettlements<T extends SettlementTile>(residents: readonly Resident<T>[], tiles: readonly T[], surface: TerrainSurface): boolean {
+export function reconcileSettlements<T extends SettlementTile>(residents: readonly Resident<T>[], tiles: readonly T[], surface: TerrainSurface, lookup?: (x: number, z: number) => T | undefined): boolean {
   const before = residents.map(resident => ({ home: resident.home, power: resident.power }));
   releaseInvalidHomes(residents, surface);
-  const tileMap = new Map(tiles.map(tile => [`${tile.x},${tile.z}`, tile]));
-  for (const tile of tiles) { tile.reserved = false; tile.castleGap = false; }
+  const tileMap = lookup ? null : new Map(tiles.map(tile => [`${tile.x},${tile.z}`, tile]));
+  const findTile = (x: number, z: number): T | undefined => lookup ? lookup(x, z) : tileMap?.get(`${x},${z}`);
+  // Only actual home neighborhoods can carry reservations; avoid scanning a large world.
+  for (const previous of before) {
+    if (!previous.home) continue;
+    for (let z = previous.home.z - 3; z <= previous.home.z + 3; z++) {
+      for (let x = previous.home.x - 3; x <= previous.home.x + 3; x++) {
+        const tile = findTile(x, z);
+        if (tile) { tile.reserved = false; tile.castleGap = false; }
+      }
+    }
+  }
   // Existing castles get first claim, then resident order breaks ties deterministically.
   const candidates = residents.filter(resident => resident.home).sort((a, b) => Number(b.power === 5) - Number(a.power === 5));
   for (const resident of candidates) {
@@ -94,7 +104,7 @@ export function reconcileSettlements<T extends SettlementTile>(residents: readon
     if (!home) continue; // An earlier castle may have displaced this resident.
     if (home.castleGap) { release(resident); continue; }
     const support = homeSupport(surface, home);
-    const footprint = support.tiles.map(point => tileMap.get(`${point.x},${point.z}`));
+    const footprint = support.tiles.map(point => findTile(point.x, point.z));
     if (support.power === 5 && footprint.every(tile => tile && !tile.reserved && !tile.castleGap)) {
       resident.power = 5;
       for (const tile of footprint) {
@@ -105,7 +115,7 @@ export function reconcileSettlements<T extends SettlementTile>(residents: readon
       // Keep two walkable, unbuildable tiles clear around the full 3×3 footprint.
       for (let z = home.z - 3; z <= home.z + 3; z++) {
         for (let x = home.x - 3; x <= home.x + 3; x++) {
-          const tile = tileMap.get(`${x},${z}`);
+          const tile = findTile(x, z);
           if (tile && (Math.abs(x - home.x) > 1 || Math.abs(z - home.z) > 1)) tile.castleGap = true;
         }
       }
@@ -120,7 +130,7 @@ export function reconcileSettlements<T extends SettlementTile>(residents: readon
   }
   // Cultivation clears trees permanently, just like a castle footprint.
   for (const point of fertileLand(residents, surface)) {
-    const tile = tileMap.get(`${point.x},${point.z}`);
+    const tile = findTile(point.x, point.z);
     if (tile) tile.tree = false;
   }
   return residents.some((resident, i) => resident.home !== before[i].home || resident.power !== before[i].power);

@@ -1,4 +1,5 @@
 export interface GridPoint { x: number; z: number }
+export interface TerrainBounds { x: number; z: number; width: number; depth: number }
 export interface PowerBudget { spend(amount: number): boolean }
 export interface TerraformResult { status: 'changed' | 'limit' | 'insufficient'; cost: number }
 
@@ -125,17 +126,21 @@ export class TerrainSurface {
       : se * (u + v - 1) + sw * (1 - u) + ne * (1 - v);
   }
 
-  /** Six vertices per tile; face index / 2 identifies the tile. No center vertex. */
-  positions(): Float32Array {
-    const result: number[] = [];
+  /** Six vertices per tile, optionally limited to a streamed camera region. */
+  positions(bounds: TerrainBounds = { x: 0, z: 0, width: this.size, depth: this.size }): Float32Array {
+    const result = new Float32Array(bounds.width * bounds.depth * 18);
     const half = this.size / 2;
-    for (let z = 0; z < this.size; z++) {
-      for (let x = 0; x < this.size; x++) {
-        for (const [dx, dz] of [[0, 0], [0, 1], [1, 0], [1, 0], [0, 1], [1, 1]]) {
-          result.push(x + dx - half, this.corner(x + dx, z + dz), z + dz - half);
+    const offsets = [[0, 0], [0, 1], [1, 0], [1, 0], [0, 1], [1, 1]];
+    let index = 0;
+    for (let z = bounds.z; z < bounds.z + bounds.depth; z++) {
+      for (let x = bounds.x; x < bounds.x + bounds.width; x++) {
+        for (const [dx, dz] of offsets) {
+          result[index++] = x + dx - half;
+          result[index++] = this.corner(x + dx, z + dz);
+          result[index++] = z + dz - half;
         }
       }
     }
-    return new Float32Array(result);
+    return result;
   }
 }

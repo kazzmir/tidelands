@@ -1,5 +1,6 @@
 import './style.css';
-import { TerrainSurface, type GridPoint } from './terrain-surface';
+import { generateWorldHeights } from './world-generation';
+import { TerrainSurface, type GridPoint, type TerrainBounds } from './terrain-surface';
 import { PowerMeter } from './power';
 import { elevationContours } from './terrain-contours';
 import { advanceSurvival, createSurvival, SINKING_SECONDS, type Survival } from './survival';
@@ -126,15 +127,15 @@ function createWorldView() {
   sun.shadow.normalBias = 0.06;
   sun.shadow.bias = -0.0005;
   sun.shadow.radius = 3;
-  scene.add(sun);
-  return { canvas, world, renderer, scene, camera, controls, resetCamera };
+  scene.add(sun, sun.target);
+  return { canvas, world, renderer, scene, camera, controls, sun, resetCamera };
 }
 
 function startGame(): void {
   const icon = createIconRenderer();
   initializeIcons(icon);
-  const { canvas, world, renderer, scene, camera, controls, resetCamera } = createWorldView();
-  const SIZE = 38;
+  const { canvas, world, renderer, scene, camera, controls, sun, resetCamera } = createWorldView();
+  const SIZE = 1000;
   const STEP = 0.65;
   const SEA = 0.08;
   const powerMeter = new PowerMeter(5, 10_000);
@@ -150,14 +151,18 @@ function startGame(): void {
     return n - Math.floor(n);
   }
   const tiles: Tile[] = [];
+  const tileCache = new Map<number, Tile>();
+  let visibleTiles: Tile[] = [];
+  let renderedBounds: TerrainBounds = { x: 0, z: 0, width: 0, depth: 0 };
   const cornerLevels = new Uint8Array((SIZE + 1) ** 2);
   const terrain = new THREE.Group();
   const scenery = new THREE.Group();
   const people = new THREE.Group();
   const buildings = new THREE.Group();
   const farms = new THREE.Group();
+  const trees = new THREE.Group();
   const fertileTiles = new Set<Tile>();
-  scene.add(terrain, scenery, farms, buildings, people);
+  scene.add(terrain, scenery, trees, farms, buildings, people);
   // Distinct elevation colors, interpolated across each slope from its corner heights.
   const heightColors = [
     '#bca171', // 0: submerged sand
@@ -184,6 +189,7 @@ function startGame(): void {
     depthWrite: false,
   });
   let surface: TerrainSurface;
+  let initialSurface: TerrainSurface;
   const tempColor = new THREE.Color();
   const treeTrunk = new THREE.MeshStandardMaterial({ color: '#796e48', roughness: 1 });
   const foliage = ['#3f7556', '#4e8057', '#64874f', '#5a8051'].map(
@@ -213,7 +219,21 @@ function startGame(): void {
   const pathGeometry = new THREE.PlaneGeometry(0.42, 0.92);
   function tileAt(x: number, z: number): Tile | undefined {
     if (x < 0 || z < 0 || x >= SIZE || z >= SIZE) return undefined;
-    return tiles[z * SIZE + x];
+    const index = z * SIZE + x;
+    let tile = tileCache.get(index);
+    if (!tile) {
+      const height = surface.elevation(x, z);
+      tile = {
+        x,
+        z,
+        height,
+        tree: initialSurface.elevation(x, z) > 2 && hash(x, z) > 0.88,
+        house: false,
+      };
+      tileCache.set(index, tile);
+      tiles.push(tile);
+    }
+    return tile;
   }
   function position(tile: Tile): THREE.Vector3 {
     return new THREE.Vector3(
@@ -229,6 +249,7 @@ function startGame(): void {
     };
   }
   function hasTree(tile: Tile): boolean {
+    if (!tile.tree) return false;
     const anchor = treeAnchor(tile);
     return tile.tree && surface.sample(anchor.x, anchor.z) > SEA;
   }
@@ -259,31 +280,54 @@ function startGame(): void {
     }
     return result;
   }
-  function addTree(tile: Tile): void {
-    const group = new THREE.Group();
-    const trunk = new THREE.Mesh(trunkGeometry, treeTrunk);
-    trunk.position.y = 0.27;
-    const material = foliage[Math.floor(hash(tile.x + 31, tile.z) * foliage.length)];
-    const crown = new THREE.Mesh(leafGeometry, material);
-    crown.position.y = 0.95;
-    const crown2 = new THREE.Mesh(leafGeometry, material);
-    crown2.scale.setScalar(0.77);
-    crown2.position.y = 1.42;
-    group.add(trunk, crown, crown2);
-    const anchor = treeAnchor(tile);
-    group.position.set(
-      anchor.x - SIZE / 2,
-      surface.sample(anchor.x, anchor.z),
-      anchor.z - SIZE / 2,
-    );
-    group.userData.tile = tile;
-    group.userData.tree = true;
-    group.rotation.y = hash(tile.x + 47, tile.z) * Math.PI;
-    group.scale.setScalar(0.65 + hash(tile.x + 59, tile.z) * 0.35);
-    group.traverse((object) => {
-      if (object instanceof THREE.Mesh) object.castShadow = true;
+  function rebuildTrees(): void {
+    for (const object of trees.children)
+      if (object instanceof THREE.InstancedMesh) object.dispose();
+    trees.clear();
+    const wooded = visibleTiles.filter((tile) => !tile.house && !tile.reserved && hasTree(tile));
+    if (!wooded.length) return;
+    const trunks = new THREE.InstancedMesh(trunkGeometry, treeTrunk, wooded.length);
+    const crowns = foliage.map((material, variant) => {
+      const matching = wooded.filter(
+        (tile) => Math.floor(hash(tile.x + 31, tile.z) * foliage.length) === variant,
+      );
+      return {
+        matching,
+        mesh: new THREE.InstancedMesh(leafGeometry, material, Math.max(1, matching.length * 2)),
+      };
     });
-    scenery.add(group);
+    const dummy = new THREE.Object3D();
+    function place(
+      mesh: THREE.InstancedMesh,
+      index: number,
+      tile: Tile,
+      offset: number,
+      crownScale = 1,
+    ): void {
+      const anchor = treeAnchor(tile);
+      const scale = 0.65 + hash(tile.x + 59, tile.z) * 0.35;
+      dummy.position.set(
+        anchor.x - SIZE / 2,
+        surface.sample(anchor.x, anchor.z) + offset * scale,
+        anchor.z - SIZE / 2,
+      );
+      dummy.rotation.set(0, hash(tile.x + 47, tile.z) * Math.PI, 0);
+      dummy.scale.setScalar(scale * crownScale);
+      dummy.updateMatrix();
+      mesh.setMatrixAt(index, dummy.matrix);
+    }
+    wooded.forEach((tile, i) => place(trunks, i, tile, 0.27));
+    trunks.castShadow = true;
+    trees.add(trunks);
+    for (const { matching, mesh } of crowns) {
+      mesh.count = matching.length * 2;
+      matching.forEach((tile, i) => {
+        place(mesh, i * 2, tile, 0.95);
+        place(mesh, i * 2 + 1, tile, 1.42, 0.77);
+      });
+      mesh.castShadow = true;
+      trees.add(mesh);
+    }
   }
   function addHouse(tile: Tile, power: HousePower): void {
     // Remove incidental rocks/paths when a settler claims this tile.
@@ -434,11 +478,8 @@ function startGame(): void {
       field.renderOrder = 2;
       farms.add(field);
     }
-    // New farms can appear without a terrain rebuild; remove their existing tree meshes now.
-    for (const decoration of [...scenery.children]) {
-      const tile = decoration.userData.tile as Tile | undefined;
-      if (decoration.userData.tree && tile && fertileTiles.has(tile)) scenery.remove(decoration);
-    }
+    // Refresh instance batches when farms or castles clear trees.
+    rebuildTrees();
   }
   function rebuildBuildings(): void {
     buildings.traverse((object) => {
@@ -465,17 +506,28 @@ function startGame(): void {
       if (object.userData.ownedGeometry && object instanceof THREE.Mesh) object.geometry.dispose();
     });
     scenery.clear();
-    surface = new TerrainSurface(SIZE, cornerLevels, STEP);
-    for (const tile of tiles) tile.height = surface.elevation(tile.x, tile.z);
+    visibleTiles = [];
+    for (let z = renderedBounds.z; z < renderedBounds.z + renderedBounds.depth; z++) {
+      for (let x = renderedBounds.x; x < renderedBounds.x + renderedBounds.width; x++) {
+        const tile = tileAt(x, z);
+        if (tile) {
+          tile.height = surface.elevation(x, z);
+          visibleTiles.push(tile);
+        }
+      }
+    }
     const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.BufferAttribute(surface.positions(), 3));
+    geometry.setAttribute(
+      'position',
+      new THREE.BufferAttribute(surface.positions(renderedBounds), 3),
+    );
     const vertices = geometry.getAttribute('position');
-    const colors = new Float32Array(tiles.length * 6 * 3);
+    const colors = new Float32Array(visibleTiles.length * 6 * 3);
     ground = new THREE.Mesh(geometry, groundMaterial);
     ground.castShadow = true;
     ground.receiveShadow = true;
-    for (let i = 0; i < tiles.length; i++) {
-      const tile = tiles[i];
+    for (let i = 0; i < visibleTiles.length; i++) {
+      const tile = visibleTiles[i];
       for (let vertex = 0; vertex < 6; vertex++) {
         const index = i * 6 + vertex;
         const height = THREE.MathUtils.clamp(
@@ -491,8 +543,7 @@ function startGame(): void {
         tempColor.toArray(colors, index * 3);
       }
       if (tile.house || tile.reserved) continue;
-      if (hasTree(tile)) addTree(tile);
-      else if (tile.height > 1) {
+      if (!hasTree(tile) && tile.height > 1) {
         if (hash(tile.x + 60, tile.z) > 0.967) {
           const rock = new THREE.Mesh(rockGeometry, rockMaterial);
           rock.position.copy(position(tile));
@@ -547,7 +598,7 @@ function startGame(): void {
 
   function createWater() {
     const water = new THREE.Mesh(
-      new THREE.PlaneGeometry(500, 500),
+      new THREE.PlaneGeometry(SIZE * 3, SIZE * 3),
       new THREE.MeshStandardMaterial({ color: '#659e95', roughness: 1, metalness: 0 }),
     );
     water.rotation.x = -Math.PI / 2;
@@ -633,7 +684,13 @@ function startGame(): void {
   function spawnSettlers(): void {
     people.clear();
     settlers.length = 0;
-    const walkable = tiles.filter((t) => t.height > 1 && isWalkable(t) && neighbors(t).length > 0);
+    const walkable = visibleTiles.filter(
+      (t) =>
+        Math.hypot(t.x - SIZE / 2, t.z - SIZE / 2) < 14 &&
+        t.height > 1 &&
+        isWalkable(t) &&
+        neighbors(t).length > 0,
+    );
     for (let i = 0; i < Math.min(24, walkable.length); i++)
       createSettler(walkable[Math.floor(random() * walkable.length)]);
     updateSettlementStats();
@@ -792,6 +849,57 @@ function startGame(): void {
       );
     }
   }
+  function cameraTerrainBounds(): TerrainBounds {
+    camera.updateMatrixWorld();
+    const ray = new THREE.Raycaster();
+    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    const intersections: THREE.Vector3[] = [];
+    for (const x of [-1, 1]) {
+      for (const y of [-1, 1]) {
+        ray.setFromCamera(new THREE.Vector2(x, y), camera);
+        const hit = ray.ray.intersectPlane(plane, new THREE.Vector3());
+        if (hit) intersections.push(hit);
+      }
+    }
+    if (!intersections.length) intersections.push(controls.target.clone());
+    const x = THREE.MathUtils.clamp(
+      Math.floor((Math.min(...intersections.map((p) => p.x)) + SIZE / 2) / 16) * 16 - 8,
+      0,
+      SIZE - 1,
+    );
+    const z = THREE.MathUtils.clamp(
+      Math.floor((Math.min(...intersections.map((p) => p.z)) + SIZE / 2) / 16) * 16 - 8,
+      0,
+      SIZE - 1,
+    );
+    const right = THREE.MathUtils.clamp(
+      Math.ceil((Math.max(...intersections.map((p) => p.x)) + SIZE / 2) / 16) * 16 + 8,
+      x + 1,
+      SIZE,
+    );
+    const bottom = THREE.MathUtils.clamp(
+      Math.ceil((Math.max(...intersections.map((p) => p.z)) + SIZE / 2) / 16) * 16 + 8,
+      z + 1,
+      SIZE,
+    );
+    return { x, z, width: right - x, depth: bottom - z };
+  }
+  function updateVisibleTerrain(): boolean {
+    const next = cameraTerrainBounds();
+    if (
+      next.x === renderedBounds.x &&
+      next.z === renderedBounds.z &&
+      next.width === renderedBounds.width &&
+      next.depth === renderedBounds.depth
+    )
+      return false;
+    renderedBounds = next;
+    rebuild();
+    return true;
+  }
+  function reconcileWorldSettlements(): void {
+    reconcileSettlements(settlers, tiles, surface, tileAt);
+  }
   function generateWorld(): void {
     powerMeter.reset();
     updatePowerDisplay();
@@ -799,29 +907,11 @@ function startGame(): void {
     people.clear();
     settlers.length = 0;
     tiles.length = 0;
-    const offset = seed === 34 ? 0 : hash(seed, seed) * 10;
-    for (let z = 0; z <= SIZE; z++) {
-      for (let x = 0; x <= SIZE; x++) {
-        const px = x - SIZE / 2;
-        const pz = z - SIZE / 2;
-        const ripple = Math.sin(px * 0.55 + offset) * 0.85 + Math.sin(pz * 0.65 + px * 0.25) * 0.65;
-        const main = 1 - Math.sqrt(((px + 1.5) / 13.5) ** 2 + ((pz + 1) / 10.5) ** 2);
-        const hill = 2.8 * Math.exp(-((px + 4) ** 2 + (pz + 3) ** 2) / 35);
-        const small = 1 - Math.sqrt(((px - 11) / 4.7) ** 2 + ((pz - 8) / 5) ** 2);
-        let height = Math.max(0, Math.floor(main * 5 + ripple + hill));
-        height = Math.max(height, Math.max(0, Math.floor(small * 4 + 0.5)));
-        cornerLevels[z * (SIZE + 1) + x] = height;
-      }
-    }
+    tileCache.clear();
+    cornerLevels.set(generateWorldHeights(SIZE, seed));
     surface = new TerrainSurface(SIZE, cornerLevels, STEP);
-    surface.enforceSlopeLimit();
-    for (let z = 0; z < SIZE; z++) {
-      for (let x = 0; x < SIZE; x++) {
-        const height = surface.elevation(x, z);
-        const tree = height > 2 && hash(x, z) > 0.67;
-        tiles.push({ x, z, height, tree, house: false });
-      }
-    }
+    initialSurface = new TerrainSurface(SIZE, cornerLevels.slice(), STEP);
+    renderedBounds = cameraTerrainBounds();
     rebuild();
     spawnSettlers();
   }
@@ -915,7 +1005,7 @@ function startGame(): void {
     const hit = raycaster.intersectObjects([ground, water])[0];
     hovered =
       hit?.object === ground && hit.faceIndex != null
-        ? tiles[Math.floor(hit.faceIndex / 2)]
+        ? visibleTiles[Math.floor(hit.faceIndex / 2)]
         : hit
           ? (tileAt(Math.floor(hit.point.x + SIZE / 2), Math.floor(hit.point.z + SIZE / 2)) ?? null)
           : null;
@@ -937,7 +1027,10 @@ function startGame(): void {
         const source = ground.geometry.getAttribute('position');
         const target = surfaceHighlightGeometry.getAttribute('position');
         for (let i = 0; i < target.count; i++) {
-          const vertex = (hovered.z * SIZE + hovered.x) * 6 + i;
+          const vertex =
+            ((hovered.z - renderedBounds.z) * renderedBounds.width + hovered.x - renderedBounds.x) *
+              6 +
+            i;
           target.setXYZ(
             i,
             source.getX(vertex),
@@ -1095,7 +1188,8 @@ function startGame(): void {
         .flatMap((point) => surface.affectedTiles(point.x, point.z))
         .map((point) => tileAt(point.x, point.z)),
     );
-    reconcileSettlements(settlers, tiles, surface);
+    for (const tile of affected) if (tile) tile.height = surface.elevation(tile.x, tile.z);
+    reconcileWorldSettlements();
     rebuild();
     syncResidentMeshes(affected);
     updateSettlementStats();
@@ -1241,8 +1335,8 @@ function startGame(): void {
       selectTool(tool);
       seed += 17;
       simulationTime = 0;
-      generateWorld();
       resetCamera();
+      generateWorld();
       hovered = null;
       hoveredCorner = null;
       cornerMarker.visible = false;
@@ -1428,7 +1522,7 @@ function startGame(): void {
       }
     }
     if (settlementsChanged) {
-      reconcileSettlements(settlers, tiles, surface);
+      reconcileWorldSettlements();
       rebuildBuildings();
       syncResidentMeshes();
       updateSettlementStats();
@@ -1450,13 +1544,18 @@ function startGame(): void {
       updateSettlementStats();
       if (lastPointer) updateHover(lastPointer);
     }
-    waves.position.x = Math.sin(simulationTime * 0.15) * 0.4;
-    waves.position.z = Math.cos(simulationTime * 0.1) * 0.3;
+    waves.position.x =
+      Math.floor(controls.target.x / 32) * 32 + Math.sin(simulationTime * 0.15) * 0.4;
+    waves.position.z =
+      Math.floor(controls.target.z / 32) * 32 + Math.cos(simulationTime * 0.1) * 0.3;
     waveMaterial.opacity = 0.2 + Math.sin(simulationTime * 0.7) * 0.045;
     powerMeter.advance(dt, totalBuildingPower(settlers));
     updatePowerDisplay();
     controls.update();
-    if ((horizontal || vertical) && lastPointer) updateHover(lastPointer);
+    const viewChanged = updateVisibleTerrain();
+    sun.position.copy(controls.target).add(new THREE.Vector3(-18, 32, 12));
+    sun.target.position.copy(controls.target);
+    if ((horizontal || vertical || viewChanged) && lastPointer) updateHover(lastPointer);
     const direction = camera.position.clone().sub(controls.target);
     element<HTMLElement>('.compass svg').style.transform =
       `rotate(${(-Math.atan2(direction.x, direction.z) * 180) / Math.PI}deg)`;
@@ -1469,6 +1568,7 @@ function startGame(): void {
     requestAnimationFrame(() => element('#loading').classList.add('done'));
   }
 
+  resize();
   generateWorld();
   bindTerrainInput();
   bindSpellControls();
