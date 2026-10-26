@@ -11,7 +11,7 @@ async function loadModule(path) {
   return import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
 }
 const { TerrainSurface } = await loadModule('../src/terrain-surface.ts');
-const { homeSupport, reconcileSettlements, trySettle } = await loadModule('../src/settlement.ts');
+const { fertileLand, homeSupport, reconcileSettlements, trySettle } = await loadModule('../src/settlement.ts');
 const world = () => {
   const surface = new TerrainSurface(8, new Uint8Array(81).fill(2), 0.65);
   const tiles = Array.from({length:64}, (_, i) => ({x:i % 8, z:Math.floor(i / 8), tree:false, house:false}));
@@ -99,6 +99,39 @@ test('changing the center releases a castle resident, including a flat center he
     assert.equal(owner.power,0);
     assert.equal(tiles.some(tile=>tile.reserved || tile.house),false);
   }
+});
+
+test('castles permanently clear only the trees inside their footprint', () => {
+  const {surface,tiles,resident} = world();
+  const owner = resident(4,4);
+  for (const tile of tiles) if (!tile.house) tile.tree = true;
+  reconcileSettlements([owner],tiles,surface);
+  for (const tile of tiles) {
+    const inside = Math.abs(tile.x - 4) <= 1 && Math.abs(tile.z - 4) <= 1;
+    assert.equal(tile.tree, !inside);
+  }
+  surface.editCorner(3,3,1);
+  reconcileSettlements([owner],tiles,surface);
+  assert.equal(tiles[3 * 8 + 3].tree,false);
+  assert.equal(tiles[0].tree,true);
+});
+
+test('fertile land is deduplicated, flat, at home height, and limited to the influence area', () => {
+  const {surface,resident} = world();
+  const owners = [resident(3,3),resident(4,3)];
+  assert.equal(fertileLand(owners,surface).length,12);
+  surface.editCorner(2,2,1);
+  const fields = fertileLand(owners,surface);
+  assert.equal(fields.length,11);
+  assert.ok(!fields.some(point=>point.x===2 && point.z===2));
+  for (const point of fields) {
+    assert.equal(surface.level(point.x,point.z),2);
+    assert.ok(owners.some(owner=>Math.abs(point.x-owner.home.x)<=1 && Math.abs(point.z-owner.home.z)<=1));
+  }
+  owners[0].home = null;
+  assert.equal(fertileLand(owners,surface).length,9);
+  owners[1].home = null;
+  assert.equal(fertileLand(owners,surface).length,0);
 });
 
 test('existing castles keep priority and overlapping castles cannot be built', () => {

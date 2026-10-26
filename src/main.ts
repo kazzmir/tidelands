@@ -1,6 +1,6 @@
 import './style.css';
 import { TerrainSurface, type GridPoint } from './terrain-surface';
-import { homeSupport, reconcileSettlements, trySettle, type HousePower, type Resident } from './settlement';
+import { fertileLand, homeSupport, reconcileSettlements, trySettle, type HousePower, type Resident } from './settlement';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
@@ -92,7 +92,9 @@ const terrain = new THREE.Group();
 const scenery = new THREE.Group();
 const people = new THREE.Group();
 const buildings = new THREE.Group();
-scene.add(terrain, scenery, buildings, people);
+const farms = new THREE.Group();
+const fertileTiles = new Set<Tile>();
+scene.add(terrain, scenery, farms, buildings, people);
 // Distinct elevation colors, interpolated across each slope from its corner heights.
 const heightColors = [
   '#bca171', // 0: submerged sand
@@ -135,8 +137,16 @@ function tileAt(x: number, z: number): Tile | undefined {
 function position(tile: Tile): THREE.Vector3 {
   return new THREE.Vector3(tile.x - SIZE / 2 + 0.5, surface.sample(tile.x + 0.5, tile.z + 0.5), tile.z - SIZE / 2 + 0.5);
 }
+function treeAnchor(tile: Tile): GridPoint {
+  return { x: tile.x + 0.5 + (hash(tile.x + 71, tile.z) - 0.5) * 0.28,
+    z: tile.z + 0.5 + (hash(tile.x + 83, tile.z) - 0.5) * 0.28 };
+}
+function hasTree(tile: Tile): boolean {
+  const anchor = treeAnchor(tile);
+  return tile.tree && surface.sample(anchor.x, anchor.z) > SEA;
+}
 function isWalkable(tile: Tile): boolean {
-  return surface.sample(tile.x + 0.5, tile.z + 0.5) > SEA && !tile.tree && !tile.house && !tile.reserved;
+  return surface.sample(tile.x + 0.5, tile.z + 0.5) > SEA && !hasTree(tile) && !tile.house && !tile.reserved;
 }
 function neighbors(tile: Tile): Tile[] {
   const result: Tile[] = [];
@@ -151,19 +161,17 @@ function addTree(tile: Tile): void {
   const group = new THREE.Group();
   const trunk = new THREE.Mesh(trunkGeometry, treeTrunk);
   trunk.position.y = 0.27;
-  const material = foliage[Math.floor(random() * foliage.length)];
+  const material = foliage[Math.floor(hash(tile.x + 31, tile.z) * foliage.length)];
   const crown = new THREE.Mesh(leafGeometry, material);
   crown.position.y = 0.95;
   const crown2 = new THREE.Mesh(leafGeometry, material);
   crown2.scale.setScalar(0.77); crown2.position.y = 1.42;
   group.add(trunk, crown, crown2);
-  group.position.copy(position(tile));
-  group.position.x += (random() - 0.5) * 0.28;
-  group.position.z += (random() - 0.5) * 0.28;
-  group.position.y = surface.sample(group.position.x + SIZE / 2, group.position.z + SIZE / 2);
+  const anchor = treeAnchor(tile);
+  group.position.set(anchor.x - SIZE / 2, surface.sample(anchor.x, anchor.z), anchor.z - SIZE / 2);
   group.userData.tile = tile;
-  group.rotation.y = random() * Math.PI;
-  group.scale.setScalar(0.65 + random() * 0.35);
+  group.rotation.y = hash(tile.x + 47, tile.z) * Math.PI;
+  group.scale.setScalar(0.65 + hash(tile.x + 59, tile.z) * 0.35);
   group.traverse(object => { if (object instanceof THREE.Mesh) object.castShadow = true; });
   scenery.add(group);
 }
@@ -245,6 +253,42 @@ function addCastle(home: Tile): void {
   castle.position.copy(position(home));
   buildings.add(castle);
 }
+const farmCanvas = document.createElement('canvas');
+farmCanvas.width = farmCanvas.height = 128;
+const farmContext = farmCanvas.getContext('2d');
+if (!farmContext) throw new Error('Unable to create farming texture');
+farmContext.strokeStyle = '#000000';
+farmContext.lineWidth = 2;
+for (let line = 0; line <= 128; line += 32) {
+  farmContext.beginPath();
+  farmContext.moveTo(line, 0); farmContext.lineTo(line, 128);
+  farmContext.moveTo(0, line); farmContext.lineTo(128, line);
+  farmContext.stroke();
+}
+const farmTexture = new THREE.CanvasTexture(farmCanvas);
+farmTexture.colorSpace = THREE.SRGBColorSpace;
+farmTexture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+const farmGeometry = new THREE.PlaneGeometry(0.96, 0.96);
+const farmMaterial = new THREE.MeshBasicMaterial({
+  map: farmTexture, transparent: true, opacity: 0.55, depthWrite: false,
+  polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
+});
+function rebuildFarms(): void {
+  farms.clear();
+  fertileTiles.clear();
+  for (const point of fertileLand(settlers, surface)) {
+    const tile = tileAt(point.x, point.z);
+    if (!tile) continue;
+    fertileTiles.add(tile);
+    const field = new THREE.Mesh(farmGeometry, farmMaterial);
+    field.rotation.x = -Math.PI / 2;
+    field.position.copy(position(tile));
+    // Castle courtyards have a shallow foundation above the underlying surface.
+    field.position.y += tile.reserved ? 0.085 : 0.012;
+    field.renderOrder = 2;
+    farms.add(field);
+  }
+}
 function rebuildBuildings(): void {
   buildings.traverse(object => {
     if (object.userData.ownedGeometry && object instanceof THREE.Mesh) object.geometry.dispose();
@@ -255,6 +299,7 @@ function rebuildBuildings(): void {
     if (settler.power === 5) addCastle(settler.home);
     else addHouse(settler.home, settler.power);
   }
+  rebuildFarms();
 }
 function rebuild(): void {
   if (ground) { terrain.remove(ground); ground.geometry.dispose(); }
@@ -282,9 +327,9 @@ function rebuild(): void {
       tempColor.toArray(colors, index * 3);
     }
     if (tile.house || tile.reserved) continue;
-    if (tile.height > 1) {
-      if (tile.tree) addTree(tile);
-      else if (hash(tile.x + 60, tile.z) > 0.967) {
+    if (hasTree(tile)) addTree(tile);
+    else if (tile.height > 1) {
+      if (hash(tile.x + 60, tile.z) > 0.967) {
         const rock = new THREE.Mesh(rockGeometry, rockMaterial);
         rock.position.copy(position(tile)); rock.position.y += 0.09;
         rock.scale.set(1, 0.7, 0.9); rock.rotation.y = hash(tile.x, tile.z) * 6;
@@ -527,7 +572,7 @@ function updateHover(event: Pick<PointerEvent, 'clientX' | 'clientY'>): void {
   const info = element('#tile-info');
   info.hidden = tool !== 'inspect' || !hovered;
   if (hovered && tool === 'inspect') {
-    const kind = hovered.height === 0 ? 'Open water' : hovered.reserved ? 'Castle grounds' : hovered.house ? 'A settler’s cottage' : hovered.tree ? 'Woodland' : hovered.height === 1 ? 'Sandy shore' : 'Grassy highlands';
+    const kind = hovered.height === 0 ? 'Open water' : hovered.reserved ? 'Castle grounds' : hovered.house ? 'A settler’s cottage' : hasTree(hovered) ? 'Woodland' : fertileTiles.has(hovered) ? 'Fertile farmland' : hovered.height === 1 ? 'Sandy shore' : 'Grassy highlands';
     const visitors = settlers.filter(s => s.tile === hovered && !s.home).length;
     const inspected = hovered;
     const resident = settlers.find(s => s.home === inspected || (s.power === 5 && s.home && Math.abs(s.home.x - inspected.x) <= 1 && Math.abs(s.home.z - inspected.z) <= 1));
@@ -571,9 +616,6 @@ canvas.addEventListener('pointerup', event => {
     return;
   }
   const affected = new Set(surface.changedPoints.flatMap(point => surface.affectedTiles(point.x, point.z)).map(point => tileAt(point.x, point.z)));
-  for (const tile of affected) {
-    if (tile) tile.tree = false;
-  }
   reconcileSettlements(settlers, tiles, surface);
   rebuild();
   syncResidentMeshes(affected);

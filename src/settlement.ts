@@ -32,6 +32,22 @@ export function homeSupport(surface: TerrainSurface, home: GridPoint): { count: 
   return { count, power, tiles: queue };
 }
 
+/** Deduplicate farming overlays shared by overlapping home influence areas. */
+export function fertileLand<T extends SettlementTile>(residents: readonly Resident<T>[], surface: TerrainSurface): GridPoint[] {
+  const result = new Map<string, GridPoint>();
+  for (const resident of residents) {
+    if (!resident.home) continue;
+    const height = surface.level(resident.home.x, resident.home.z);
+    for (let z = resident.home.z - 1; z <= resident.home.z + 1; z++) {
+      for (let x = resident.home.x - 1; x <= resident.home.x + 1; x++) {
+        const point = { x, z };
+        if (isHabitable(surface, point) && surface.level(x, z) === height) result.set(`${x},${z}`, point);
+      }
+    }
+  }
+  return [...result.values()];
+}
+
 export function trySettle<T extends SettlementTile>(resident: Resident<T>, surface: TerrainSurface): boolean {
   const tile = resident.tile;
   if (resident.home || tile.house || tile.reserved || tile.tree || !isHabitable(surface, tile)) return false;
