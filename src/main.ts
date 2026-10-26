@@ -310,6 +310,7 @@ function generateWorld(): void {
     }
   }
   surface = new TerrainSurface(SIZE, cornerLevels, STEP);
+  surface.enforceSlopeLimit();
   for (let z = 0; z < SIZE; z++) {
     for (let x = 0; x < SIZE; x++) {
       const height = surface.elevation(x, z);
@@ -458,7 +459,6 @@ canvas.addEventListener('pointerup', event => {
   if (action === 'inspect') return;
   selectTool(action);
   const delta = action === 'raise' ? 1 : -1;
-  const points = shiftHeld ? surface.tileCorners(hovered.x, hovered.z) : [hoveredCorner];
   const changed = shiftHeld
     ? surface.editTile(hovered.x, hovered.z, delta)
     : surface.editCorner(hoveredCorner.x, hoveredCorner.z, delta);
@@ -467,7 +467,7 @@ canvas.addEventListener('pointerup', event => {
       : action === 'raise' ? 'This corner is as close to the sky as it can go.' : 'This corner is already at sea level.');
     return;
   }
-  const affected = new Set(points.flatMap(point => surface.affectedTiles(point.x, point.z)).map(point => tileAt(point.x, point.z)));
+  const affected = new Set(surface.changedPoints.flatMap(point => surface.affectedTiles(point.x, point.z)).map(point => tileAt(point.x, point.z)));
   for (const tile of affected) {
     if (tile) { tile.tree = false; tile.house = false; }
   }

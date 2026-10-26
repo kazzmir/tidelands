@@ -25,8 +25,8 @@ test('editing changes exactly one shared corner and the four adjoining tiles', (
   assert.deepEqual(surface.levels, before);
 });
 
-test('whole-surface edits move exactly its four corners by the same amount', () => {
-  const surface = field();
+test('whole-surface edits move exactly its four corners when no propagation is needed', () => {
+  const surface = new TerrainSurface(4, new Uint8Array(25).fill(1), 0.42);
   const before = surface.levels.slice();
   const points = surface.tileCorners(1, 1);
   assert.equal(surface.editTile(1, 1, 1), true);
@@ -102,6 +102,72 @@ test('closest-corner selection and edits work on all four corners and map bounda
   assert.deepEqual(surface.affectedTiles(4, 4), [{x:3,z:3}]);
   assert.equal(surface.editCorner(4, 4, 1), true);
   close(surface.sample(4, 4), surface.corner(4, 4));
+});
+
+function assertSlopeLimit(surface) {
+  for (let z = 0; z <= surface.size; z++) {
+    for (let x = 0; x <= surface.size; x++) {
+      const h = surface.level(x, z);
+      assert.ok(h >= 0 && h <= 8);
+      if (x < surface.size) assert.ok(Math.abs(h - surface.level(x + 1, z)) <= 1, `steep x edge at ${x},${z}`);
+      if (z < surface.size) assert.ok(Math.abs(h - surface.level(x, z + 1)) <= 1, `steep z edge at ${x},${z}`);
+      if (x < surface.size && z < surface.size) assert.ok(Math.abs(h - surface.level(x + 1, z + 1)) <= 1, `steep diagonal at ${x},${z}`);
+      if (x > 0 && z < surface.size) assert.ok(Math.abs(h - surface.level(x - 1, z + 1)) <= 1, `steep diagonal at ${x},${z}`);
+    }
+  }
+}
+
+test('raising to height 4 propagates outward as 3, 2, 1, 0', () => {
+  const surface = new TerrainSurface(8, new Uint8Array(81), 0.65);
+  surface.editCorner(4, 4, 4);
+  for (let z = 0; z <= 8; z++) {
+    for (let x = 0; x <= 8; x++) assert.equal(surface.level(x, z), Math.max(0, 4 - Math.max(Math.abs(x - 4), Math.abs(z - 4))));
+  }
+  assert.ok(surface.changedPoints.some(point => point.x === 1 && point.z === 4));
+  assertSlopeLimit(surface);
+});
+
+test('lowering a point also lowers higher neighbors as needed', () => {
+  const surface = new TerrainSurface(8, new Uint8Array(81).fill(6), 0.65);
+  surface.editCorner(4, 4, -4);
+  for (let z = 0; z <= 8; z++) {
+    for (let x = 0; x <= 8; x++) assert.equal(surface.level(x, z), Math.min(6, 2 + Math.max(Math.abs(x - 4), Math.abs(z - 4))));
+  }
+  assertSlopeLimit(surface);
+});
+
+test('whole-surface propagation keeps the four selected corners at the requested height', () => {
+  const surface = new TerrainSurface(8, new Uint8Array(81), 0.65);
+  surface.editTile(3, 3, 4);
+  for (const point of surface.tileCorners(3, 3)) assert.equal(surface.level(point.x, point.z), 4);
+  assert.equal(surface.level(2, 3), 3);
+  assert.equal(surface.level(1, 3), 2);
+  assert.equal(surface.level(0, 3), 1);
+  assertSlopeLimit(surface);
+  surface.editTile(3, 3, -3);
+  for (const point of surface.tileCorners(3, 3)) assert.equal(surface.level(point.x, point.z), 1);
+  assertSlopeLimit(surface);
+});
+
+test('generated terrain can be normalized without lowering any point', () => {
+  const levels = Uint8Array.from({length:81}, (_, i) => (i * 7) % 9);
+  const original = levels.slice();
+  const surface = new TerrainSurface(8, levels, 0.65);
+  surface.enforceSlopeLimit();
+  assertSlopeLimit(surface);
+  for (let i = 0; i < levels.length; i++) assert.ok(levels[i] >= original[i]);
+});
+
+test('mixed corner and surface edits maintain the slope limit, including map edges', () => {
+  const surface = new TerrainSurface(8, new Uint8Array(81).fill(3), 0.65);
+  let seed = 123;
+  const random = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  for (let i = 0; i < 500; i++) {
+    const delta = random() < 0.5 ? -1 : 1;
+    if (i % 3 === 0) surface.editTile(Math.floor(random() * 8), Math.floor(random() * 8), delta);
+    else surface.editCorner(Math.floor(random() * 9), Math.floor(random() * 9), delta);
+    assertSlopeLimit(surface);
+  }
 });
 
 test('height zero is submerged; corner heights stay within 0–8', () => {

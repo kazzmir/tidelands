@@ -2,6 +2,9 @@ export interface GridPoint { x: number; z: number }
 
 /** Integer heights belong to shared grid corners, not tile centers. */
 export class TerrainSurface {
+  /** Includes propagated edits, so scenery and inhabitants can update everywhere affected. */
+  readonly changedPoints: GridPoint[] = [];
+
   constructor(readonly size: number, readonly levels: Uint8Array, readonly step: number) {
     if (levels.length !== (size + 1) ** 2) throw new Error('Expected one height per grid corner');
   }
@@ -23,12 +26,50 @@ export class TerrainSurface {
   }
 
   editCorner(x: number, z: number, delta: number): boolean {
-    if (!Number.isInteger(x) || !Number.isInteger(z) || x < 0 || z < 0 || x > this.size || z > this.size) return false;
-    const index = z * (this.size + 1) + x;
-    const next = Math.max(0, Math.min(8, this.levels[index] + Math.trunc(delta)));
-    if (next === this.levels[index]) return false;
-    this.levels[index] = next;
+    return this.editPoints([{ x, z }], delta);
+  }
+
+  private editPoints(points: readonly GridPoint[], delta: number): boolean {
+    this.changedPoints.length = 0;
+    const change = Math.trunc(delta);
+    if (!Number.isFinite(change) || !change || points.some(({ x, z }) =>
+      !Number.isInteger(x) || !Number.isInteger(z) || x < 0 || z < 0 || x > this.size || z > this.size
+      || this.level(x, z) + change < 0 || this.level(x, z) + change > 8)) return false;
+    const changed = new Set<number>();
+    // Apply the entire selection before propagating, so Shift edits move it exactly once.
+    for (const { x, z } of points) {
+      const index = z * (this.size + 1) + x;
+      this.levels[index] += change;
+      changed.add(index);
+    }
+    this.propagate([...changed], change > 0 ? 1 : -1, changed);
     return true;
+  }
+
+  /** Normalize generated terrain without lowering its peaks. */
+  enforceSlopeLimit(): void {
+    this.changedPoints.length = 0;
+    this.propagate(Array.from(this.levels.keys()), 1, new Set<number>());
+  }
+
+  private propagate(queue: number[], direction: 1 | -1, changed: Set<number>): void {
+    const width = this.size + 1;
+    for (let head = 0; head < queue.length; head++) {
+      const index = queue[head];
+      const x = index % width; const z = Math.floor(index / width);
+      // Include diagonal neighbors, so every surrounding point obeys the limit.
+      for (const [dx, dz] of [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+        const nx = x + dx; const nz = z + dz;
+        if (nx < 0 || nz < 0 || nx > this.size || nz > this.size) continue;
+        const neighbor = nz * width + nx;
+        const required = this.levels[index] - direction;
+        if ((this.levels[neighbor] - required) * direction >= 0) continue;
+        this.levels[neighbor] = required;
+        changed.add(neighbor);
+        queue.push(neighbor);
+      }
+    }
+    for (const index of changed) this.changedPoints.push({ x: index % width, z: Math.floor(index / width) });
   }
 
   tileCorners(x: number, z: number): GridPoint[] {
@@ -37,12 +78,9 @@ export class TerrainSurface {
 
   /** Move all four corners together, or leave all unchanged at the height limits. */
   editTile(x: number, z: number, delta: number): boolean {
+    this.changedPoints.length = 0;
     if (!Number.isInteger(x) || !Number.isInteger(z) || x < 0 || z < 0 || x >= this.size || z >= this.size) return false;
-    const change = Math.trunc(delta);
-    const corners = this.tileCorners(x, z);
-    if (!change || corners.some(point => this.level(point.x, point.z) + change < 0 || this.level(point.x, point.z) + change > 8)) return false;
-    for (const point of corners) this.editCorner(point.x, point.z, change);
-    return true;
+    return this.editPoints(this.tileCorners(x, z), delta);
   }
 
   affectedTiles(x: number, z: number): GridPoint[] {
