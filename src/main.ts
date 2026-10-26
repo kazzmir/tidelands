@@ -2,7 +2,7 @@ import './style.css';
 import { generateWorldHeights } from './world-generation';
 import { TerrainSurface, type GridPoint, type TerrainBounds } from './terrain-surface';
 import { PowerMeter } from './power';
-import { grazingNeighbors, planFlock, type GrazingSheep } from './sheep';
+import { grazingNeighbors, planFlock, SheepSpawner, type GrazingSheep } from './sheep';
 import { elevationContours } from './terrain-contours';
 import { advanceSurvival, createSurvival, SINKING_SECONDS, type Survival } from './survival';
 import { earthquake, mountain, SPELL_COSTS, type Spell } from './spells';
@@ -639,6 +639,7 @@ function startGame(): void {
 
   const settlers: Settler[] = [];
   const flock: Sheep[] = [];
+  const sheepSpawner = new SheepSpawner();
   const woolMaterial = new THREE.MeshStandardMaterial({ color: '#f3efda', roughness: 1 });
   const sheepFaceMaterial = new THREE.MeshStandardMaterial({ color: '#635e50', roughness: 1 });
   const woolGeometry = new THREE.IcosahedronGeometry(0.19, 1);
@@ -711,7 +712,18 @@ function startGame(): void {
     for (const sheep of flock) if (!keep.has(sheep)) animals.remove(sheep.mesh);
     flock.length = 0;
     flock.push(...plan.keep);
-    for (const tile of plan.spawn) createSheep(tile);
+  }
+  function spawnSheep(dt: number): void {
+    const plan = planFlock(
+      flock,
+      fertileTiles,
+      settlers.filter((settler) => settler.home).length,
+      canGraze,
+    );
+    if (!sheepSpawner.advance(dt, plan.spawn.length > 0, random)) return;
+    createSheep(plan.spawn[Math.floor(random() * plan.spawn.length)]);
+    updateSettlementStats();
+    if (lastPointer) updateHover(lastPointer);
   }
   function animateSheep(dt: number): void {
     if (!dt) return;
@@ -1028,6 +1040,7 @@ function startGame(): void {
     settlers.length = 0;
     animals.clear();
     flock.length = 0;
+    sheepSpawner.reset();
     tiles.length = 0;
     tileCache.clear();
     cornerLevels.set(generateWorldHeights(SIZE, seed));
@@ -1668,6 +1681,7 @@ function startGame(): void {
       if (lastPointer) updateHover(lastPointer);
     }
     animateSheep(dt);
+    spawnSheep(dt);
     waves.position.x =
       Math.floor(controls.target.x / 32) * 32 + Math.sin(simulationTime * 0.15) * 0.4;
     waves.position.z =

@@ -5,10 +5,38 @@ import ts from 'typescript';
 
 const source=await readFile(new URL('../src/sheep.ts',import.meta.url),'utf8');
 const {outputText}=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}});
-const {planFlock,grazingNeighbors}=await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
+const {planFlock,grazingNeighbors,SheepSpawner}=await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
 const field=()=>Array.from({length:16},(_,i)=>({x:i%4,z:Math.floor(i/4),blocked:false}));
 const canGraze=tile=>!tile.blocked;
 const sheep=tile=>({tile,target:null});
+
+test('sheep spawning waits ten simulation seconds and succeeds only on its chance roll',()=>{
+  const timer=new SheepSpawner();
+  assert.equal(timer.advance(9.9,true,()=>0),false);
+  assert.equal(timer.advance(0.1,true,()=>0.49),true);
+  assert.equal(timer.advance(9.9,true,()=>0),false);
+  assert.equal(timer.advance(0.1,true,()=>0.5),false);
+  assert.equal(timer.advance(0.1,true,()=>0),false);
+});
+
+test('sheep spawning does not catch up in bursts or advance while paused',()=>{
+  const timer=new SheepSpawner(10,1);
+  assert.equal(timer.advance(100,true,()=>0),true);
+  assert.equal(timer.advance(0,true,()=>0),false);
+  assert.equal(timer.advance(9.9,true,()=>0),false);
+  assert.equal(timer.advance(0.1,true,()=>0),true);
+});
+
+test('new farm eligibility and new worlds reset the sheep spawn wait',()=>{
+  const timer=new SheepSpawner(10,1);
+  timer.advance(9,true,()=>0);
+  timer.advance(1,false,()=>0);
+  assert.equal(timer.advance(1,true,()=>0),false);
+  assert.equal(timer.advance(9,true,()=>0),true);
+  timer.advance(9,true,()=>0);
+  timer.reset();
+  assert.equal(timer.advance(1,true,()=>0),false);
+});
 
 test('flocks never exceed two sheep per building',()=>{
   const tiles=field(),farm=new Set(tiles);

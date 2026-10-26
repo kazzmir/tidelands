@@ -5,7 +5,38 @@ export interface GrazingSheep<T> {
   target: T | null;
 }
 
-/** Keep a valid flock and fill available grazing spaces without exceeding two sheep per building. */
+/** Limit global spawning to one chance per ten simulation seconds, with no catch-up bursts. */
+export class SheepSpawner {
+  private elapsed = 0;
+
+  constructor(
+    readonly interval = 10,
+    readonly chance = 0.5,
+  ) {
+    if (!Number.isFinite(interval) || interval <= 0)
+      throw new Error('Sheep spawn interval must be positive');
+    if (!Number.isFinite(chance) || chance < 0 || chance > 1)
+      throw new Error('Sheep spawn chance must be between zero and one');
+  }
+
+  advance(seconds: number, eligible: boolean, random: () => number): boolean {
+    if (!eligible) {
+      this.elapsed = 0;
+      return false;
+    }
+    if (!Number.isFinite(seconds) || seconds <= 0) return false;
+    this.elapsed += seconds;
+    if (this.elapsed + 1e-9 < this.interval) return false;
+    this.elapsed = 0;
+    return random() < this.chance;
+  }
+
+  reset(): void {
+    this.elapsed = 0;
+  }
+}
+
+/** Keep a valid flock and suggest free grazing spaces without exceeding two sheep per building. */
 export function planFlock<T, S extends GrazingSheep<T>>(
   flock: readonly S[],
   farmland: ReadonlySet<T>,
