@@ -384,12 +384,16 @@ canvas.addEventListener('pointerleave', () => {
 });
 canvas.addEventListener('pointerdown', event => { pointerDown = { x: event.clientX, y: event.clientY }; });
 canvas.addEventListener('pointerup', event => {
-  if (event.button !== 0 || Math.hypot(event.clientX - pointerDown.x, event.clientY - pointerDown.y) > 5) return;
+  if ((event.button !== 0 && event.button !== 2) || Math.hypot(event.clientX - pointerDown.x, event.clientY - pointerDown.y) > 5) return;
   updateHover(event);
-  if (!hovered || tool === 'inspect') return;
-  if (tool === 'raise' && hovered.height >= 8) { toast('This is as close to the sky as we can go.'); return; }
-  if (tool === 'lower' && hovered.height === 0) { toast('Already at sea level. Try raising a new shore.'); return; }
-  hovered.height += tool === 'raise' ? 1 : -1;
+  if (!hovered) return;
+  // Mouse buttons directly choose elevation; touch keeps the selected toolbar tool.
+  const action = event.pointerType === 'touch' ? tool : event.button === 2 ? 'lower' : 'raise';
+  if (action === 'inspect') return;
+  selectTool(action);
+  if (action === 'raise' && hovered.height >= 8) { toast('This is as close to the sky as we can go.'); return; }
+  if (action === 'lower' && hovered.height === 0) { toast('Already at sea level. Try raising a new shore.'); return; }
+  hovered.height += action === 'raise' ? 1 : -1;
   hovered.tree = false; hovered.house = false;
   rebuild();
   // Redirect anyone whose path was interrupted. Never leave a settler underwater.
@@ -417,8 +421,8 @@ function selectTool(next: Tool): void {
     button.classList.toggle('active', active); button.setAttribute('aria-pressed', String(active));
   });
   const hints: Record<Tool, [string, string]> = {
-    raise: ['Raise land', 'Click a tile to lift it out of the sea'],
-    lower: ['Lower land', 'Click a tile to bring it closer to the sea'],
+    raise: ['Raise land', 'Left-click to raise · Right-click to lower'],
+    lower: ['Lower land', 'Left-click to raise · Right-click to lower'],
     inspect: ['Explore your world', 'Hover a tile to discover what lives there'],
   };
   element('#tool-hint').innerHTML = `<strong>${hints[next][0]}</strong><span class="hint-detail">${hints[next][1]}</span>`;

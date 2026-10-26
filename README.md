@@ -19,9 +19,10 @@ npm run preview # Serve the production build
 
 ## Controls
 
-- **1 / Raise:** click to raise a tile one level.
-- **2 / Lower:** click to lower a tile. Level 0 is water.
-- **3 / Inspect:** hover to see elevation, terrain, and inhabitants.
+- **Left-click:** raise a tile one level, regardless of the selected tool.
+- **Right-click:** lower a tile one level. Level 0 is water.
+- **1 / Raise, 2 / Lower:** select the action for touch taps; mouse clicks always use the button mapping above.
+- **3 / Inspect:** hover to see elevation, terrain, and inhabitants; touch taps inspect without editing.
 - **Drag:** pan; **right-drag:** orbit; **scroll:** zoom.
 - **Touch:** drag to pan; use two fingers to zoom/orbit.
 - **Space:** pause/resume; **1× / 2× / 4×:** simulation speed.
