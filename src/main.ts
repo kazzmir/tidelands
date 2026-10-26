@@ -2,7 +2,7 @@ import './style.css';
 import { TerrainSurface, type GridPoint } from './terrain-surface';
 import { PowerMeter } from './power';
 import { elevationContours } from './terrain-contours';
-import { BIRTH_THRESHOLD, growPopulation, INITIAL_CHARACTER_POWER } from './population';
+import { BIRTH_THRESHOLD, birthInterval, characterGrowthRate, growPopulation, INITIAL_CHARACTER_POWER } from './population';
 import { fertileLand, homeSupport, reconcileSettlements, totalBuildingPower, trySettle, type HousePower, type Resident } from './settlement';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -628,7 +628,7 @@ function updateHover(event: Pick<PointerEvent, 'clientX' | 'clientY'>): void {
     const walkerPower = walkers.reduce((sum, walker) => sum + walker.characterPower, 0).toFixed(1);
     const inspected = hovered;
     const resident = settlers.find(s => s.home === inspected || (s.power === 5 && s.home && Math.abs(s.home.x - inspected.x) <= 1 && Math.abs(s.home.z - inspected.z) <= 1));
-    const buildingInfo = resident?.home ? `${resident.power === 5 ? 'Castle' : 'House'} · Level ${resident.power} · ${homeSupport(surface, resident.home).count}/9 flat tiles<br>Resident power ${resident.characterPower.toFixed(1)} · Growth +${resident.power}/s<br>Birth above ${BIRTH_THRESHOLD} · Splits power equally` : '';
+    const buildingInfo = resident?.home ? `${resident.power === 5 ? 'Castle' : 'House'} · Level ${resident.power} · ${homeSupport(surface, resident.home).count}/9 flat tiles<br>Resident power ${resident.characterPower.toFixed(1)} · Growth +${characterGrowthRate(resident.power).toFixed(3)}/s<br>Birth cycle ~${birthInterval(resident.power)}s · Threshold ${BIRTH_THRESHOLD}` : '';
     const cornerInfo = shiftHeld ? 'Surface selected · All four corners' : hoveredCorner ? `Corner ${hoveredCorner.x}, ${hoveredCorner.z} · Height ${surface.level(hoveredCorner.x, hoveredCorner.z)}` : '';
     info.innerHTML = `<strong>${kind}</strong>${cornerInfo}<br>Tile ${hovered.x}, ${hovered.z} · Corners ${surface.level(hovered.x, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z + 1)}, ${surface.level(hovered.x, hovered.z + 1)}<br>${resident ? `${buildingInfo}<br>1 settler lives here.` : visitors ? `${visitors} settler${visitors > 1 ? 's' : ''} here · Power ${walkerPower}` : 'Select a corner to shape the land.'}`;
   }

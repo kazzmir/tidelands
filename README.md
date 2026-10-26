@@ -59,7 +59,17 @@ Flat tiles at a home’s height within its centered 3×3 influence area receive 
 
 Every starting settler has **10 character power**, separate from the player’s spendable Power and a building’s terrain-derived level. Character power stays with the settler when they build a home, leave it, or are displaced by a castle.
 
-Housed residents gain **1 × building level character power per simulation second**. When a resident exceeds **20**, their power is divided equally: one half stays in the building, and the other becomes a new walking settler. Higher-level buildings therefore have shorter birth intervals; castles grow residents five times as fast as level-1 houses. New settlers carry their inherited power into any home they later build.
+Housed residents accumulate character power at a rate tuned to these nominal birth intervals:
+
+| Building level | Simulation seconds per birth |
+| --- | --- |
+| 1 | 120 |
+| 2 | 97.5 |
+| 3 | 75 |
+| 4 | 52.5 |
+| 5 (castle) | 30 |
+
+When a resident exceeds **20 character power**, their power is divided equally: one half stays in the building, and the other becomes a new walking settler. Growth is `10 / birth interval` power per simulation second, so castles accumulate four times as fast as level-1 houses. Intervals assume a resident starts at 10 power (as after a typical split); inherited or retained power can shorten the first interval. New settlers carry their inherited power into any home they later build.
 
 Newborns appear on the nearest reachable dry, unobstructed walking tile outside the building/castle. If no safe tile is available, the resident retains their power and the birth waits. Pause stops growth, and speed controls accelerate it. Inspect shows character power, resident growth, and the birth threshold.
 
