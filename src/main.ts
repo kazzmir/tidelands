@@ -78,7 +78,7 @@ scene.add(sun);
 const SIZE = 38;
 const STEP = 0.65;
 const SEA = 0.08;
-const powerMeter = new PowerMeter(5);
+const powerMeter = new PowerMeter(5, 500);
 let seed = 34;
 let randomState = seed;
 function random(): number {
@@ -423,7 +423,7 @@ function updateSettlementStats(): void {
   element('#population').innerHTML = `${settlers.length} <small>settlers</small>`;
   const castles = settlers.filter(settler => settler.power === 5).length;
   element('#population').title = `${roaming} roaming · ${housed} at home${castles ? ` · ${castles} castle${castles > 1 ? 's' : ''}` : ''}`;
-  element('#power').title = `+${totalBuildingPower(settlers)} power every ${powerMeter.interval} simulation seconds`;
+  element('#power').title = `+${totalBuildingPower(settlers)} power every ${powerMeter.interval} simulation seconds · Terrain costs 1 power per affected point`;
 }
 function syncResidentMeshes(affected: ReadonlySet<Tile | undefined> = new Set()): void {
   for (const settler of settlers) {
@@ -448,7 +448,7 @@ function syncResidentMeshes(affected: ReadonlySet<Tile | undefined> = new Set())
 }
 function generateWorld(): void {
   powerMeter.reset();
-  element('#power').textContent = '0';
+  element('#power').textContent = powerMeter.value.toLocaleString();
   randomState = seed;
   people.clear(); settlers.length = 0;
   tiles.length = 0;
@@ -617,14 +617,18 @@ canvas.addEventListener('pointerup', event => {
   if (action === 'inspect') return;
   selectTool(action);
   const delta = action === 'raise' ? 1 : -1;
-  const changed = shiftHeld
-    ? surface.editTile(hovered.x, hovered.z, delta)
-    : surface.editCorner(hoveredCorner.x, hoveredCorner.z, delta);
-  if (!changed) {
+  const selection = shiftHeld ? hovered : hoveredCorner;
+  const result = surface.terraform(selection.x, selection.z, delta, shiftHeld, powerMeter);
+  if (result.status === 'insufficient') {
+    toast(`Not enough power. This edit needs ${result.cost} power, including neighboring points.`);
+    return;
+  }
+  if (result.status === 'limit') {
     toast(shiftHeld ? 'All four corners must stay between sea level and height 8.'
       : action === 'raise' ? 'This corner is as close to the sky as it can go.' : 'This corner is already at sea level.');
     return;
   }
+  element('#power').textContent = powerMeter.value.toLocaleString();
   const affected = new Set(surface.changedPoints.flatMap(point => surface.affectedTiles(point.x, point.z)).map(point => tileAt(point.x, point.z)));
   reconcileSettlements(settlers, tiles, surface);
   rebuild();

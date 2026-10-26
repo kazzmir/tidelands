@@ -1,4 +1,6 @@
 export interface GridPoint { x: number; z: number }
+export interface PowerBudget { spend(amount: number): boolean }
+export interface TerraformResult { status: 'changed' | 'limit' | 'insufficient'; cost: number }
 
 /** Integer heights belong to shared grid corners, not tile centers. */
 export class TerrainSurface {
@@ -23,6 +25,23 @@ export class TerrainSurface {
 
   nearestCorner(x: number, z: number): GridPoint {
     return { x: Math.max(0, Math.min(this.size, Math.round(x))), z: Math.max(0, Math.min(this.size, Math.round(z))) };
+  }
+
+  /** Preview the full cascade; only spend and commit when the entire edit is affordable. */
+  terraform(x: number, z: number, delta: number, wholeTile: boolean, budget: PowerBudget): TerraformResult {
+    this.changedPoints.length = 0;
+    const preview = new TerrainSurface(this.size, this.levels.slice(), this.step);
+    const changed = wholeTile ? preview.editTile(x, z, delta) : preview.editCorner(x, z, delta);
+    if (!changed) return { status: 'limit', cost: 0 };
+    const width = this.size + 1;
+    const cost = preview.changedPoints.reduce((sum, point) => {
+      const index = point.z * width + point.x;
+      return sum + Math.abs(preview.levels[index] - this.levels[index]);
+    }, 0);
+    if (!budget.spend(cost)) return { status: 'insufficient', cost };
+    this.levels.set(preview.levels);
+    this.changedPoints.push(...preview.changedPoints);
+    return { status: 'changed', cost };
   }
 
   editCorner(x: number, z: number, delta: number): boolean {
