@@ -101,19 +101,37 @@ test('changing the center releases a castle resident, including a flat center he
   }
 });
 
-test('castles permanently clear only the trees inside their footprint', () => {
+test('castles clear trees in their footprint and extended farmland but retain distant trees', () => {
   const {surface,tiles,resident} = world();
   const owner = resident(4,4);
   for (const tile of tiles) if (!tile.house) tile.tree = true;
   reconcileSettlements([owner],tiles,surface);
   for (const tile of tiles) {
-    const inside = Math.abs(tile.x - 4) <= 1 && Math.abs(tile.z - 4) <= 1;
-    assert.equal(tile.tree, !inside);
+    const cultivated = Math.abs(tile.x - 4) <= 3 && Math.abs(tile.z - 4) <= 3;
+    assert.equal(tile.tree, !cultivated);
   }
   surface.editCorner(3,3,1);
   reconcileSettlements([owner],tiles,surface);
   assert.equal(tiles[3 * 8 + 3].tree,false);
   assert.equal(tiles[0].tree,true);
+});
+
+test('castle farming extends three tiles from its center and shrinks on downgrade', () => {
+  const {surface,tiles,resident} = world();
+  const owner = resident(4,4);
+  reconcileSettlements([owner],tiles,surface);
+  assert.equal(owner.power,5);
+  const fields = fertileLand([owner],surface);
+  assert.equal(fields.length,49);
+  assert.ok(fields.some(point=>point.x===1 && point.z===1));
+  assert.ok(fields.some(point=>point.x===7 && point.z===7));
+  assert.ok(fields.every(point=>Math.abs(point.x-4)<=3 && Math.abs(point.z-4)<=3));
+  surface.editCorner(1,1,1);
+  assert.equal(fertileLand([owner],surface).length,48); // Non-flat outer tile is excluded.
+  surface.editCorner(3,3,1);
+  reconcileSettlements([owner],tiles,surface);
+  assert.equal(owner.power,4);
+  assert.ok(fertileLand([owner],surface).every(point=>Math.abs(point.x-4)<=1 && Math.abs(point.z-4)<=1));
 });
 
 test('fertile land is deduplicated, flat, at home height, and limited to the influence area', () => {

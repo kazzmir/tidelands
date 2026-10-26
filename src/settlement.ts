@@ -42,8 +42,9 @@ export function fertileLand<T extends SettlementTile>(residents: readonly Reside
   for (const resident of residents) {
     if (!resident.home) continue;
     const height = surface.level(resident.home.x, resident.home.z);
-    for (let z = resident.home.z - 1; z <= resident.home.z + 1; z++) {
-      for (let x = resident.home.x - 1; x <= resident.home.x + 1; x++) {
+    const radius = resident.power === 5 ? 3 : 1;
+    for (let z = resident.home.z - radius; z <= resident.home.z + radius; z++) {
+      for (let x = resident.home.x - radius; x <= resident.home.x + radius; x++) {
         const point = { x, z };
         if (isHabitable(surface, point) && surface.level(x, z) === height) result.set(`${x},${z}`, point);
       }

@@ -53,7 +53,7 @@ Changing an outer tile recomputes support immediately, downgrading the castle to
 
 ### Fertile land
 
-Flat tiles at a home’s height within its centered 3×3 influence area receive a transparent black-grid farming texture. Cultivated tiles have their trees permanently removed. The overlay preserves the terrain’s elevation colors, updates after edits and building changes, and disappears when no home influences the tile. Overlapping influence areas share one overlay per tile. Castle courtyards show the same pattern over their foundations. Fertility applies to all qualifying flat tiles in range; house power still requires edge-connected support.
+Flat tiles at a home’s height receive a transparent black-grid farming texture. Ordinary houses influence a centered **3×3 area** (one tile in each direction); castles influence a centered **7×7 area** (three tiles in each direction, including diagonals). Downgrading a castle shrinks its farming influence back to the house range. Castle power still depends only on the central nine tiles. Cultivated tiles have their trees permanently removed. The overlay preserves the terrain’s elevation colors, updates after edits and building changes, and disappears when no home influences the tile. Overlapping influence areas share one overlay per tile. Castle courtyards show the same pattern over their foundations. Fertility applies to all qualifying flat tiles in range; house power still requires edge-connected support.
 
 ## Character power and births
 
