@@ -1,6 +1,7 @@
 import './style.css';
 import { TerrainSurface, type GridPoint } from './terrain-surface';
-import { fertileLand, homeSupport, reconcileSettlements, trySettle, type HousePower, type Resident } from './settlement';
+import { PowerMeter } from './power';
+import { fertileLand, homeSupport, reconcileSettlements, totalBuildingPower, trySettle, type HousePower, type Resident } from './settlement';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
@@ -16,6 +17,7 @@ function element<T extends HTMLElement>(selector: string): T {
 const icons: Record<string, string> = {
   refresh: '<path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 7a7 7 0 0 1 11.6-2L20 8M4 16l2.3 3A7 7 0 0 0 18 17"/>',
   people: '<circle cx="9" cy="7" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 4a3 3 0 0 1 0 6M18 14a5 5 0 0 1 3 5v2"/>',
+  power: '<path d="m13 2-9 12h7l-1 8 10-13h-7Z"/>',
   mountain: '<path d="m2 19 7-13 5 8 3-5 5 10ZM6 12l3 2 3-2"/>',
   raise: '<path d="m3 16 9 5 9-5M3 12l9 5 9-5M12 12V2m-4 4 4-4 4 4"/>',
   lower: '<path d="m3 17 9 5 9-5M3 13l9 5 9-5M12 2v10m-4-4 4 4 4-4"/>',
@@ -76,6 +78,7 @@ scene.add(sun);
 const SIZE = 38;
 const STEP = 0.65;
 const SEA = 0.08;
+const powerMeter = new PowerMeter(5);
 let seed = 34;
 let randomState = seed;
 function random(): number {
@@ -362,7 +365,6 @@ function rebuild(): void {
   geometry.computeVertexNormals();
   terrain.add(ground);
   rebuildBuildings();
-  element('#land-count').innerHTML = `${tiles.filter(t => t.height > 0).length} <small>tiles</small>`;
 }
 
 const water = new THREE.Mesh(new THREE.PlaneGeometry(500, 500), new THREE.MeshStandardMaterial({ color: '#659e95', roughness: 1, metalness: 0 }));
@@ -421,6 +423,7 @@ function updateSettlementStats(): void {
   element('#population').innerHTML = `${settlers.length} <small>settlers</small>`;
   const castles = settlers.filter(settler => settler.power === 5).length;
   element('#population').title = `${roaming} roaming · ${housed} at home${castles ? ` · ${castles} castle${castles > 1 ? 's' : ''}` : ''}`;
+  element('#power').title = `+${totalBuildingPower(settlers)} power every ${powerMeter.interval} simulation seconds`;
 }
 function syncResidentMeshes(affected: ReadonlySet<Tile | undefined> = new Set()): void {
   for (const settler of settlers) {
@@ -444,6 +447,8 @@ function syncResidentMeshes(affected: ReadonlySet<Tile | undefined> = new Set())
   }
 }
 function generateWorld(): void {
+  powerMeter.reset();
+  element('#power').textContent = '0';
   randomState = seed;
   people.clear(); settlers.length = 0;
   tiles.length = 0;
@@ -790,9 +795,8 @@ function animate(): void {
   waves.position.x = Math.sin(simulationTime * 0.15) * 0.4;
   waves.position.z = Math.cos(simulationTime * 0.1) * 0.3;
   waveMaterial.opacity = 0.2 + Math.sin(simulationTime * 0.7) * 0.045;
-  const day = Math.floor(simulationTime / 120) + 1;
-  const timeOfDay = simulationTime % 120 < 40 ? 'morning' : simulationTime % 120 < 85 ? 'afternoon' : 'evening';
-  element('#day').innerHTML = `Day ${day} <small>· ${timeOfDay}</small>`;
+  powerMeter.advance(dt, totalBuildingPower(settlers));
+  element('#power').textContent = powerMeter.value.toLocaleString();
   controls.update();
   if ((horizontal || vertical) && lastPointer) updateHover(lastPointer);
   const direction = camera.position.clone().sub(controls.target);

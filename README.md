@@ -31,7 +31,7 @@ npm run preview # Serve the production build
 - **Reset camera icon:** return to the original isometric view.
 - **New world:** generate a fresh island and population.
 
-Settlers choose neighboring dry tiles, climb one elevation step at a time, and avoid trees and cottages. After walking onto an unoccupied, treeless tile with four equal, above-water corner heights, they build a house and live inside it, disappearing from the map. Each house belongs to one settler; total population includes both roaming and housed settlers. Making a home’s ground non-flat (including through a cascaded edit) removes it and returns its resident to walking. Moving all four corners together preserves the home if it remains dry. Flooding a home also releases its resident; anyone stranded underwater relocates to the nearest dry ground. Hover the population count to see roaming/housed counts and the castle count; Inspect identifies occupied homes. Day progression is cosmetic; this is a terrain/walking prototype, not yet a full civilization simulation. Worlds are not persisted between reloads.
+Settlers choose neighboring dry tiles, climb one elevation step at a time, and avoid trees and cottages. After walking onto an unoccupied, treeless tile with four equal, above-water corner heights, they build a house and live inside it, disappearing from the map. Each house belongs to one settler; total population includes both roaming and housed settlers. Making a home’s ground non-flat (including through a cascaded edit) removes it and returns its resident to walking. Moving all four corners together preserves the home if it remains dry. Flooding a home also releases its resident; anyone stranded underwater relocates to the nearest dry ground. Hover the population count to see roaming/housed counts and the castle count; Inspect identifies occupied homes. This is a terrain and settlement sandbox, not yet a full civilization simulation. Worlds are not persisted between reloads.
 
 Trees retain their species, size, rotation, and horizontal position through terrain edits. Submerged trees disappear but their locations are remembered, allowing them to return when raised above water. Farming permanently clears trees from cultivated tiles, and castle construction clears all nine footprint tiles.
 
@@ -55,10 +55,16 @@ Changing an outer tile recomputes support immediately, downgrading the castle to
 
 Flat tiles at a home’s height within its centered 3×3 influence area receive a transparent black-grid farming texture. Cultivated tiles have their trees permanently removed. The overlay preserves the terrain’s elevation colors, updates after edits and building changes, and disappears when no home influences the tile. Overlapping influence areas share one overlay per tile. Castle courtyards show the same pattern over their foundations. Fertility applies to all qualifying flat tiles in range; house power still requires edge-connected support.
 
+## Accumulated power
+
+The upper-right HUD shows total population and accumulated **Power**. Every **5 simulation seconds**, power increases by the sum of all occupied building power levels (houses 1–4, castles 5). For example, two power-2 houses and a castle produce 9 power per collection. Roaming settlers produce none. Pausing stops collection; 2×/4× speed accelerates it. Existing power is retained if a building is lost; creating a new world resets the balance and collection timer. Hover the Power number to see the current income rate.
+
 ## Structure
 
 - `src/main.ts` — procedural terrain, scenery, settler simulation, camera, and interaction.
 - `src/terrain-surface.ts` — shared-corner triangle mesh and matching surface-height sampling.
+- `src/power.ts` — periodic simulation-time power collection.
+- `tests/power.test.mjs` — building income, timing, speed, pause, and reset tests.
 - `src/settlement.ts` — flat-ground house placement, connected-land power, castle footprints, ownership, and resident release.
 - `tests/settlement.test.mjs` — settlement, occupancy, flooding, and terrain-driven release tests.
 - `tests/castles.test.mjs` — power thresholds, connectivity, castle promotion/demotion, displaced residents, and overlapping footprints.

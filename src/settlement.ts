@@ -4,6 +4,10 @@ export type HousePower = 0 | 1 | 2 | 3 | 4 | 5;
 export interface SettlementTile { x: number; z: number; tree: boolean; house: boolean; reserved?: boolean }
 export interface Resident<T extends SettlementTile> { tile: T; home: T | null; power: HousePower; homeLevel: number | null }
 
+export function totalBuildingPower<T extends SettlementTile>(residents: readonly Resident<T>[]): number {
+  return residents.reduce((sum, resident) => sum + (resident.home ? resident.power : 0), 0);
+}
+
 /** A home needs horizontal, dry ground, not merely a coplanar hillside. */
 export function isHabitable(surface: TerrainSurface, tile: GridPoint): boolean {
   if (tile.x < 0 || tile.z < 0 || tile.x >= surface.size || tile.z >= surface.size) return false;
