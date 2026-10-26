@@ -102,11 +102,11 @@ export function reconcileSettlements<T extends SettlementTile>(residents: readon
         tile.reserved = true;
         tile.tree = false;
       }
-      // Reserve a walkable, unbuildable one-tile ring around the full 3×3 footprint.
-      for (let z = home.z - 2; z <= home.z + 2; z++) {
-        for (let x = home.x - 2; x <= home.x + 2; x++) {
+      // Keep two walkable, unbuildable tiles clear around the full 3×3 footprint.
+      for (let z = home.z - 3; z <= home.z + 3; z++) {
+        for (let x = home.x - 3; x <= home.x + 3; x++) {
           const tile = tileMap.get(`${x},${z}`);
-          if (tile && (Math.abs(x - home.x) === 2 || Math.abs(z - home.z) === 2)) tile.castleGap = true;
+          if (tile && (Math.abs(x - home.x) > 1 || Math.abs(z - home.z) > 1)) tile.castleGap = true;
         }
       }
       for (const other of residents) {

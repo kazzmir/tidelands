@@ -12,11 +12,11 @@ async function loadModule(path) {
 }
 const { TerrainSurface } = await loadModule('../src/terrain-surface.ts');
 const { fertileLand, homeSupport, reconcileSettlements, trySettle } = await loadModule('../src/settlement.ts');
-const world = () => {
-  const surface = new TerrainSurface(8, new Uint8Array(81).fill(2), 0.65);
-  const tiles = Array.from({length:64}, (_, i) => ({x:i % 8, z:Math.floor(i / 8), tree:false, house:false}));
+const world = (size=8) => {
+  const surface = new TerrainSurface(size, new Uint8Array((size+1)**2).fill(2), 0.65);
+  const tiles = Array.from({length:size**2}, (_, i) => ({x:i % size, z:Math.floor(i / size), tree:false, house:false}));
   const resident = (x, z) => {
-    const settler = {tile:tiles[z * 8 + x], home:null, power:0, homeLevel:null, characterPower:10};
+    const settler = {tile:tiles[z * size + x], home:null, power:0, homeLevel:null, characterPower:10};
     assert.equal(trySettle(settler, surface), true);
     return settler;
   };
@@ -168,18 +168,18 @@ test('farming permanently clears trees only from qualifying fertile tiles', () =
   assert.equal(tiles[5 * 8 + 5].tree,false); // Trees do not regrow after the farm disappears.
 });
 
-test('castle buffers block adjacent houses, but allow houses after one clear tile', () => {
-  const {surface,tiles,resident} = world();
+test('castle buffers block houses until there are two clear tiles, including diagonally', () => {
+  const {surface,tiles,resident} = world(10);
   const castle = resident(4,4);
   reconcileSettlements([castle],tiles,surface);
-  assert.equal(tiles.filter(tile=>tile.castleGap).length,16);
-  for (const [x,z] of [[6,4],[2,4],[4,6],[4,2],[6,6],[2,2]]) {
-    const walker = {tile:tiles[z * 8 + x],home:null,power:0,homeLevel:null,characterPower:10};
+  assert.equal(tiles.filter(tile=>tile.castleGap).length,40);
+  for (const [x,z] of [[6,4],[2,4],[4,6],[4,2],[6,6],[2,2],[7,4],[4,7],[7,7],[1,1]]) {
+    const walker = {tile:tiles[z * 10 + x],home:null,power:0,homeLevel:null,characterPower:10};
     assert.equal(trySettle(walker,surface),false);
     assert.equal(walker.tile.reserved,false); // Buffer is not part of the castle footprint.
   }
-  assert.ok(resident(7,4).home);
-  assert.ok(resident(7,7).home);
+  assert.ok(resident(8,4).home);
+  assert.ok(resident(8,8).home);
 });
 
 test('castle expansion releases houses in the buffer, and downgrading frees the buffer', () => {
@@ -199,7 +199,7 @@ test('castle expansion releases houses in the buffer, and downgrading frees the 
 
 test('existing castles keep priority and castle expansions respect the gap', () => {
   const {surface,tiles,resident} = world();
-  const castle = resident(3,3);
+  const castle = resident(2,3);
   reconcileSettlements([castle],tiles,surface);
   const neighbor = resident(6,3);
   reconcileSettlements([neighbor,castle],tiles,surface);
