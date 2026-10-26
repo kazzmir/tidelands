@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f5f3e9" />
+    <meta name="description" content="A little world, shaped by you. An isometric god-game sandbox inspired by Populous." />
+    <title>Tidelands — A little world, shaped by you</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;450;500;550;600;650;700&family=Manrope:wght@400;500;600;650;700;750;800&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="header">
+        <a class="brand" href="./" aria-label="Tidelands home"><span class="brand-mark">≋</span><span>tidelands<span class="brand-dot">.</span></span></a>
+        <div class="world-name"><span class="live-dot"></span> The first shore <span class="tag">SANDBOX</span></div>
+        <button id="new-world" class="text-button"><span data-icon="refresh"></span> New world</button>
+      </header>
+      <main id="world">
+        <canvas id="scene" aria-label="Interactive isometric island. Click to shape land, drag to pan, right-drag to orbit, scroll to zoom."></canvas>
+        <div class="scene-grain"></div>
+        <section class="intro"><div class="eyebrow">A LITTLE WORLD, SHAPED BY YOU</div><h1>Every shore<br>starts somewhere.</h1><p>Raise the land. Make room for life.</p></section>
+        <section class="world-stats" aria-label="World statistics"><div class="stat"><span class="stat-icon" data-icon="people"></span><div><span class="stat-label">POPULATION</span><strong id="population">24 <small>settlers</small></strong></div></div><span class="stat-divider"></span><div class="stat"><span class="stat-icon" data-icon="mountain"></span><div><span class="stat-label">LAND</span><strong id="land-count">0 <small>tiles</small></strong></div></div><span class="stat-divider"></span><div class="stat"><span class="sun-symbol">☀</span><div><span class="stat-label">YOUR WORLD</span><strong id="day">Day 1 <small>· morning</small></strong></div></div></section>
+        <aside class="toolbox"><div class="toolbox-label">SHAPE</div><button class="tool active" data-tool="raise" title="Raise land (1)"><span data-icon="raise"></span><span>Raise</span><kbd>1</kbd></button><button class="tool" data-tool="lower" title="Lower land (2)"><span data-icon="lower"></span><span>Lower</span><kbd>2</kbd></button><div class="tool-separator"></div><button class="tool" data-tool="inspect" title="Inspect tile (3)"><span data-icon="inspect"></span><span>Inspect</span><kbd>3</kbd></button></aside>
+        <div class="compass" aria-label="North direction"><div class="compass-n">N</div><svg width="52" height="52" viewBox="0 0 52 52"><path d="M26 7 34 32 26 27 18 32Z" fill="#4a7068"/><path d="m26 27 8 5-8 13-8-13Z" fill="#fff" opacity=".8"/></svg></div>
+        <aside class="island-card"><div class="card-heading"><span class="live-dot"></span> LIFE FINDS A WAY</div><h2>A place to call home.</h2><p>Your settlers roam the high ground.<br>Connect the shores and watch them explore.</p><div class="card-footer"><span class="tiny-house" data-icon="house"></span><span>Small beginnings. Endless possibilities.</span></div></aside>
+        <div id="tile-info" class="tile-info" hidden></div>
+        <div id="toast" class="toast" role="status"></div>
+        <div class="bottom-bar"><div class="tool-hint"><span class="hint-icon" data-icon="mouse"></span><span id="tool-hint"><strong>Raise land</strong><span class="hint-detail">Click a tile to lift it out of the sea</span></span></div><div class="playback"><button id="pause" class="icon-button" title="Pause simulation (Space)" aria-label="Pause simulation"><span data-icon="pause"></span></button><div class="speed-buttons"><button class="selected" data-speed="1">1×</button><button data-speed="2">2×</button><button data-speed="4">4×</button></div><span class="playback-divider"></span><button id="reset-view" class="icon-button" title="Reset camera" aria-label="Reset camera"><span data-icon="focus"></span></button></div></div>
+        <div class="navigation-hint"><span>Drag to pan</span><i>·</i><span>Right-drag to orbit</span><i>·</i><span>Scroll to zoom</span></div>
+        <div class="world-badge"><span class="live-dot"></span> A living, little sandbox <span>v0.1</span></div>
+        <div id="loading"><span class="brand-mark">≋</span><p>A world is taking shape…</p></div>
+      </main>
+      <footer><span>NO OBJECTIVES. JUST POSSIBILITIES.</span><span>Inspired by Populous. Made for a moment of wonder. <span class="footer-wave">≈</span></span></footer>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
