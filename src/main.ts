@@ -2,6 +2,7 @@ import './style.css';
 import { TerrainSurface, type GridPoint } from './terrain-surface';
 import { PowerMeter } from './power';
 import { elevationContours } from './terrain-contours';
+import { earthquake, mountain, SPELL_COSTS, type Spell } from './spells';
 import { BIRTH_THRESHOLD, birthInterval, characterGrowthRate, growPopulation, INITIAL_CHARACTER_POWER } from './population';
 import { fertileLand, homeSupport, reconcileSettlements, totalBuildingPower, trySettle, type HousePower, type Resident } from './settlement';
 import * as THREE from 'three';
@@ -20,6 +21,7 @@ const icons: Record<string, string> = {
   refresh: '<path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 7a7 7 0 0 1 11.6-2L20 8M4 16l2.3 3A7 7 0 0 0 18 17"/>',
   people: '<circle cx="9" cy="7" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 4a3 3 0 0 1 0 6M18 14a5 5 0 0 1 3 5v2"/>',
   power: '<path d="m13 2-9 12h7l-1 8 10-13h-7Z"/>',
+  earthquake: '<path d="m3 17 6 3 4-2 8 3M3 12l5-2 4 2 9-3M13 2l-3 5 5 2-5 6 3 3"/>',
   mountain: '<path d="m2 19 7-13 5 8 3-5 5 10ZM6 12l3 2 3-2"/>',
   raise: '<path d="m3 16 9 5 9-5M3 12l9 5 9-5M12 12V2m-4 4 4-4 4 4"/>',
   lower: '<path d="m3 17 9 5 9-5M3 13l9 5 9-5M12 2v10m-4-4 4 4 4-4"/>',
@@ -457,6 +459,15 @@ function findBirthTile(home: Tile): Tile | null {
   }
   return null;
 }
+function updatePowerDisplay(): void {
+  element('#power').textContent = powerMeter.value.toLocaleString();
+  document.querySelectorAll<HTMLButtonElement>('[data-spell]').forEach(button => {
+    const spell = button.dataset.spell as Spell;
+    const affordable = powerMeter.value >= SPELL_COSTS[spell];
+    button.classList.toggle('affordable', affordable);
+    button.setAttribute('aria-disabled', String(!affordable));
+  });
+}
 function updateSettlementStats(): void {
   const housed = settlers.filter(settler => settler.home !== null).length;
   const roaming = settlers.length - housed;
@@ -488,7 +499,7 @@ function syncResidentMeshes(affected: ReadonlySet<Tile | undefined> = new Set())
 }
 function generateWorld(): void {
   powerMeter.reset();
-  element('#power').textContent = powerMeter.value.toLocaleString();
+  updatePowerDisplay();
   randomState = seed;
   people.clear(); settlers.length = 0;
   tiles.length = 0;
@@ -670,15 +681,65 @@ canvas.addEventListener('pointerup', event => {
       : action === 'raise' ? 'This corner is as close to the sky as it can go.' : 'This corner is already at sea level.');
     return;
   }
-  element('#power').textContent = powerMeter.value.toLocaleString();
+  refreshTerrainAfterEdit();
+  updateHover(event);
+});
+canvas.addEventListener('contextmenu', event => event.preventDefault());
+function refreshTerrainAfterEdit(): void {
   const affected = new Set(surface.changedPoints.flatMap(point => surface.affectedTiles(point.x, point.z)).map(point => tileAt(point.x, point.z)));
   reconcileSettlements(settlers, tiles, surface);
   rebuild();
   syncResidentMeshes(affected);
   updateSettlementStats();
-  updateHover(event);
+  updatePowerDisplay();
+  if (lastPointer) updateHover(lastPointer);
+}
+let shakeTimer: ReturnType<typeof setTimeout>;
+function castSpell(spell: Spell): void {
+  const cost = SPELL_COSTS[spell];
+  if (powerMeter.value < cost) {
+    toast(`${spell === 'earthquake' ? 'Earthquake' : 'Mountain'} needs ${cost.toLocaleString()} power.`);
+    return;
+  }
+  controls.update();
+  camera.updateMatrixWorld();
+  const preview = new TerrainSurface(SIZE, cornerLevels.slice(), STEP);
+  let changed = false;
+  if (spell === 'earthquake') {
+    const focusRay = new THREE.Raycaster();
+    focusRay.setFromCamera(new THREE.Vector2(), camera);
+    const hit = focusRay.intersectObjects([ground, water])[0];
+    const center = hit ? { x: hit.point.x + SIZE / 2, z: hit.point.z + SIZE / 2 } : null;
+    if (center && center.x >= 0 && center.z >= 0 && center.x <= SIZE && center.z <= SIZE) changed = earthquake(preview, center, random);
+  } else {
+    const visible: GridPoint[] = [];
+    const projected = new THREE.Vector3();
+    for (let z = 0; z <= SIZE; z++) {
+      for (let x = 0; x <= SIZE; x++) {
+        projected.set(x - SIZE / 2, surface.corner(x, z), z - SIZE / 2).project(camera);
+        if (Math.abs(projected.x) < 0.85 && Math.abs(projected.y) < 0.85 && Math.abs(projected.z) <= 1) visible.push({ x, z });
+      }
+    }
+    changed = mountain(preview, visible, random);
+  }
+  if (!changed) { toast('Bring some land into view to cast this spell.'); return; }
+  if (!powerMeter.spend(cost)) return;
+  cornerLevels.set(preview.levels);
+  surface.changedPoints.length = 0;
+  surface.changedPoints.push(...preview.changedPoints);
+  refreshTerrainAfterEdit();
+  toast(spell === 'earthquake' ? 'The earth trembles.' : 'Mountains rise from the shore.');
+  if (spell === 'earthquake') {
+    clearTimeout(shakeTimer);
+    document.body.classList.remove('earthquake-shake');
+    void document.body.offsetWidth;
+    document.body.classList.add('earthquake-shake');
+    shakeTimer = setTimeout(() => document.body.classList.remove('earthquake-shake'), 1000);
+  }
+}
+document.querySelectorAll<HTMLButtonElement>('[data-spell]').forEach(button => {
+  button.addEventListener('click', () => castSpell(button.dataset.spell as Spell));
 });
-canvas.addEventListener('contextmenu', event => event.preventDefault());
 function selectTool(next: Tool): void {
   tool = next;
   document.querySelectorAll<HTMLButtonElement>('[data-tool]').forEach(button => {
@@ -715,6 +776,8 @@ document.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach(button => {
 });
 element('#reset-view').addEventListener('click', resetCamera);
 element('#new-world').addEventListener('click', () => {
+  clearTimeout(shakeTimer);
+  document.body.classList.remove('earthquake-shake');
   seed += 17; simulationTime = 0; generateWorld(); resetCamera();
   hovered = null; hoveredCorner = null; cornerMarker.visible = false; lastPointer = null;
   glowingSurface = null; surfaceStrength = 0; surfaceTarget = 0;
@@ -848,7 +911,7 @@ function animate(): void {
   waves.position.z = Math.cos(simulationTime * 0.1) * 0.3;
   waveMaterial.opacity = 0.2 + Math.sin(simulationTime * 0.7) * 0.045;
   powerMeter.advance(dt, totalBuildingPower(settlers));
-  element('#power').textContent = powerMeter.value.toLocaleString();
+  updatePowerDisplay();
   controls.update();
   if ((horizontal || vertical) && lastPointer) updateHover(lastPointer);
   const direction = camera.position.clone().sub(controls.target);

@@ -81,12 +81,23 @@ The upper-right HUD shows total population and accumulated **Power**. Each world
 
 Raising or lowering costs **1 power per height level changed per point**. Every point adjusted by the neighboring-height cascade counts, and Shift edits charge for all four selected points plus propagated changes. The complete edit is previewed first: if the available balance cannot cover it, **no power is spent and no terrain, homes, farms, or trees change**. Attempts beyond the height limits cost nothing.
 
+## Spells
+
+The right-hand spell palette shows icons with hover/focus tooltips. Affordable spell names are light; unaffordable names and icons are dimmed. Click an icon to cast immediately at the current camera view. Spells use a fixed power cost (no additional per-point terraforming cost), and only spend power when they have a valid effect.
+
+- **Earthquake — 500 power:** randomly raises/lowers points within roughly six tiles of the camera’s center-of-view terrain hit. Neighboring heights still differ by at most one. The entire interface shakes for one real-time second (suppressed for reduced-motion preferences).
+- **Mountain — 2,000 power:** raises up to three spaced-out points within the camera frustum to maximum height 8; cascading adjustments create surrounding hills. No power is spent if no eligible points are visible.
+
+Both spells update homes, castles, farming, trees, and settler positions just like ordinary terrain edits. Spells can be cast while the simulation is paused.
+
 ## Structure
 
 - `src/main.ts` — procedural terrain, scenery, settler simulation, camera, and interaction.
 - `src/terrain-surface.ts` — shared-corner triangle mesh and matching surface-height sampling.
 - `src/terrain-contours.ts` — elevation contour segments where sloping triangles intersect integer height planes.
 - `tests/terrain-contours.test.mjs` — contour placement, flat surfaces, shared edges, and height scaling tests.
+- `src/spells.ts` — Earthquake and Mountain terrain effects and fixed power costs.
+- `tests/spells.test.mjs` — spell costs, effects, maximum peaks, slope limits, and valid targets.
 - `src/population.ts` — resident character-power growth, equal-power births, and safe-spawn deferral.
 - `tests/population.test.mjs` — growth scaling, splits, inheritance, pause/speed, and blocked births.
 - `src/power.ts` — periodic simulation-time power collection.
