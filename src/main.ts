@@ -419,9 +419,8 @@ function updateSettlementStats(): void {
   const housed = settlers.filter(settler => settler.home !== null).length;
   const roaming = settlers.length - housed;
   element('#population').innerHTML = `${settlers.length} <small>settlers</small>`;
-  element('#population').title = `${roaming} roaming · ${housed} at home`;
   const castles = settlers.filter(settler => settler.power === 5).length;
-  element('#settlement-status').textContent = `${roaming} roaming · ${housed} at home${castles ? ` · ${castles} castle${castles > 1 ? 's' : ''}` : ''}`;
+  element('#population').title = `${roaming} roaming · ${housed} at home${castles ? ` · ${castles} castle${castles > 1 ? 's' : ''}` : ''}`;
 }
 function syncResidentMeshes(affected: ReadonlySet<Tile | undefined> = new Set()): void {
   for (const settler of settlers) {
