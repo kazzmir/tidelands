@@ -58,7 +58,7 @@ controls.minPolarAngle = Math.PI / 6;
 controls.maxPolarAngle = Math.PI / 2.6;
 controls.minZoom = 0.65;
 controls.maxZoom = 8;
-controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.ROTATE, RIGHT: null };
 controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
 function resetCamera(): void {
   camera.position.set(34, 34, 34);

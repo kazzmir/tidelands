@@ -18,7 +18,7 @@
         <button id="new-world" class="text-button"><span data-icon="refresh"></span> New world</button>
       </header>
       <main id="world">
-        <canvas id="scene" aria-label="Interactive isometric island. Point at a corner, or hold Shift to select a surface. Left-click to raise, right-click to lower, drag to pan, right-drag to orbit, arrow keys to pan, scroll to zoom."></canvas>
+        <canvas id="scene" aria-label="Interactive isometric island. Point at a corner, or hold Shift to select a surface. Left-click to raise, right-click to lower, drag to pan, middle-drag to orbit, arrow keys to pan, scroll to zoom."></canvas>
         <div class="scene-grain"></div>
         <section class="world-stats" aria-label="Population and power"><div class="stat"><span class="stat-icon" data-icon="people"></span><div><span class="stat-label">POPULATION</span><strong id="population">24 <small>settlers</small></strong></div></div><span class="stat-divider"></span><div class="stat"><span class="stat-icon" data-icon="power"></span><div><span class="stat-label">POWER</span><strong id="power" title="Start with 500 power. Terrain costs 1 power per affected point. Buildings generate power every 5 simulation seconds.">500</strong></div></div></section>
         <aside class="toolbox"><div class="toolbox-label">SHAPE</div><button class="tool active" data-tool="raise" title="Raise land (1)"><span data-icon="raise"></span><span>Raise</span><kbd>1</kbd></button><button class="tool" data-tool="lower" title="Lower land (2)"><span data-icon="lower"></span><span>Lower</span><kbd>2</kbd></button><div class="tool-separator"></div><button class="tool" data-tool="inspect" title="Inspect tile (3)"><span data-icon="inspect"></span><span>Inspect</span><kbd>3</kbd></button></aside>
@@ -27,7 +27,7 @@
         <div id="tile-info" class="tile-info" hidden></div>
         <div id="toast" class="toast" role="status"></div>
         <div class="bottom-bar"><div class="tool-hint"><span class="hint-icon" data-icon="mouse"></span><span id="tool-hint"><strong>Raise a corner</strong><span class="hint-detail">Left raises · Right lowers · Shift selects surface</span></span></div><div class="playback"><button id="pause" class="icon-button" title="Pause simulation (Space)" aria-label="Pause simulation"><span data-icon="pause"></span></button><div class="speed-buttons"><button class="selected" data-speed="1">1×</button><button data-speed="2">2×</button><button data-speed="4">4×</button></div><span class="playback-divider"></span><button id="reset-view" class="icon-button" title="Reset camera" aria-label="Reset camera"><span data-icon="focus"></span></button></div></div>
-        <div class="navigation-hint"><span>Drag or ↑ ↓ ← → to pan</span><i>·</i><span>Right-drag to orbit</span><i>·</i><span>Scroll to zoom</span></div>
+        <div class="navigation-hint"><span>Drag or ↑ ↓ ← → to pan</span><i>·</i><span>Middle-drag to orbit</span><i>·</i><span>Scroll to zoom</span></div>
         <div class="world-badge"><span class="live-dot"></span> A living, little sandbox <span>v0.1</span></div>
         <div id="loading"><span class="brand-mark">≋</span><p>A world is taking shape…</p></div>
       </main>

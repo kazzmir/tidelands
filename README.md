@@ -25,7 +25,7 @@ npm run preview # Serve the production build
 - **Hold Shift:** select and highlight the whole surface instead of a point. **Shift+left-click** raises all four corners; **Shift+right-click** lowers all four. The tile keeps its shape, and neighboring tiles follow the shared points. If any corner would exceed heights 0–8, the entire edit is rejected.
 - **1 / Raise, 2 / Lower:** select the action for touch taps; mouse clicks always use the button mapping above.
 - **3 / Inspect:** hover to see elevation, terrain, and inhabitants; touch taps inspect without editing.
-- **Arrow keys / drag:** pan; **right-drag:** orbit; **scroll:** zoom. Hold arrows for continuous, camera-relative movement, including while paused.
+- **Arrow keys / drag:** pan; **hold middle button and drag:** orbit; **scroll:** zoom. Hold arrows for continuous, camera-relative movement, including while paused.
 - **Touch:** drag to pan; use two fingers to zoom/orbit.
 - **Space:** pause/resume; **1× / 2× / 4×:** simulation speed.
 - **Reset camera icon:** return to the original isometric view.
