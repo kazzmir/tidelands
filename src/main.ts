@@ -302,6 +302,17 @@ const outlineMaterial = new THREE.LineBasicMaterial({ color: '#fff8d7', depthTes
 const outline = new THREE.Line(outlineGeometry, outlineMaterial);
 outline.renderOrder = 10; outline.visible = false;
 scene.add(outline);
+// Tint every triangle of the hovered land tile, preserving the terrain underneath.
+const hoverGeometry = new THREE.BufferGeometry();
+hoverGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(36), 3));
+const hoverMaterial = new THREE.MeshBasicMaterial({
+  color: '#b32432', transparent: true, opacity: 0.68, depthWrite: false,
+  polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+});
+const hoverGlow = new THREE.Mesh(hoverGeometry, hoverMaterial);
+hoverGlow.visible = false;
+hoverGlow.renderOrder = 5;
+scene.add(hoverGlow);
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 let hovered: Tile | null = null;
@@ -321,6 +332,18 @@ function updateHover(event: PointerEvent): void {
     ? tiles[Math.floor(hit.faceIndex / 4)]
     : hit ? tileAt(Math.floor(hit.point.x + SIZE / 2), Math.floor(hit.point.z + SIZE / 2)) ?? null : null;
   outline.visible = hovered !== null;
+  hoverGlow.visible = hovered !== null && hovered.height > 0;
+  if (hovered && hoverGlow.visible) {
+    const tileIndex = hovered.z * SIZE + hovered.x;
+    const source = ground.geometry.getAttribute('position');
+    const target = hoverGeometry.getAttribute('position');
+    for (let i = 0; i < target.count; i++) {
+      const vertex = tileIndex * 12 + i;
+      target.setXYZ(i, source.getX(vertex), source.getY(vertex), source.getZ(vertex));
+    }
+    target.needsUpdate = true;
+    hoverGeometry.computeBoundingSphere();
+  }
   if (hovered) {
     outline.position.set(hovered.x - SIZE / 2 + 0.5, 0, hovered.z - SIZE / 2 + 0.5);
     const vertices = outlineGeometry.getAttribute('position');
@@ -331,7 +354,7 @@ function updateHover(event: PointerEvent): void {
     }
     vertices.needsUpdate = true;
     outlineGeometry.computeBoundingSphere();
-    outlineMaterial.color.set(tool === 'lower' ? '#e8ad85' : '#fff6cc');
+    outlineMaterial.color.set(hovered.height > 0 ? '#b32432' : tool === 'lower' ? '#e8ad85' : '#fff6cc');
   }
   const info = element('#tile-info');
   info.hidden = tool !== 'inspect' || !hovered;
@@ -343,7 +366,7 @@ function updateHover(event: PointerEvent): void {
   canvas.style.cursor = hovered ? (tool === 'inspect' ? 'help' : 'crosshair') : 'grab';
 }
 canvas.addEventListener('pointermove', updateHover);
-canvas.addEventListener('pointerleave', () => { outline.visible = false; hovered = null; element('#tile-info').hidden = true; });
+canvas.addEventListener('pointerleave', () => { outline.visible = false; hoverGlow.visible = false; hovered = null; element('#tile-info').hidden = true; });
 canvas.addEventListener('pointerdown', event => { pointerDown = { x: event.clientX, y: event.clientY }; });
 canvas.addEventListener('pointerup', event => {
   if (event.button !== 0 || Math.hypot(event.clientX - pointerDown.x, event.clientY - pointerDown.y) > 5) return;
@@ -409,6 +432,8 @@ document.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach(button => {
 element('#reset-view').addEventListener('click', resetCamera);
 element('#new-world').addEventListener('click', () => {
   seed += 17; simulationTime = 0; generateWorld(); resetCamera();
+  hovered = null; outline.visible = false; hoverGlow.visible = false;
+  element('#tile-info').hidden = true;
   toast('A new shore. A fresh beginning.');
 });
 window.addEventListener('keydown', event => {
