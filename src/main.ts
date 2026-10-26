@@ -1,6 +1,7 @@
 import './style.css';
 import { TerrainSurface, type GridPoint } from './terrain-surface';
 import { PowerMeter } from './power';
+import { elevationContours } from './terrain-contours';
 import { fertileLand, homeSupport, reconcileSettlements, totalBuildingPower, trySettle, type HousePower, type Resident } from './settlement';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -112,6 +113,8 @@ const heightColors = [
 ].map(color => new THREE.Color(color));
 const groundMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true });
 let ground: THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>;
+let contours: THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial> | null = null;
+const contourMaterial = new THREE.LineBasicMaterial({ color: '#101810', transparent: true, opacity: 0.8, depthWrite: false });
 let surface: TerrainSurface;
 const tempColor = new THREE.Color();
 const treeTrunk = new THREE.MeshStandardMaterial({ color: '#796e48', roughness: 1 });
@@ -312,6 +315,7 @@ function rebuildBuildings(): void {
 }
 function rebuild(): void {
   if (ground) { terrain.remove(ground); ground.geometry.dispose(); }
+  if (contours) { terrain.remove(contours); contours.geometry.dispose(); }
   scenery.traverse(object => {
     if (object.userData.ownedGeometry && object instanceof THREE.Mesh) object.geometry.dispose();
   });
@@ -364,6 +368,12 @@ function rebuild(): void {
   geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   geometry.computeVertexNormals();
   terrain.add(ground);
+  const contourGeometry = new THREE.BufferGeometry();
+  contourGeometry.setAttribute('position', new THREE.BufferAttribute(elevationContours(vertices.array, STEP), 3));
+  contours = new THREE.LineSegments(contourGeometry, contourMaterial);
+  contours.position.y = 0.012; // Keep the lines above their surface without z-fighting.
+  contours.renderOrder = 1;
+  terrain.add(contours);
   rebuildBuildings();
 }
 
