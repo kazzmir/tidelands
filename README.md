@@ -19,8 +19,9 @@ npm run preview # Serve the production build
 
 ## Controls
 
-- **Left-click:** raise a tile one level, regardless of the selected tool.
-- **Right-click:** lower a tile one level. Level 0 is water.
+- **Left-click:** raise the nearest grid corner one level, regardless of the selected tool.
+- **Right-click:** lower the nearest grid corner one level. Level 0 is water.
+- The small highlighted point shows the selected corner. Its height is shared by up to four neighboring tiles; only that point changes per click.
 - **1 / Raise, 2 / Lower:** select the action for touch taps; mouse clicks always use the button mapping above.
 - **3 / Inspect:** hover to see elevation, terrain, and inhabitants; touch taps inspect without editing.
 - **Drag:** pan; **right-drag:** orbit; **scroll:** zoom.
@@ -39,4 +40,4 @@ Settlers choose neighboring dry tiles, climb one elevation step at a time, and a
 - `src/style.css` — responsive game HUD.
 - `index.html` — accessible interface and canvas shell.
 
-Terrain uses integer center heights with a fixed world-space step. Shared corners average neighboring elevations; four triangles connect each tile center to those corners, producing continuous diagonal hills instead of vertical steps. Settlers sample this exact surface as they walk, while cottages have foundations and paths follow the slopes. A seeded generator creates the islands and decorations. An orthographic camera supplies the isometric view; surface raycasting maps pointer input back to grid cells, including underwater cells.
+Terrain stores integer heights (0–8) directly at the shared grid corners. Each tile consists of two triangles using only its four corners, without an independent center height. Equal-height corners make a perfectly flat tile; four coplanar corners make a single flat plane, including inclined planes. Editing one corner updates all adjoining tiles without changing the other corner heights. Settlers sample this exact surface as they walk, while cottages have foundations and paths follow the slopes. A seeded generator creates the islands and decorations. An orthographic camera supplies the isometric view; surface raycasting maps pointer input back to grid cells, including underwater cells.

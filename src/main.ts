@@ -1,5 +1,5 @@
 import './style.css';
-import { TerrainSurface } from './terrain-surface';
+import { TerrainSurface, type GridPoint } from './terrain-surface';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
@@ -86,6 +86,7 @@ function hash(x: number, z: number): number {
   return n - Math.floor(n);
 }
 const tiles: Tile[] = [];
+const cornerLevels = new Uint8Array((SIZE + 1) ** 2);
 const terrain = new THREE.Group();
 const scenery = new THREE.Group();
 const people = new THREE.Group();
@@ -120,13 +121,17 @@ function tileAt(x: number, z: number): Tile | undefined {
   return tiles[z * SIZE + x];
 }
 function position(tile: Tile): THREE.Vector3 {
-  return new THREE.Vector3(tile.x - SIZE / 2 + 0.5, tile.height * STEP, tile.z - SIZE / 2 + 0.5);
+  return new THREE.Vector3(tile.x - SIZE / 2 + 0.5, surface.sample(tile.x + 0.5, tile.z + 0.5), tile.z - SIZE / 2 + 0.5);
+}
+function isWalkable(tile: Tile): boolean {
+  return surface.sample(tile.x + 0.5, tile.z + 0.5) > SEA && !tile.tree && !tile.house;
 }
 function neighbors(tile: Tile): Tile[] {
   const result: Tile[] = [];
   for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
     const next = tileAt(tile.x + dx, tile.z + dz);
-    if (next && next.height > 0 && Math.abs(next.height - tile.height) <= 1 && !next.tree && !next.house) result.push(next);
+    if (next && isWalkable(next) && Math.abs(position(next).y - position(tile).y) <= STEP
+      && surface.sample(tile.x + 0.5 + dx / 2, tile.z + 0.5 + dz / 2) > SEA) result.push(next);
   }
   return result;
 }
@@ -179,18 +184,19 @@ function rebuild(): void {
     if (object.userData.ownedGeometry && object instanceof THREE.Mesh) object.geometry.dispose();
   });
   scenery.clear();
-  surface = new TerrainSurface(SIZE, tiles, STEP);
+  surface = new TerrainSurface(SIZE, cornerLevels, STEP);
+  for (const tile of tiles) tile.height = surface.elevation(tile.x, tile.z);
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(surface.positions(), 3));
-  const colors = new Float32Array(tiles.length * 12 * 3);
+  const colors = new Float32Array(tiles.length * 6 * 3);
   ground = new THREE.Mesh(geometry, groundMaterial);
   ground.castShadow = true;
   ground.receiveShadow = true;
   for (let i = 0; i < tiles.length; i++) {
     const tile = tiles[i];
-    tempColor.copy(tile.height <= 1 ? sandColor : grassColors[Math.min(tile.height - 2, grassColors.length - 1)]);
+    tempColor.copy(tile.height <= 1 ? sandColor : grassColors[Math.max(0, Math.min(Math.floor(tile.height) - 2, grassColors.length - 1))]);
     tempColor.multiplyScalar(0.95 + hash(tile.x, tile.z) * 0.1);
-    for (let vertex = 0; vertex < 12; vertex++) tempColor.toArray(colors, (i * 12 + vertex) * 3);
+    for (let vertex = 0; vertex < 6; vertex++) tempColor.toArray(colors, (i * 6 + vertex) * 3);
     if (tile.height > 1) {
       if (tile.house) addHouse(tile);
       else if (tile.tree) addTree(tile);
@@ -250,7 +256,7 @@ const hairGeometry = new THREE.BoxGeometry(0.145, 0.055, 0.14);
 const limbGeometry = new THREE.BoxGeometry(0.055, 0.16, 0.065);
 function spawnSettlers(): void {
   people.clear(); settlers.length = 0;
-  const walkable = tiles.filter(t => t.height > 1 && !t.tree && !t.house && neighbors(t).length > 0);
+  const walkable = tiles.filter(t => t.height > 1 && isWalkable(t) && neighbors(t).length > 0);
   for (let i = 0; i < Math.min(24, walkable.length); i++) {
     const tile = walkable[Math.floor(random() * walkable.length)];
     const mesh = new THREE.Group();
@@ -275,8 +281,8 @@ function generateWorld(): void {
   randomState = seed;
   tiles.length = 0;
   const offset = seed === 34 ? 0 : hash(seed, seed) * 10;
-  for (let z = 0; z < SIZE; z++) {
-    for (let x = 0; x < SIZE; x++) {
+  for (let z = 0; z <= SIZE; z++) {
+    for (let x = 0; x <= SIZE; x++) {
       const px = x - SIZE / 2; const pz = z - SIZE / 2;
       const ripple = Math.sin(px * 0.55 + offset) * 0.85 + Math.sin(pz * 0.65 + px * 0.25) * 0.65;
       const main = 1 - Math.sqrt(((px + 1.5) / 13.5) ** 2 + ((pz + 1) / 10.5) ** 2);
@@ -284,6 +290,13 @@ function generateWorld(): void {
       const small = 1 - Math.sqrt(((px - 11) / 4.7) ** 2 + ((pz - 8) / 5) ** 2);
       let height = Math.max(0, Math.floor(main * 5 + ripple + hill));
       height = Math.max(height, Math.max(0, Math.floor(small * 4 + 0.5)));
+      cornerLevels[z * (SIZE + 1) + x] = height;
+    }
+  }
+  surface = new TerrainSurface(SIZE, cornerLevels, STEP);
+  for (let z = 0; z < SIZE; z++) {
+    for (let x = 0; x < SIZE; x++) {
+      const height = surface.elevation(x, z);
       const tree = height > 2 && hash(x, z) > 0.67;
       const house = height >= 2 && height <= 4 && hash(x + 40, z) > 0.955 && !tree;
       tiles.push({ x, z, height, tree, house });
@@ -295,8 +308,8 @@ generateWorld();
 
 // Highlight the exact grid cell under the pointer, including submerged cells.
 const outlineGeometry = new THREE.BufferGeometry().setFromPoints([
-  new THREE.Vector3(-0.49, 0, -0.49), new THREE.Vector3(0.49, 0, -0.49),
-  new THREE.Vector3(0.49, 0, 0.49), new THREE.Vector3(-0.49, 0, 0.49), new THREE.Vector3(-0.49, 0, -0.49),
+  new THREE.Vector3(-0.5, 0, -0.5), new THREE.Vector3(0.5, 0, -0.5),
+  new THREE.Vector3(0.5, 0, 0.5), new THREE.Vector3(-0.5, 0, 0.5), new THREE.Vector3(-0.5, 0, -0.5),
 ]);
 const outlineMaterial = new THREE.LineBasicMaterial({ color: '#fff8d7', depthTest: false });
 const outline = new THREE.Line(outlineGeometry, outlineMaterial);
@@ -304,7 +317,7 @@ outline.renderOrder = 10; outline.visible = false;
 scene.add(outline);
 // Tint every triangle of the hovered land tile, preserving the terrain underneath.
 const hoverGeometry = new THREE.BufferGeometry();
-hoverGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(36), 3));
+hoverGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(18), 3));
 const hoverMaterial = new THREE.MeshStandardMaterial({
   color: '#8c1e28', emissive: '#b32432', emissiveIntensity: 0.65, roughness: 1,
   transparent: true, opacity: 0, depthWrite: false,
@@ -314,6 +327,14 @@ const hoverGlow = new THREE.Mesh(hoverGeometry, hoverMaterial);
 hoverGlow.visible = false;
 hoverGlow.renderOrder = 5;
 scene.add(hoverGlow);
+const cornerMarker = new THREE.Mesh(
+  new THREE.SphereGeometry(0.075, 12, 8),
+  new THREE.MeshBasicMaterial({ color: '#fff0c3', depthTest: false }),
+);
+cornerMarker.renderOrder = 11;
+cornerMarker.visible = false;
+scene.add(cornerMarker);
+let hoveredCorner: GridPoint | null = null;
 let glowingTile: Tile | null = null;
 let hoverStrength = 0;
 let hoverTarget = 0;
@@ -333,8 +354,13 @@ function updateHover(event: PointerEvent): void {
   raycaster.setFromCamera(pointer, camera);
   const hit = raycaster.intersectObjects([ground, water])[0];
   hovered = hit?.object === ground && hit.faceIndex != null
-    ? tiles[Math.floor(hit.faceIndex / 4)]
+    ? tiles[Math.floor(hit.faceIndex / 2)]
     : hit ? tileAt(Math.floor(hit.point.x + SIZE / 2), Math.floor(hit.point.z + SIZE / 2)) ?? null : null;
+  hoveredCorner = hovered && hit ? surface.nearestCorner(hit.point.x + SIZE / 2, hit.point.z + SIZE / 2) : null;
+  cornerMarker.visible = hoveredCorner !== null;
+  if (hoveredCorner) {
+    cornerMarker.position.set(hoveredCorner.x - SIZE / 2, Math.max(SEA, surface.corner(hoveredCorner.x, hoveredCorner.z)) + 0.035, hoveredCorner.z - SIZE / 2);
+  }
   outline.visible = hovered !== null;
   const landTile = hovered && hovered.height > 0 ? hovered : null;
   hoverTarget = landTile ? 1 : 0;
@@ -349,7 +375,7 @@ function updateHover(event: PointerEvent): void {
     const source = ground.geometry.getAttribute('position');
     const target = hoverGeometry.getAttribute('position');
     for (let i = 0; i < target.count; i++) {
-      const vertex = tileIndex * 12 + i;
+      const vertex = tileIndex * 6 + i;
       target.setXYZ(i, source.getX(vertex), source.getY(vertex), source.getZ(vertex));
     }
     target.needsUpdate = true;
@@ -373,40 +399,45 @@ function updateHover(event: PointerEvent): void {
   if (hovered && tool === 'inspect') {
     const kind = hovered.height === 0 ? 'Open water' : hovered.house ? 'A settler’s cottage' : hovered.tree ? 'Woodland' : hovered.height === 1 ? 'Sandy shore' : 'Grassy highlands';
     const visitors = settlers.filter(s => s.tile === hovered).length;
-    info.innerHTML = `<strong>${kind}</strong>Elevation ${hovered.height} · Tile ${hovered.x}, ${hovered.z}<br>${visitors ? `${visitors} settler${visitors > 1 ? 's' : ''} here` : hovered.height === 0 ? 'Raise this tile to create land.' : 'A little room for life.'}`;
+    const cornerInfo = hoveredCorner ? `Corner ${hoveredCorner.x}, ${hoveredCorner.z} · Height ${surface.level(hoveredCorner.x, hoveredCorner.z)}` : '';
+    info.innerHTML = `<strong>${kind}</strong>${cornerInfo}<br>Tile ${hovered.x}, ${hovered.z} · Corners ${surface.level(hovered.x, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z + 1)}, ${surface.level(hovered.x, hovered.z + 1)}<br>${visitors ? `${visitors} settler${visitors > 1 ? 's' : ''} here` : 'Select a corner to shape the land.'}`;
   }
   canvas.style.cursor = hovered ? (tool === 'inspect' ? 'help' : 'crosshair') : 'grab';
 }
 canvas.addEventListener('pointermove', updateHover);
 canvas.addEventListener('pointerleave', () => {
-  outline.visible = false; hoverTarget = 0; hovered = null;
+  outline.visible = false; cornerMarker.visible = false; hoverTarget = 0; hovered = null; hoveredCorner = null;
   element('#tile-info').hidden = true;
 });
 canvas.addEventListener('pointerdown', event => { pointerDown = { x: event.clientX, y: event.clientY }; });
 canvas.addEventListener('pointerup', event => {
   if ((event.button !== 0 && event.button !== 2) || Math.hypot(event.clientX - pointerDown.x, event.clientY - pointerDown.y) > 5) return;
   updateHover(event);
-  if (!hovered) return;
+  if (!hovered || !hoveredCorner) return;
   // Mouse buttons directly choose elevation; touch keeps the selected toolbar tool.
   const action = event.pointerType === 'touch' ? tool : event.button === 2 ? 'lower' : 'raise';
   if (action === 'inspect') return;
   selectTool(action);
-  if (action === 'raise' && hovered.height >= 8) { toast('This is as close to the sky as we can go.'); return; }
-  if (action === 'lower' && hovered.height === 0) { toast('Already at sea level. Try raising a new shore.'); return; }
-  hovered.height += action === 'raise' ? 1 : -1;
-  hovered.tree = false; hovered.house = false;
+  if (!surface.editCorner(hoveredCorner.x, hoveredCorner.z, action === 'raise' ? 1 : -1)) {
+    toast(action === 'raise' ? 'This corner is as close to the sky as it can go.' : 'This corner is already at sea level.');
+    return;
+  }
+  const affected = new Set(surface.affectedTiles(hoveredCorner.x, hoveredCorner.z).map(point => tileAt(point.x, point.z)));
+  for (const tile of affected) {
+    if (tile) { tile.tree = false; tile.house = false; }
+  }
   rebuild();
   // Redirect anyone whose path was interrupted. Never leave a settler underwater.
   for (const settler of settlers) {
-    if (settler.tile === hovered || settler.target === hovered) {
+    if (affected.has(settler.tile) || (settler.target && affected.has(settler.target))) {
       settler.target = null; settler.progress = 0;
-      if (settler.tile.height === 0) {
-        const dry = tiles.filter(t => t.height > 0 && !t.tree && !t.house);
+      if (!isWalkable(settler.tile)) {
+        const dry = tiles.filter(isWalkable);
         dry.sort((a, b) => (a.x - settler.tile.x) ** 2 + (a.z - settler.tile.z) ** 2 - (b.x - settler.tile.x) ** 2 - (b.z - settler.tile.z) ** 2);
         if (dry[0]) settler.tile = dry[0];
       }
       settler.mesh.position.copy(position(settler.tile));
-      settler.mesh.visible = settler.tile.height > 0;
+      settler.mesh.visible = isWalkable(settler.tile);
     }
     // Editing a neighbor also changes shared corners, even while paused.
     settler.mesh.position.y = surface.sample(settler.mesh.position.x + SIZE / 2, settler.mesh.position.z + SIZE / 2);
@@ -421,8 +452,8 @@ function selectTool(next: Tool): void {
     button.classList.toggle('active', active); button.setAttribute('aria-pressed', String(active));
   });
   const hints: Record<Tool, [string, string]> = {
-    raise: ['Raise land', 'Left-click to raise · Right-click to lower'],
-    lower: ['Lower land', 'Left-click to raise · Right-click to lower'],
+    raise: ['Raise a corner', 'Point at a corner · Left raises · Right lowers'],
+    lower: ['Lower a corner', 'Point at a corner · Left raises · Right lowers'],
     inspect: ['Explore your world', 'Hover a tile to discover what lives there'],
   };
   element('#tool-hint').innerHTML = `<strong>${hints[next][0]}</strong><span class="hint-detail">${hints[next][1]}</span>`;
@@ -451,7 +482,8 @@ document.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach(button => {
 element('#reset-view').addEventListener('click', resetCamera);
 element('#new-world').addEventListener('click', () => {
   seed += 17; simulationTime = 0; generateWorld(); resetCamera();
-  hovered = null; glowingTile = null; hoverStrength = 0; hoverTarget = 0;
+  hovered = null; hoveredCorner = null; cornerMarker.visible = false;
+  glowingTile = null; hoverStrength = 0; hoverTarget = 0;
   hoverMaterial.opacity = 0; outline.visible = false; hoverGlow.visible = false;
   element('#tile-info').hidden = true;
   toast('A new shore. A fresh beginning.');
