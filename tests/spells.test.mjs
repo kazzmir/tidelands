@@ -41,11 +41,39 @@ test('earthquake reshapes the focus area, preserving all neighboring height limi
   for(const point of surface.changedPoints)assert.notEqual(surface.level(point.x,point.z),before[point.z*21+point.x]);
 });
 
-test('earthquake still affects flat water and unlucky random sequences',()=>{
+test('earthquake can raise water when the roll falls in the 10 percent uplift chance',()=>{
   const surface=new TerrainSurface(10,new Uint8Array(121),0.65);
   assert.equal(earthquake(surface,{x:5,z:5},()=>0),true);
   assertSlopes(surface);
   assert.ok(surface.levels.some(height=>height>0));
+});
+
+test('earthquake uses a 10 percent raise / 90 percent lower distribution',()=>{
+  const random=randomGenerator();
+  let rises=0, falls=0, flooded=0;
+  for(let i=0;i<1000;i++){
+    const surface=new TerrainSurface(4,new Uint8Array(25).fill(4),0.65);
+    earthquake(surface,{x:2,z:2},random,0);
+    const height=surface.level(2,2);
+    if(height>4)rises++;
+    if(height<4)falls++;
+    if(height===0)flooded++;
+    assertSlopes(surface);
+  }
+  assert.ok(rises>=75 && rises<=125,`unexpected uplift count ${rises}`);
+  assert.equal(falls,1000-rises);
+  assert.ok(flooded>100);
+});
+
+test('earthquake subsidence can flood the affected area all the way to water',()=>{
+  const surface=new TerrainSurface(20,new Uint8Array(441).fill(3),0.65);
+  assert.equal(earthquake(surface,{x:10,z:10},()=>0.9),true);
+  assert.equal(surface.level(10,10),0);
+  assert.equal(surface.level(0,0),3);
+  assertSlopes(surface);
+  const water=new TerrainSurface(4,new Uint8Array(25),0.65);
+  assert.equal(earthquake(water,{x:2,z:2},()=>0.9),false);
+  assert.ok(water.levels.every(height=>height===0));
 });
 
 test('Mountain raises three supplied visible points to maximum height with valid slopes',()=>{

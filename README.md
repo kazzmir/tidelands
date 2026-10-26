@@ -85,7 +85,7 @@ Raising or lowering costs **1 power per height level changed per point**. Every 
 
 The right-hand spell palette shows icons with hover/focus tooltips. Affordable spell names are light; unaffordable names and icons are dimmed. Click an icon to select a spell, then **left-click a highlighted tile** to cast at that location. Selection spends no power. Press **Escape**, right-click, click the selected spell again, or choose a terrain tool to cancel. Spells use a fixed power cost (no additional per-point terraforming cost), and only spend power when they have a valid effect.
 
-- **Earthquake — 500 power:** randomly raises/lowers points within roughly six tiles of the selected tile. Neighboring heights still differ by at most one. The entire interface shakes for one real-time second (suppressed for reduced-motion preferences).
+- **Earthquake — 500 power:** reshapes points within roughly six tiles of the selected tile: each point has a **10% chance to rise** by one or two levels and a **90% chance to lower**, potentially all the way to water (height 0). Subsidence is applied after uplift so most affected land sinks. Neighboring heights still differ by at most one. The entire interface shakes for one real-time second (suppressed for reduced-motion preferences).
 - **Mountain — 2,000 power:** raises up to three spaced-out points around the selected tile to maximum height 8, prioritizing a corner of that tile; cascading adjustments create surrounding hills. No power is spent if no eligible nearby points remain.
 
 Both spells update homes, castles, farming, trees, and settler positions just like ordinary terrain edits. Spells can be cast while the simulation is paused.

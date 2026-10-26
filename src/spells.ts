@@ -14,18 +14,27 @@ function recordChanges(surface: TerrainSurface, before: Uint8Array): boolean {
 
 export function earthquake(surface: TerrainSurface, center: GridPoint, random: () => number, radius = 6): boolean {
   const before = surface.levels.slice();
+  const rises: Array<GridPoint & { height: number }> = [];
+  const falls: Array<GridPoint & { height: number }> = [];
   for (let z = Math.max(0, Math.floor(center.z - radius)); z <= Math.min(surface.size, Math.ceil(center.z + radius)); z++) {
     for (let x = Math.max(0, Math.floor(center.x - radius)); x <= Math.min(surface.size, Math.ceil(center.x + radius)); x++) {
-      if (Math.hypot(x - center.x, z - center.z) > radius || random() > 0.45) continue;
+      if (Math.hypot(x - center.x, z - center.z) > radius) continue;
       const current = surface.level(x, z);
-      const next = Math.max(0, Math.min(8, current + Math.floor(random() * 5) - 2));
-      surface.editCorner(x, z, next - current);
+      if (random() < 0.1) {
+        rises.push({ x, z, height: Math.min(8, current + 1 + Math.floor(random() * 2)) });
+      } else {
+        falls.push({ x, z, height: Math.max(0, current - 1 - Math.floor(random() * current)) });
+      }
     }
   }
-  // Even an unlucky random sequence should produce an effect on a valid target.
-  if (!recordChanges(surface, before)) {
-    const point = surface.nearestCorner(center.x, center.z);
-    surface.editCorner(point.x, point.z, surface.level(point.x, point.z) < 8 ? 1 : -1);
+  // Resolve uplift first, then subsidence so upward cascades cannot undo the flooding.
+  for (const point of rises) {
+    const current = surface.level(point.x, point.z);
+    if (point.height > current) surface.editCorner(point.x, point.z, point.height - current);
+  }
+  for (const point of falls) {
+    const current = surface.level(point.x, point.z);
+    if (point.height < current) surface.editCorner(point.x, point.z, point.height - current);
   }
   return recordChanges(surface, before);
 }

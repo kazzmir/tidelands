@@ -743,7 +743,10 @@ function castSpell(spell: Spell, target: Tile): void {
     }
     changed = mountain(preview, nearby, random, center);
   }
-  if (!changed) { toast('There are no points left to raise around this tile.'); return; }
+  if (!changed) {
+    toast(spell === 'earthquake' ? 'No land changed here. Try another tile.' : 'There are no points left to raise around this tile.');
+    return;
+  }
   if (!powerMeter.spend(cost)) return;
   selectedSpell = null;
   selectTool(tool);
