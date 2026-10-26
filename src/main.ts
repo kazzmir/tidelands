@@ -227,7 +227,7 @@ function startGame(): void {
         x,
         z,
         height,
-        tree: initialSurface.elevation(x, z) > 2 && hash(x, z) > 0.88,
+        tree: initialSurface.elevation(x, z) > 2 && hash(x, z) > 0.97,
         house: false,
       };
       tileCache.set(index, tile);
