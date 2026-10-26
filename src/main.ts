@@ -305,14 +305,18 @@ scene.add(outline);
 // Tint every triangle of the hovered land tile, preserving the terrain underneath.
 const hoverGeometry = new THREE.BufferGeometry();
 hoverGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(36), 3));
-const hoverMaterial = new THREE.MeshBasicMaterial({
-  color: '#b32432', transparent: true, opacity: 0.68, depthWrite: false,
+const hoverMaterial = new THREE.MeshStandardMaterial({
+  color: '#8c1e28', emissive: '#b32432', emissiveIntensity: 0.65, roughness: 1,
+  transparent: true, opacity: 0, depthWrite: false,
   polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
 });
 const hoverGlow = new THREE.Mesh(hoverGeometry, hoverMaterial);
 hoverGlow.visible = false;
 hoverGlow.renderOrder = 5;
 scene.add(hoverGlow);
+let glowingTile: Tile | null = null;
+let hoverStrength = 0;
+let hoverTarget = 0;
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
 let hovered: Tile | null = null;
@@ -332,8 +336,15 @@ function updateHover(event: PointerEvent): void {
     ? tiles[Math.floor(hit.faceIndex / 4)]
     : hit ? tileAt(Math.floor(hit.point.x + SIZE / 2), Math.floor(hit.point.z + SIZE / 2)) ?? null : null;
   outline.visible = hovered !== null;
-  hoverGlow.visible = hovered !== null && hovered.height > 0;
-  if (hovered && hoverGlow.visible) {
+  const landTile = hovered && hovered.height > 0 ? hovered : null;
+  hoverTarget = landTile ? 1 : 0;
+  if (landTile && landTile !== glowingTile) {
+    glowingTile = landTile;
+    hoverStrength = 0;
+    hoverMaterial.opacity = 0;
+  }
+  if (landTile) hoverGlow.visible = true;
+  if (hovered && landTile) {
     const tileIndex = hovered.z * SIZE + hovered.x;
     const source = ground.geometry.getAttribute('position');
     const target = hoverGeometry.getAttribute('position');
@@ -342,6 +353,7 @@ function updateHover(event: PointerEvent): void {
       target.setXYZ(i, source.getX(vertex), source.getY(vertex), source.getZ(vertex));
     }
     target.needsUpdate = true;
+    hoverGeometry.computeVertexNormals();
     hoverGeometry.computeBoundingSphere();
   }
   if (hovered) {
@@ -354,7 +366,7 @@ function updateHover(event: PointerEvent): void {
     }
     vertices.needsUpdate = true;
     outlineGeometry.computeBoundingSphere();
-    outlineMaterial.color.set(hovered.height > 0 ? '#b32432' : tool === 'lower' ? '#e8ad85' : '#fff6cc');
+    outlineMaterial.color.set(tool === 'lower' ? '#e8ad85' : '#fff6cc');
   }
   const info = element('#tile-info');
   info.hidden = tool !== 'inspect' || !hovered;
@@ -366,7 +378,10 @@ function updateHover(event: PointerEvent): void {
   canvas.style.cursor = hovered ? (tool === 'inspect' ? 'help' : 'crosshair') : 'grab';
 }
 canvas.addEventListener('pointermove', updateHover);
-canvas.addEventListener('pointerleave', () => { outline.visible = false; hoverGlow.visible = false; hovered = null; element('#tile-info').hidden = true; });
+canvas.addEventListener('pointerleave', () => {
+  outline.visible = false; hoverTarget = 0; hovered = null;
+  element('#tile-info').hidden = true;
+});
 canvas.addEventListener('pointerdown', event => { pointerDown = { x: event.clientX, y: event.clientY }; });
 canvas.addEventListener('pointerup', event => {
   if (event.button !== 0 || Math.hypot(event.clientX - pointerDown.x, event.clientY - pointerDown.y) > 5) return;
@@ -432,7 +447,8 @@ document.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach(button => {
 element('#reset-view').addEventListener('click', resetCamera);
 element('#new-world').addEventListener('click', () => {
   seed += 17; simulationTime = 0; generateWorld(); resetCamera();
-  hovered = null; outline.visible = false; hoverGlow.visible = false;
+  hovered = null; glowingTile = null; hoverStrength = 0; hoverTarget = 0;
+  hoverMaterial.opacity = 0; outline.visible = false; hoverGlow.visible = false;
   element('#tile-info').hidden = true;
   toast('A new shore. A fresh beginning.');
 });
@@ -459,6 +475,13 @@ const clock = new THREE.Clock();
 function animate(): void {
   requestAnimationFrame(animate);
   const elapsed = clock.getDelta();
+  // Real-time easing keeps feedback responsive even when the simulation is paused.
+  hoverStrength = THREE.MathUtils.lerp(hoverStrength, hoverTarget, 1 - Math.exp(-8 * Math.min(elapsed, 0.1)));
+  hoverMaterial.opacity = hoverStrength * 0.68;
+  if (hoverTarget === 0 && hoverStrength < 0.005) {
+    hoverGlow.visible = false;
+    glowingTile = null;
+  }
   const dt = paused ? 0 : Math.min(elapsed, 0.05) * speed;
   simulationTime += dt;
   for (const settler of settlers) {
