@@ -535,7 +535,17 @@ element('#new-world').addEventListener('click', () => {
   element('#tile-info').hidden = true;
   toast('A new shore. A fresh beginning.');
 });
+const panKeys = new Set<string>();
+const arrowKeys = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight']);
+const panRight = new THREE.Vector3();
+const panForward = new THREE.Vector3();
+const panOffset = new THREE.Vector3();
 window.addEventListener('keydown', event => {
+  if (event.target instanceof HTMLElement && (event.target.isContentEditable || event.target.matches('input, textarea, select'))) return;
+  if (arrowKeys.has(event.code)) {
+    event.preventDefault();
+    panKeys.add(event.code);
+  }
   if (event.key === 'Shift') setShift(true);
   if (event.target instanceof HTMLButtonElement && event.code === 'Space') return;
   if (event.code === 'Space') { event.preventDefault(); togglePause(); }
@@ -545,9 +555,11 @@ window.addEventListener('keydown', event => {
 });
 
 window.addEventListener('keyup', event => {
+  panKeys.delete(event.code);
   if (event.key === 'Shift') setShift(event.shiftKey);
 });
 window.addEventListener('blur', () => {
+  panKeys.clear();
   lastPointer = null;
   setShift(false);
   hoverTarget = 0; surfaceTarget = 0;
@@ -568,6 +580,17 @@ const clock = new THREE.Clock();
 function animate(): void {
   requestAnimationFrame(animate);
   const elapsed = clock.getDelta();
+  // Pan on the ground relative to the camera's current orientation, even while paused.
+  const horizontal = Number(panKeys.has('ArrowRight')) - Number(panKeys.has('ArrowLeft'));
+  const vertical = Number(panKeys.has('ArrowUp')) - Number(panKeys.has('ArrowDown'));
+  if (horizontal || vertical) {
+    panRight.setFromMatrixColumn(camera.matrixWorld, 0).setY(0).normalize();
+    panForward.subVectors(controls.target, camera.position).setY(0).normalize();
+    panOffset.copy(panRight).multiplyScalar(horizontal).addScaledVector(panForward, vertical)
+      .normalize().multiplyScalar(12 * Math.min(elapsed, 0.05) / camera.zoom);
+    camera.position.add(panOffset);
+    controls.target.add(panOffset);
+  }
   // Real-time easing keeps feedback responsive even when the simulation is paused.
   hoverStrength = THREE.MathUtils.lerp(hoverStrength, hoverTarget, 1 - Math.exp(-8 * Math.min(elapsed, 0.1)));
   surfaceStrength = THREE.MathUtils.lerp(surfaceStrength, surfaceTarget, 1 - Math.exp(-8 * Math.min(elapsed, 0.1)));
@@ -616,6 +639,7 @@ function animate(): void {
   const timeOfDay = simulationTime % 120 < 40 ? 'morning' : simulationTime % 120 < 85 ? 'afternoon' : 'evening';
   element('#day').innerHTML = `Day ${day} <small>· ${timeOfDay}</small>`;
   controls.update();
+  if ((horizontal || vertical) && lastPointer) updateHover(lastPointer);
   const direction = camera.position.clone().sub(controls.target);
   element<HTMLElement>('.compass svg').style.transform = `rotate(${-Math.atan2(direction.x, direction.z) * 180 / Math.PI}deg)`;
   renderer.render(scene, camera);
