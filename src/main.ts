@@ -1,4 +1,5 @@
 import './style.css';
+import { TerrainSurface } from './terrain-surface';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
@@ -91,12 +92,9 @@ const people = new THREE.Group();
 scene.add(terrain, scenery, people);
 const sandColor = new THREE.Color('#d6c391');
 const grassColors = ['#9eb778', '#8eae6f', '#82a564', '#769d5b', '#6c9357', '#71965d', '#819f6d'].map(c => new THREE.Color(c));
-const groundGeometry = new THREE.BoxGeometry(1, 1, 1);
-const sideMaterial = new THREE.MeshStandardMaterial({ color: '#b1a88a', roughness: 1 });
-const topMaterial = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 1 });
-const groundMaterials = [sideMaterial, sideMaterial, topMaterial, sideMaterial, sideMaterial, sideMaterial];
-let ground: THREE.InstancedMesh<THREE.BoxGeometry, THREE.MeshStandardMaterial[]>;
-const dummy = new THREE.Object3D();
+const groundMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true });
+let ground: THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>;
+let surface: TerrainSurface;
 const tempColor = new THREE.Color();
 const treeTrunk = new THREE.MeshStandardMaterial({ color: '#796e48', roughness: 1 });
 const foliage = ['#3f7556', '#4e8057', '#64874f', '#5a8051'].map(color => new THREE.MeshStandardMaterial({ color, roughness: 1 }));
@@ -145,6 +143,7 @@ function addTree(tile: Tile): void {
   group.position.copy(position(tile));
   group.position.x += (random() - 0.5) * 0.28;
   group.position.z += (random() - 0.5) * 0.28;
+  group.position.y = surface.sample(group.position.x + SIZE / 2, group.position.z + SIZE / 2);
   group.rotation.y = random() * Math.PI;
   group.scale.setScalar(0.65 + random() * 0.35);
   group.traverse(object => { if (object instanceof THREE.Mesh) object.castShadow = true; });
@@ -162,27 +161,36 @@ function addHouse(tile: Tile): void {
   chimney.position.set(-0.2, 0.72, -0.15);
   group.add(walls, roof, door, chimney);
   group.position.copy(position(tile));
+  const footprint = [-0.4, 0.4].flatMap(dx => [-0.4, 0.4].map(dz => surface.sample(tile.x + 0.5 + dx, tile.z + 0.5 + dz)));
+  const floor = Math.max(tile.height * STEP, ...footprint) + 0.01;
+  const foundationDepth = floor - Math.min(...footprint) + 0.04;
+  const foundation = new THREE.Mesh(new THREE.BoxGeometry(0.64, foundationDepth, 0.6), wallMaterial);
+  foundation.userData.ownedGeometry = true;
+  foundation.position.y = -foundationDepth / 2;
+  group.add(foundation);
+  group.position.y = floor;
   group.rotation.y = Math.floor(hash(tile.x, tile.z) * 4) * Math.PI / 2;
   group.traverse(object => { if (object instanceof THREE.Mesh) { object.castShadow = true; object.receiveShadow = true; } });
   scenery.add(group);
 }
 function rebuild(): void {
-  if (ground) { terrain.remove(ground); ground.dispose(); }
+  if (ground) { terrain.remove(ground); ground.geometry.dispose(); }
+  scenery.traverse(object => {
+    if (object.userData.ownedGeometry && object instanceof THREE.Mesh) object.geometry.dispose();
+  });
   scenery.clear();
-  ground = new THREE.InstancedMesh(groundGeometry, groundMaterials, tiles.length);
+  surface = new TerrainSurface(SIZE, tiles, STEP);
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(surface.positions(), 3));
+  const colors = new Float32Array(tiles.length * 12 * 3);
+  ground = new THREE.Mesh(geometry, groundMaterial);
   ground.castShadow = true;
   ground.receiveShadow = true;
   for (let i = 0; i < tiles.length; i++) {
     const tile = tiles[i];
-    const top = tile.height === 0 ? -0.35 : tile.height * STEP;
-    const depth = top + 1.5;
-    dummy.position.set(tile.x - SIZE / 2 + 0.5, top - depth / 2, tile.z - SIZE / 2 + 0.5);
-    dummy.scale.set(1, depth, 1);
-    dummy.updateMatrix();
-    ground.setMatrixAt(i, dummy.matrix);
     tempColor.copy(tile.height <= 1 ? sandColor : grassColors[Math.min(tile.height - 2, grassColors.length - 1)]);
     tempColor.multiplyScalar(0.95 + hash(tile.x, tile.z) * 0.1);
-    ground.setColorAt(i, tempColor);
+    for (let vertex = 0; vertex < 12; vertex++) tempColor.toArray(colors, (i * 12 + vertex) * 3);
     if (tile.height > 1) {
       if (tile.house) addHouse(tile);
       else if (tile.tree) addTree(tile);
@@ -194,12 +202,21 @@ function rebuild(): void {
         scenery.add(rock);
       } else if (tile.height === 2 && hash(tile.x + 90, tile.z) > 0.75) {
         const path = new THREE.Mesh(pathGeometry, pathMaterial);
-        path.rotation.x = -Math.PI / 2; path.position.copy(position(tile)); path.position.y += 0.005;
+        path.geometry = pathGeometry.clone();
+        path.userData.ownedGeometry = true;
+        path.rotation.x = -Math.PI / 2; path.position.copy(position(tile));
+        const vertices = path.geometry.getAttribute('position');
+        for (let i = 0; i < vertices.count; i++) {
+          const y = surface.sample(tile.x + 0.5 + vertices.getX(i), tile.z + 0.5 - vertices.getY(i));
+          vertices.setZ(i, y - path.position.y + 0.008);
+        }
+        path.geometry.computeVertexNormals();
         scenery.add(path);
       }
     }
   }
-  ground.instanceMatrix.needsUpdate = true;
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geometry.computeVertexNormals();
   terrain.add(ground);
   element('#land-count').innerHTML = `${tiles.filter(t => t.height > 0).length} <small>tiles</small>`;
 }
@@ -300,12 +317,20 @@ function updateHover(event: PointerEvent): void {
   pointer.set((event.clientX - bounds.left) / bounds.width * 2 - 1, -(event.clientY - bounds.top) / bounds.height * 2 + 1);
   raycaster.setFromCamera(pointer, camera);
   const hit = raycaster.intersectObjects([ground, water])[0];
-  hovered = hit?.instanceId !== undefined
-    ? tiles[hit.instanceId]
+  hovered = hit?.object === ground && hit.faceIndex != null
+    ? tiles[Math.floor(hit.faceIndex / 4)]
     : hit ? tileAt(Math.floor(hit.point.x + SIZE / 2), Math.floor(hit.point.z + SIZE / 2)) ?? null : null;
   outline.visible = hovered !== null;
   if (hovered) {
-    outline.position.copy(position(hovered)); outline.position.y = Math.max(SEA, hovered.height * STEP) + 0.025;
+    outline.position.set(hovered.x - SIZE / 2 + 0.5, 0, hovered.z - SIZE / 2 + 0.5);
+    const vertices = outlineGeometry.getAttribute('position');
+    for (let i = 0; i < vertices.count; i++) {
+      const x = outline.position.x + vertices.getX(i);
+      const z = outline.position.z + vertices.getZ(i);
+      vertices.setY(i, Math.max(SEA, surface.sample(x + SIZE / 2, z + SIZE / 2)) + 0.025);
+    }
+    vertices.needsUpdate = true;
+    outlineGeometry.computeBoundingSphere();
     outlineMaterial.color.set(tool === 'lower' ? '#e8ad85' : '#fff6cc');
   }
   const info = element('#tile-info');
@@ -341,6 +366,8 @@ canvas.addEventListener('pointerup', event => {
       settler.mesh.position.copy(position(settler.tile));
       settler.mesh.visible = settler.tile.height > 0;
     }
+    // Editing a neighbor also changes shared corners, even while paused.
+    settler.mesh.position.y = surface.sample(settler.mesh.position.x + SIZE / 2, settler.mesh.position.z + SIZE / 2);
   }
   updateHover(event);
 });
@@ -423,7 +450,8 @@ function animate(): void {
     settler.progress = Math.min(1, settler.progress + dt * 0.65);
     const from = position(settler.tile); const to = position(settler.target);
     settler.mesh.position.lerpVectors(from, to, settler.progress);
-    settler.mesh.position.y += Math.abs(Math.sin(settler.progress * Math.PI * 4)) * 0.035;
+    settler.mesh.position.y = surface.sample(settler.mesh.position.x + SIZE / 2, settler.mesh.position.z + SIZE / 2)
+      + Math.abs(Math.sin(settler.progress * Math.PI * 4)) * 0.035;
     for (let i = 0; i < settler.legs.length; i++) {
       settler.legs[i].rotation.x = Math.sin(simulationTime * 9 + settler.phase) * (i < 2 ? 0.45 : -0.45);
     }

@@ -12,6 +12,7 @@ npm run dev
 Open the local URL printed by Vite. Requires Node.js 22.12+ (or 20.19+).
 
 ```sh
+npm test         # Check slope continuity and terrain sampling
 npm run build    # Type-check and produce dist/
 npm run preview # Serve the production build
 ```
@@ -31,8 +32,10 @@ Settlers choose neighboring dry tiles, climb one elevation step at a time, and a
 
 ## Structure
 
-- `src/main.ts` — procedural terrain, instanced tile rendering, scenery, settler simulation, camera, and interaction.
+- `src/main.ts` — procedural terrain, scenery, settler simulation, camera, and interaction.
+- `src/terrain-surface.ts` — shared-corner triangle mesh and matching surface-height sampling.
+- `tests/terrain-surface.test.mjs` — slope continuity, mesh winding, height sampling, and edit tests.
 - `src/style.css` — responsive game HUD.
 - `index.html` — accessible interface and canvas shell.
 
-Terrain uses integer heights with a fixed world-space step. A seeded generator creates the islands and decorations. An orthographic camera supplies the isometric view; surface raycasting maps pointer input back to grid cells, including underwater cells.
+Terrain uses integer center heights with a fixed world-space step. Shared corners average neighboring elevations; four triangles connect each tile center to those corners, producing continuous diagonal hills instead of vertical steps. Settlers sample this exact surface as they walk, while cottages have foundations and paths follow the slopes. A seeded generator creates the islands and decorations. An orthographic camera supplies the isometric view; surface raycasting maps pointer input back to grid cells, including underwater cells.
