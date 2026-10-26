@@ -114,7 +114,7 @@ const heightColors = [
 const groundMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true });
 let ground: THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>;
 let contours: THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial> | null = null;
-const contourMaterial = new THREE.LineBasicMaterial({ color: '#101810', transparent: true, opacity: 0.8, depthWrite: false });
+const contourMaterial = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.55, depthWrite: false });
 let surface: TerrainSurface;
 const tempColor = new THREE.Color();
 const treeTrunk = new THREE.MeshStandardMaterial({ color: '#796e48', roughness: 1 });
@@ -369,7 +369,14 @@ function rebuild(): void {
   geometry.computeVertexNormals();
   terrain.add(ground);
   const contourGeometry = new THREE.BufferGeometry();
-  contourGeometry.setAttribute('position', new THREE.BufferAttribute(elevationContours(vertices.array, STEP), 3));
+  const contourPositions = elevationContours(vertices.array, STEP);
+  contourGeometry.setAttribute('position', new THREE.BufferAttribute(contourPositions, 3));
+  const contourColors = new Float32Array(contourPositions.length);
+  for (let i = 0; i < contourPositions.length; i += 3) {
+    const level = THREE.MathUtils.clamp(Math.round(contourPositions[i + 1] / STEP), 0, heightColors.length - 1);
+    tempColor.copy(heightColors[level]).multiplyScalar(0.85).toArray(contourColors, i);
+  }
+  contourGeometry.setAttribute('color', new THREE.BufferAttribute(contourColors, 3));
   contours = new THREE.LineSegments(contourGeometry, contourMaterial);
   contours.position.y = 0.012; // Keep the lines above their surface without z-fighting.
   contours.renderOrder = 1;
