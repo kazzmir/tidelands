@@ -1,11 +1,12 @@
 import './style.css';
 import { TerrainSurface, type GridPoint } from './terrain-surface';
+import { releaseInvalidHomes, trySettle } from './settlement';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 type Tool = 'raise' | 'lower' | 'inspect';
 interface Tile { x: number; z: number; height: number; tree: boolean; house: boolean }
-interface Settler { mesh: THREE.Group; tile: Tile; target: Tile | null; progress: number; wait: number; phase: number; legs: THREE.Mesh[] }
+interface Settler { mesh: THREE.Group; tile: Tile; home: Tile | null; target: Tile | null; progress: number; wait: number; phase: number; legs: THREE.Mesh[] }
 
 function element<T extends HTMLElement>(selector: string): T {
   const result = document.querySelector<T>(selector);
@@ -90,7 +91,8 @@ const cornerLevels = new Uint8Array((SIZE + 1) ** 2);
 const terrain = new THREE.Group();
 const scenery = new THREE.Group();
 const people = new THREE.Group();
-scene.add(terrain, scenery, people);
+const buildings = new THREE.Group();
+scene.add(terrain, scenery, buildings, people);
 // Distinct elevation colors, interpolated across each slope from its corner heights.
 const heightColors = [
   '#bca171', // 0: submerged sand
@@ -165,6 +167,12 @@ function addTree(tile: Tile): void {
   scenery.add(group);
 }
 function addHouse(tile: Tile): void {
+  // Remove incidental rocks/paths when a settler claims this tile.
+  for (const decoration of [...scenery.children]) {
+    if (decoration.userData.tile !== tile) continue;
+    scenery.remove(decoration);
+    if (decoration instanceof THREE.Mesh && decoration.userData.ownedGeometry) decoration.geometry.dispose();
+  }
   const group = new THREE.Group();
   const walls = new THREE.Mesh(houseGeometry, wallMaterial);
   walls.position.y = 0.24;
@@ -186,7 +194,7 @@ function addHouse(tile: Tile): void {
   group.position.y = floor;
   group.rotation.y = Math.floor(hash(tile.x, tile.z) * 4) * Math.PI / 2;
   group.traverse(object => { if (object instanceof THREE.Mesh) { object.castShadow = true; object.receiveShadow = true; } });
-  scenery.add(group);
+  buildings.add(group);
 }
 function rebuild(): void {
   if (ground) { terrain.remove(ground); ground.geometry.dispose(); }
@@ -194,6 +202,10 @@ function rebuild(): void {
     if (object.userData.ownedGeometry && object instanceof THREE.Mesh) object.geometry.dispose();
   });
   scenery.clear();
+  buildings.traverse(object => {
+    if (object.userData.ownedGeometry && object instanceof THREE.Mesh) object.geometry.dispose();
+  });
+  buildings.clear();
   surface = new TerrainSurface(SIZE, cornerLevels, STEP);
   for (const tile of tiles) tile.height = surface.elevation(tile.x, tile.z);
   const geometry = new THREE.BufferGeometry();
@@ -213,19 +225,21 @@ function rebuild(): void {
       tempColor.multiplyScalar(0.98 + hash(vertices.getX(index) + SIZE / 2, vertices.getZ(index) + SIZE / 2) * 0.04);
       tempColor.toArray(colors, index * 3);
     }
-    if (tile.height > 1) {
-      if (tile.house) addHouse(tile);
-      else if (tile.tree) addTree(tile);
+    if (tile.house) addHouse(tile);
+    else if (tile.height > 1) {
+      if (tile.tree) addTree(tile);
       else if (hash(tile.x + 60, tile.z) > 0.967) {
         const rock = new THREE.Mesh(rockGeometry, rockMaterial);
         rock.position.copy(position(tile)); rock.position.y += 0.09;
         rock.scale.set(1, 0.7, 0.9); rock.rotation.y = hash(tile.x, tile.z) * 6;
         rock.castShadow = true;
+        rock.userData.tile = tile;
         scenery.add(rock);
       } else if (tile.height === 2 && hash(tile.x + 90, tile.z) > 0.75) {
         const path = new THREE.Mesh(pathGeometry, pathMaterial);
         path.geometry = pathGeometry.clone();
         path.userData.ownedGeometry = true;
+        path.userData.tile = tile;
         path.rotation.x = -Math.PI / 2; path.position.copy(position(tile));
         const vertices = path.geometry.getAttribute('position');
         for (let i = 0; i < vertices.count; i++) {
@@ -289,9 +303,16 @@ function spawnSettlers(): void {
     mesh.traverse(object => { if (object instanceof THREE.Mesh) object.castShadow = true; });
     mesh.position.copy(position(tile)); mesh.scale.setScalar(1.15);
     people.add(mesh);
-    settlers.push({ mesh, tile, target: null, progress: 0, wait: random() * 3, phase: random() * 6, legs });
+    settlers.push({ mesh, tile, home: null, target: null, progress: 0, wait: random() * 3, phase: random() * 6, legs });
   }
+  updateSettlementStats();
+}
+function updateSettlementStats(): void {
+  const housed = settlers.filter(settler => settler.home !== null).length;
+  const roaming = settlers.length - housed;
   element('#population').innerHTML = `${settlers.length} <small>settlers</small>`;
+  element('#population').title = `${roaming} roaming · ${housed} at home`;
+  element('#settlement-status').textContent = `${roaming} roaming · ${housed} at home`;
 }
 function generateWorld(): void {
   randomState = seed;
@@ -315,8 +336,7 @@ function generateWorld(): void {
     for (let x = 0; x < SIZE; x++) {
       const height = surface.elevation(x, z);
       const tree = height > 2 && hash(x, z) > 0.67;
-      const house = height >= 2 && height <= 4 && hash(x + 40, z) > 0.955 && !tree;
-      tiles.push({ x, z, height, tree, house });
+      tiles.push({ x, z, height, tree, house: false });
     }
   }
   rebuild(); spawnSettlers();
@@ -428,9 +448,10 @@ function updateHover(event: Pick<PointerEvent, 'clientX' | 'clientY'>): void {
   info.hidden = tool !== 'inspect' || !hovered;
   if (hovered && tool === 'inspect') {
     const kind = hovered.height === 0 ? 'Open water' : hovered.house ? 'A settler’s cottage' : hovered.tree ? 'Woodland' : hovered.height === 1 ? 'Sandy shore' : 'Grassy highlands';
-    const visitors = settlers.filter(s => s.tile === hovered).length;
+    const visitors = settlers.filter(s => s.tile === hovered && !s.home).length;
+    const resident = settlers.some(s => s.home === hovered);
     const cornerInfo = shiftHeld ? 'Surface selected · All four corners' : hoveredCorner ? `Corner ${hoveredCorner.x}, ${hoveredCorner.z} · Height ${surface.level(hoveredCorner.x, hoveredCorner.z)}` : '';
-    info.innerHTML = `<strong>${kind}</strong>${cornerInfo}<br>Tile ${hovered.x}, ${hovered.z} · Corners ${surface.level(hovered.x, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z + 1)}, ${surface.level(hovered.x, hovered.z + 1)}<br>${visitors ? `${visitors} settler${visitors > 1 ? 's' : ''} here` : 'Select a corner to shape the land.'}`;
+    info.innerHTML = `<strong>${kind}</strong>${cornerInfo}<br>Tile ${hovered.x}, ${hovered.z} · Corners ${surface.level(hovered.x, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z + 1)}, ${surface.level(hovered.x, hovered.z + 1)}<br>${resident ? '1 settler lives here.' : visitors ? `${visitors} settler${visitors > 1 ? 's' : ''} here` : 'Select a corner to shape the land.'}`;
   }
   canvas.style.cursor = hovered ? (tool === 'inspect' ? 'help' : 'crosshair') : 'grab';
 }
@@ -469,13 +490,15 @@ canvas.addEventListener('pointerup', event => {
   }
   const affected = new Set(surface.changedPoints.flatMap(point => surface.affectedTiles(point.x, point.z)).map(point => tileAt(point.x, point.z)));
   for (const tile of affected) {
-    if (tile) { tile.tree = false; tile.house = false; }
+    if (tile) tile.tree = false;
   }
+  releaseInvalidHomes(settlers, surface);
   rebuild();
   // Redirect anyone whose path was interrupted. Never leave a settler underwater.
   for (const settler of settlers) {
+    if (settler.home) continue;
     if (affected.has(settler.tile) || (settler.target && affected.has(settler.target))) {
-      settler.target = null; settler.progress = 0;
+      settler.target = null; settler.progress = 0; settler.wait = 0;
       if (!isWalkable(settler.tile)) {
         const dry = tiles.filter(isWalkable);
         dry.sort((a, b) => (a.x - settler.tile.x) ** 2 + (a.z - settler.tile.z) ** 2 - (b.x - settler.tile.x) ** 2 - (b.z - settler.tile.z) ** 2);
@@ -487,6 +510,7 @@ canvas.addEventListener('pointerup', event => {
     // Editing a neighbor also changes shared corners, even while paused.
     settler.mesh.position.y = surface.sample(settler.mesh.position.x + SIZE / 2, settler.mesh.position.z + SIZE / 2);
   }
+  updateSettlementStats();
   updateHover(event);
 });
 canvas.addEventListener('contextmenu', event => event.preventDefault());
@@ -608,7 +632,12 @@ function animate(): void {
   const dt = paused ? 0 : Math.min(elapsed, 0.05) * speed;
   simulationTime += dt;
   for (const settler of settlers) {
-    if (!dt) continue;
+    if (!dt || settler.home) continue;
+    // Another settler may have built a house after this walk was planned.
+    if (settler.target && !isWalkable(settler.target)) {
+      settler.target = null;
+      settler.mesh.position.copy(position(settler.tile));
+    }
     if (!settler.target) {
       settler.wait -= dt;
       if (settler.wait > 0) continue;
@@ -630,6 +659,11 @@ function animate(): void {
       settler.tile = settler.target; settler.target = null;
       settler.wait = random() < 0.2 ? random() * 3 : 0;
       settler.legs.forEach(leg => { leg.rotation.x = 0; });
+      if (trySettle(settler, surface)) {
+        settler.mesh.visible = false;
+        addHouse(settler.tile);
+        updateSettlementStats();
+      }
     }
   }
   waves.position.x = Math.sin(simulationTime * 0.15) * 0.4;

@@ -31,12 +31,14 @@ npm run preview # Serve the production build
 - **Reset camera icon:** return to the original isometric view.
 - **New world:** generate a fresh island and population.
 
-Settlers choose neighboring dry tiles, climb one elevation step at a time, and avoid trees and cottages. They can explore newly connected land. Lowering an occupied tile into the sea relocates its inhabitant to the nearest dry ground. Day progression is cosmetic; this is a terrain/walking prototype, not yet a full civilization simulation. Worlds are not persisted between reloads.
+Settlers choose neighboring dry tiles, climb one elevation step at a time, and avoid trees and cottages. After walking onto an unoccupied, treeless tile with four equal, above-water corner heights, they build a house and live inside it, disappearing from the map. Each house belongs to one settler; total population includes both roaming and housed settlers. Making a home’s ground non-flat (including through a cascaded edit) removes it and returns its resident to walking. Moving all four corners together preserves the home if it remains dry. Flooding a home also releases its resident; anyone stranded underwater relocates to the nearest dry ground. The life panel shows the roaming/housed counts, and Inspect identifies occupied homes. Day progression is cosmetic; this is a terrain/walking prototype, not yet a full civilization simulation. Worlds are not persisted between reloads.
 
 ## Structure
 
 - `src/main.ts` — procedural terrain, scenery, settler simulation, camera, and interaction.
 - `src/terrain-surface.ts` — shared-corner triangle mesh and matching surface-height sampling.
+- `src/settlement.ts` — flat-ground house placement, ownership, and resident release.
+- `tests/settlement.test.mjs` — settlement, occupancy, flooding, and terrain-driven release tests.
 - `tests/terrain-surface.test.mjs` — slope continuity, mesh winding, height sampling, and edit tests.
 - `src/style.css` — responsive game HUD.
 - `index.html` — accessible interface and canvas shell.
