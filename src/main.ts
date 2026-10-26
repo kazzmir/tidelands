@@ -839,7 +839,7 @@ function animate(): void {
     panRight.setFromMatrixColumn(camera.matrixWorld, 0).setY(0).normalize();
     panForward.subVectors(controls.target, camera.position).setY(0).normalize();
     panOffset.copy(panRight).multiplyScalar(horizontal).addScaledVector(panForward, vertical)
-      .normalize().multiplyScalar(12 * Math.min(elapsed, 0.05) / camera.zoom);
+      .normalize().multiplyScalar(24 * Math.min(elapsed, 0.05) / camera.zoom);
     camera.position.add(panOffset);
     controls.target.add(panOffset);
   }
