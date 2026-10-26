@@ -73,7 +73,7 @@ sun.shadow.radius = 3;
 scene.add(sun);
 
 const SIZE = 38;
-const STEP = 0.42;
+const STEP = 0.65;
 const SEA = 0.08;
 let seed = 34;
 let randomState = seed;
@@ -140,7 +140,7 @@ function neighbors(tile: Tile): Tile[] {
   const result: Tile[] = [];
   for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
     const next = tileAt(tile.x + dx, tile.z + dz);
-    if (next && isWalkable(next) && Math.abs(position(next).y - position(tile).y) <= STEP
+    if (next && isWalkable(next) && Math.abs(position(next).y - position(tile).y) <= STEP + 1e-6
       && surface.sample(tile.x + 0.5 + dx / 2, tile.z + 0.5 + dz / 2) > SEA) result.push(next);
   }
   return result;
