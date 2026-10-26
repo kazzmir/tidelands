@@ -33,12 +33,29 @@ npm run preview # Serve the production build
 
 Settlers choose neighboring dry tiles, climb one elevation step at a time, and avoid trees and cottages. After walking onto an unoccupied, treeless tile with four equal, above-water corner heights, they build a house and live inside it, disappearing from the map. Each house belongs to one settler; total population includes both roaming and housed settlers. Making a home’s ground non-flat (including through a cascaded edit) removes it and returns its resident to walking. Moving all four corners together preserves the home if it remains dry. Flooding a home also releases its resident; anyone stranded underwater relocates to the nearest dry ground. The life panel shows the roaming/housed counts, and Inspect identifies occupied homes. Day progression is cosmetic; this is a terrain/walking prototype, not yet a full civilization simulation. Worlds are not persisted between reloads.
 
+## House power and castles
+
+A home counts flat, same-height surfaces connected by tile edges within the **centered 3×3 neighborhood** (nine tiles total, including its own tile). Disconnected tiles and land outside that neighborhood do not count.
+
+| Connected tiles | Power |
+| --- | --- |
+| 1 | 1 |
+| 2–4 | 2 |
+| 5–7 | 3 |
+| 8 | 4 |
+| 9 | 5 — castle |
+
+House size reflects its power. Inspect a house to see its exact power and support count. At power 5, a castle occupies all nine tiles, clears vegetation there, and releases residents of other homes within its footprint. Roaming settlers cannot enter or build in a castle’s footprint. Existing castles have priority where footprints overlap; another home cannot expand into the same area.
+
+Changing an outer tile recomputes support immediately, downgrading the castle to a house and freeing its footprint when support drops below nine. Making its center non-flat, submerged, or changing the center’s height releases the castle resident instead. Restoring nine connected flat tiles can upgrade a surviving house again. Total population is preserved throughout.
+
 ## Structure
 
 - `src/main.ts` — procedural terrain, scenery, settler simulation, camera, and interaction.
 - `src/terrain-surface.ts` — shared-corner triangle mesh and matching surface-height sampling.
-- `src/settlement.ts` — flat-ground house placement, ownership, and resident release.
+- `src/settlement.ts` — flat-ground house placement, connected-land power, castle footprints, ownership, and resident release.
 - `tests/settlement.test.mjs` — settlement, occupancy, flooding, and terrain-driven release tests.
+- `tests/castles.test.mjs` — power thresholds, connectivity, castle promotion/demotion, displaced residents, and overlapping footprints.
 - `tests/terrain-surface.test.mjs` — slope continuity, mesh winding, height sampling, and edit tests.
 - `src/style.css` — responsive game HUD.
 - `index.html` — accessible interface and canvas shell.

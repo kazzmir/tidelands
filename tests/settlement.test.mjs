@@ -11,10 +11,10 @@ async function loadModule(path) {
   return import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
 }
 const { TerrainSurface } = await loadModule('../src/terrain-surface.ts');
-const { isHabitable, trySettle, releaseInvalidHomes } = await loadModule('../src/settlement.ts');
+const { homeSupport, isHabitable, reconcileSettlements, trySettle, releaseInvalidHomes } = await loadModule('../src/settlement.ts');
 const tile = (x = 1, z = 1) => ({x, z, tree:false, house:false});
 const field = (height = 2) => new TerrainSurface(4, new Uint8Array(25).fill(height), 0.65);
-const walker = tile => ({tile, home:null});
+const walker = tile => ({tile, home:null, power:0, homeLevel:null});
 
 test('a walker claims a flat dry tile and becomes its resident', () => {
   const surface = field();
