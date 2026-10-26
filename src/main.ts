@@ -2,6 +2,7 @@ import './style.css';
 import { generateWorldHeights } from './world-generation';
 import { TerrainSurface, type GridPoint, type TerrainBounds } from './terrain-surface';
 import { PowerMeter } from './power';
+import { grazingNeighbors, planFlock, type GrazingSheep } from './sheep';
 import { elevationContours } from './terrain-contours';
 import { advanceSurvival, createSurvival, SINKING_SECONDS, type Survival } from './survival';
 import { earthquake, mountain, SPELL_COSTS, type Spell } from './spells';
@@ -38,6 +39,14 @@ interface Settler extends Resident<Tile> {
   mesh: THREE.Group;
   survival: Survival;
   target: Tile | null;
+  progress: number;
+  wait: number;
+  phase: number;
+  legs: THREE.Mesh[];
+}
+
+interface Sheep extends GrazingSheep<Tile> {
+  mesh: THREE.Group;
   progress: number;
   wait: number;
   phase: number;
@@ -160,9 +169,10 @@ function startGame(): void {
   const people = new THREE.Group();
   const buildings = new THREE.Group();
   const farms = new THREE.Group();
+  const animals = new THREE.Group();
   const trees = new THREE.Group();
   const fertileTiles = new Set<Tile>();
-  scene.add(terrain, scenery, trees, farms, buildings, people);
+  scene.add(terrain, scenery, trees, farms, buildings, people, animals);
   // Distinct elevation colors, interpolated across each slope from its corner heights.
   const heightColors = [
     '#bca171', // 0: submerged sand
@@ -480,6 +490,7 @@ function startGame(): void {
     }
     // Refresh instance batches when farms or castles clear trees.
     rebuildTrees();
+    syncFlock();
   }
   function rebuildBuildings(): void {
     buildings.traverse((object) => {
@@ -627,6 +638,115 @@ function startGame(): void {
   const { water, waves, waveMaterial } = createWater();
 
   const settlers: Settler[] = [];
+  const flock: Sheep[] = [];
+  const woolMaterial = new THREE.MeshStandardMaterial({ color: '#f3efda', roughness: 1 });
+  const sheepFaceMaterial = new THREE.MeshStandardMaterial({ color: '#635e50', roughness: 1 });
+  const woolGeometry = new THREE.IcosahedronGeometry(0.19, 1);
+  const sheepHeadGeometry = new THREE.BoxGeometry(0.12, 0.13, 0.15);
+  const sheepEarGeometry = new THREE.BoxGeometry(0.065, 0.035, 0.06);
+  const sheepLegGeometry = new THREE.CylinderGeometry(0.022, 0.025, 0.13, 4);
+  function canGraze(tile: Tile): boolean {
+    return fertileTiles.has(tile) && !tile.house && !tile.reserved;
+  }
+  function createSheep(tile: Tile): void {
+    const mesh = new THREE.Group();
+    const body = new THREE.Mesh(woolGeometry, woolMaterial);
+    body.scale.set(1.05, 0.9, 1.4);
+    body.position.y = 0.24;
+    const head = new THREE.Mesh(sheepHeadGeometry, sheepFaceMaterial);
+    head.position.set(0, 0.27, 0.27);
+    mesh.add(body, head);
+    const legs: THREE.Mesh[] = [];
+    for (const x of [-1, 1]) {
+      const ear = new THREE.Mesh(sheepEarGeometry, sheepFaceMaterial);
+      ear.position.set(x * 0.085, 0.31, 0.26);
+      mesh.add(ear);
+      for (const z of [-1, 1]) {
+        const leg = new THREE.Mesh(sheepLegGeometry, sheepFaceMaterial);
+        leg.position.set(x * 0.09, 0.075, z * 0.14);
+        legs.push(leg);
+        mesh.add(leg);
+      }
+    }
+    mesh.traverse((object) => {
+      if (object instanceof THREE.Mesh) object.castShadow = true;
+    });
+    mesh.position.copy(position(tile));
+    mesh.scale.setScalar(1.1);
+    mesh.rotation.y = random() * Math.PI * 2;
+    animals.add(mesh);
+    flock.push({
+      mesh,
+      tile,
+      target: null,
+      progress: 0,
+      wait: 1 + random() * 3,
+      phase: random() * 6,
+      legs,
+    });
+  }
+  function syncFlock(): void {
+    const valid = flock.filter((sheep) => {
+      const current = tileAt(
+        Math.floor(sheep.mesh.position.x + SIZE / 2),
+        Math.floor(sheep.mesh.position.z + SIZE / 2),
+      );
+      if (!current || !canGraze(current)) return false;
+      if (!canGraze(sheep.tile) || (sheep.target && !canGraze(sheep.target))) {
+        sheep.tile = current;
+        sheep.target = null;
+        sheep.progress = 0;
+        sheep.wait = 1;
+        sheep.mesh.position.copy(position(current));
+      }
+      return true;
+    });
+    const plan = planFlock(
+      valid,
+      fertileTiles,
+      settlers.filter((settler) => settler.home).length,
+      canGraze,
+    );
+    const keep = new Set(plan.keep);
+    for (const sheep of flock) if (!keep.has(sheep)) animals.remove(sheep.mesh);
+    flock.length = 0;
+    flock.push(...plan.keep);
+    for (const tile of plan.spawn) createSheep(tile);
+  }
+  function animateSheep(dt: number): void {
+    if (!dt) return;
+    for (const sheep of flock) {
+      if (!sheep.target) {
+        sheep.wait -= dt;
+        if (sheep.wait > 0) continue;
+        const options = grazingNeighbors(sheep.tile, fertileTiles, tileAt, canGraze);
+        if (!options.length) {
+          sheep.wait = 1;
+          continue;
+        }
+        sheep.target = options[Math.floor(random() * options.length)];
+        sheep.progress = 0;
+        sheep.mesh.rotation.y = Math.atan2(
+          sheep.target.x - sheep.tile.x,
+          sheep.target.z - sheep.tile.z,
+        );
+      }
+      sheep.progress = Math.min(1, sheep.progress + dt * 0.45);
+      sheep.mesh.position.lerpVectors(position(sheep.tile), position(sheep.target), sheep.progress);
+      sheep.mesh.position.y += Math.abs(Math.sin(simulationTime * 9 + sheep.phase)) * 0.012;
+      sheep.legs.forEach((leg, i) => {
+        leg.rotation.x = Math.sin(simulationTime * 9 + sheep.phase) * (i % 3 === 0 ? 0.35 : -0.35);
+      });
+      if (sheep.progress >= 1) {
+        sheep.tile = sheep.target;
+        sheep.target = null;
+        sheep.wait = 0.8 + random() * 2.5;
+        sheep.legs.forEach((leg) => {
+          leg.rotation.x = 0;
+        });
+      }
+    }
+  }
   const skinMaterial = new THREE.MeshStandardMaterial({ color: '#e3bb8b', roughness: 1 });
   const hairMaterial = new THREE.MeshStandardMaterial({ color: '#685139', roughness: 1 });
   const trouserMaterial = new THREE.MeshStandardMaterial({ color: '#54665a', roughness: 1 });
@@ -747,7 +867,7 @@ function startGame(): void {
     element('#population').innerHTML = `${living.length} <small>settlers</small>`;
     const castles = settlers.filter((settler) => settler.power === 5).length;
     element('#population').title =
-      `${roaming} roaming · ${housed} at home${drowning ? ` · ${drowning} drowning` : ''}${castles ? ` · ${castles} castle${castles > 1 ? 's' : ''}` : ''}`;
+      `${roaming} roaming · ${housed} at home${drowning ? ` · ${drowning} drowning` : ''}${castles ? ` · ${castles} castle${castles > 1 ? 's' : ''}` : ''} · ${flock.length} sheep`;
     element('#power').title =
       `+${totalBuildingPower(settlers)} power every ${powerMeter.interval} simulation seconds · Terrain costs 1 power per affected point`;
   }
@@ -906,6 +1026,8 @@ function startGame(): void {
     randomState = seed;
     people.clear();
     settlers.length = 0;
+    animals.clear();
+    flock.length = 0;
     tiles.length = 0;
     tileCache.clear();
     cornerLevels.set(generateWorldHeights(SIZE, seed));
@@ -1089,6 +1211,7 @@ function startGame(): void {
           (s.survival.phase === 'alive' || s.survival.phase === 'drowning'),
       );
       const drowning = walkers.some((s) => s.survival.phase === 'drowning');
+      const sheepHere = flock.filter((sheep) => sheep.tile === hovered).length;
       const visitors = walkers.length;
       const walkerPower = walkers
         .reduce((sum, walker) => sum + walker.characterPower, 0)
@@ -1110,7 +1233,7 @@ function startGame(): void {
         : hoveredCorner
           ? `Corner ${hoveredCorner.x}, ${hoveredCorner.z} · Height ${surface.level(hoveredCorner.x, hoveredCorner.z)}`
           : '';
-      info.innerHTML = `<strong>${kind}</strong>${cornerInfo}<br>Tile ${hovered.x}, ${hovered.z} · Corners ${surface.level(hovered.x, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z + 1)}, ${surface.level(hovered.x, hovered.z + 1)}<br>${resident ? `${buildingInfo}<br>1 settler lives here.` : drowning ? 'Drowning — raise the land beneath them to rescue!' : visitors ? `${visitors} settler${visitors > 1 ? 's' : ''} here · Power ${walkerPower}` : 'Select a corner to shape the land.'}`;
+      info.innerHTML = `<strong>${kind}</strong>${cornerInfo}<br>Tile ${hovered.x}, ${hovered.z} · Corners ${surface.level(hovered.x, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z + 1)}, ${surface.level(hovered.x, hovered.z + 1)}<br>${resident ? `${buildingInfo}<br>1 settler lives here.` : drowning ? 'Drowning — raise the land beneath them to rescue!' : visitors ? `${visitors} settler${visitors > 1 ? 's' : ''} here · Power ${walkerPower}` : 'Select a corner to shape the land.'}${sheepHere ? `<br>${sheepHere} sheep grazing here` : ''}`;
     }
     canvas.style.cursor = hovered
       ? tool === 'inspect' && !selectedSpell
@@ -1544,6 +1667,7 @@ function startGame(): void {
       updateSettlementStats();
       if (lastPointer) updateHover(lastPointer);
     }
+    animateSheep(dt);
     waves.position.x =
       Math.floor(controls.target.x / 32) * 32 + Math.sin(simulationTime * 0.15) * 0.4;
     waves.position.z =

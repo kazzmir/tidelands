@@ -61,6 +61,10 @@ Changing an outer tile recomputes support immediately, downgrading the castle to
 
 Flat tiles at a home’s height receive a transparent black-grid farming texture. Ordinary houses influence a centered **3×3 area** (one tile in each direction); castles influence a centered **7×7 area** (three tiles in each direction, including diagonals). Downgrading a castle shrinks its farming influence back to the house range. Castle power still depends only on the central nine tiles. Cultivated tiles have their trees permanently removed. The overlay preserves the terrain’s elevation colors, updates after edits and building changes, and disappears when no home influences the tile. Overlapping influence areas share one overlay per tile. Castle courtyards show the same pattern over their foundations. Fertility applies to all qualifying flat tiles in range; house power still requires edge-connected support.
 
+## Sheep
+
+Small animated sheep automatically appear on available farmland and wander between edge-adjacent farm tiles. The flock never exceeds **two sheep per occupied building**; a castle counts as one building, not nine. Sheep avoid building footprints and do not enter non-farmed land or water. A sheep disappears when the ground under its actual position ceases to be farmland, and losing buildings trims the flock to the new cap. Sheep do not count toward settler population. Inspect farm tiles to see grazing sheep, or hover Population for the total flock size. Pause and speed controls also apply to sheep.
+
 ## Character power and births
 
 Every starting settler has **10 character power**, separate from the player’s spendable Power and a building’s terrain-derived level. Character power stays with the settler when they build a home, leave it, or are displaced by a castle.
@@ -106,6 +110,8 @@ Both spells update homes, castles, farming, trees, and settler positions just li
 - `tests/terrain-contours.test.mjs` — contour placement, flat surfaces, shared edges, and height scaling tests.
 - `src/spells.ts` — Earthquake and Mountain terrain effects and fixed power costs.
 - `tests/spells.test.mjs` — spell costs, effects, maximum peaks, slope limits, and valid targets.
+- `src/sheep.ts` — bounded flock planning and farmland-only grazing routes.
+- `tests/sheep.test.mjs` — two-per-building caps, lost farmland, blocked footprints, spawn space, and grazing paths.
 - `src/survival.ts` — drowning, rescue, death, and sinking lifecycle.
 - `tests/survival.test.mjs` — two-second rescue window, pause, irreversible death, and sinking timing.
 - `src/population.ts` — resident character-power growth, equal-power births, and safe-spawn deferral.
