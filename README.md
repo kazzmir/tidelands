@@ -21,7 +21,8 @@ npm run preview # Serve the production build
 
 - **Left-click:** raise the nearest grid corner one level, regardless of the selected tool.
 - **Right-click:** lower the nearest grid corner one level. Level 0 is water.
-- A red point with a softly fading halo highlights the selected corner; tile surfaces are not highlighted. Its height is shared by up to four neighboring tiles; only that point changes per click.
+- A red point with a softly fading halo highlights the selected corner. Its height is shared by up to four neighboring tiles; only that point changes per click.
+- **Hold Shift:** select and highlight the whole surface instead of a point. **Shift+left-click** raises all four corners; **Shift+right-click** lowers all four. The tile keeps its shape, and neighboring tiles follow the shared points. If any corner would exceed heights 0–8, the entire edit is rejected.
 - **1 / Raise, 2 / Lower:** select the action for touch taps; mouse clicks always use the button mapping above.
 - **3 / Inspect:** hover to see elevation, terrain, and inhabitants; touch taps inspect without editing.
 - **Drag:** pan; **right-drag:** orbit; **scroll:** zoom.

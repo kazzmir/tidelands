@@ -25,6 +25,35 @@ test('editing changes exactly one shared corner and the four adjoining tiles', (
   assert.deepEqual(surface.levels, before);
 });
 
+test('whole-surface edits move exactly its four corners by the same amount', () => {
+  const surface = field();
+  const before = surface.levels.slice();
+  const points = surface.tileCorners(1, 1);
+  assert.equal(surface.editTile(1, 1, 1), true);
+  for (let z = 0; z <= surface.size; z++) {
+    for (let x = 0; x <= surface.size; x++) {
+      const selected = points.some(point => point.x === x && point.z === z);
+      assert.equal(surface.level(x, z), before[z * 5 + x] + (selected ? 1 : 0));
+    }
+  }
+  assert.equal(surface.editTile(1, 1, -1), true);
+  assert.deepEqual(surface.levels, before);
+});
+
+test('whole-surface edits preserve flatness and reject partial edits at limits', () => {
+  const surface = new TerrainSurface(1, new Uint8Array(4).fill(2), 0.42);
+  assert.equal(surface.editTile(0, 0, 1), true);
+  close(surface.sample(0.1, 0.8), 1.26);
+  close(surface.sample(0.7, 0.2), 1.26);
+  for (const levels of [new Uint8Array([0, 1, 1, 1]), new Uint8Array([7, 7, 8, 7])]) {
+    const bounded = new TerrainSurface(1, levels, 0.42);
+    const before = levels.slice();
+    assert.equal(bounded.editTile(0, 0, levels.includes(0) ? -1 : 1), false);
+    assert.deepEqual(levels, before);
+  }
+  assert.equal(surface.editTile(1, 0, 1), false);
+});
+
 test('equal corner heights produce a perfectly flat tile without a center peak', () => {
   const surface = new TerrainSurface(1, new Uint8Array([2, 2, 2, 2]), 0.42);
   for (let z = 0; z <= 1; z += 0.1) {

@@ -306,7 +306,7 @@ function generateWorld(): void {
 }
 generateWorld();
 
-// Highlight only the editable corner, never the surrounding tile surface.
+// Normal selection highlights a corner; Shift highlights the entire tile surface.
 const glowCanvas = document.createElement('canvas');
 glowCanvas.width = glowCanvas.height = 128;
 const glowContext = glowCanvas.getContext('2d');
@@ -330,6 +330,22 @@ const cornerMarker = new THREE.Group();
 cornerMarker.add(cornerGlow, cornerPoint);
 cornerMarker.visible = false;
 scene.add(cornerMarker);
+const surfaceHighlightGeometry = new THREE.BufferGeometry();
+surfaceHighlightGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(18), 3));
+const surfaceHighlightMaterial = new THREE.MeshStandardMaterial({
+  color: '#8c1e28', emissive: '#b32432', emissiveIntensity: 0.65, roughness: 1,
+  transparent: true, opacity: 0, depthWrite: false,
+  polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+});
+const surfaceHighlight = new THREE.Mesh(surfaceHighlightGeometry, surfaceHighlightMaterial);
+surfaceHighlight.visible = false;
+surfaceHighlight.renderOrder = 5;
+scene.add(surfaceHighlight);
+let shiftHeld = false;
+let lastPointer: Pick<PointerEvent, 'clientX' | 'clientY'> | null = null;
+let glowingSurface: Tile | null = null;
+let surfaceStrength = 0;
+let surfaceTarget = 0;
 let hoveredCorner: GridPoint | null = null;
 let glowingCorner: GridPoint | null = null;
 let hoverStrength = 0;
@@ -344,7 +360,8 @@ function toast(message: string): void {
   const node = element('#toast'); node.textContent = message; node.classList.add('visible');
   clearTimeout(toastTimer); toastTimer = setTimeout(() => node.classList.remove('visible'), 2800);
 }
-function updateHover(event: PointerEvent): void {
+function updateHover(event: Pick<PointerEvent, 'clientX' | 'clientY'>): void {
+  lastPointer = { clientX: event.clientX, clientY: event.clientY };
   const bounds = canvas.getBoundingClientRect();
   pointer.set((event.clientX - bounds.left) / bounds.width * 2 - 1, -(event.clientY - bounds.top) / bounds.height * 2 + 1);
   raycaster.setFromCamera(pointer, camera);
@@ -353,8 +370,34 @@ function updateHover(event: PointerEvent): void {
     ? tiles[Math.floor(hit.faceIndex / 2)]
     : hit ? tileAt(Math.floor(hit.point.x + SIZE / 2), Math.floor(hit.point.z + SIZE / 2)) ?? null : null;
   hoveredCorner = hovered && hit ? surface.nearestCorner(hit.point.x + SIZE / 2, hit.point.z + SIZE / 2) : null;
-  hoverTarget = hoveredCorner ? 1 : 0;
-  if (hoveredCorner) {
+  hoverTarget = !shiftHeld && hoveredCorner ? 1 : 0;
+  surfaceTarget = shiftHeld && hovered ? 1 : 0;
+  if (shiftHeld) {
+    cornerMarker.visible = false;
+    hoverStrength = 0;
+    if (hovered) {
+      if (glowingSurface !== hovered) {
+        surfaceStrength = 0;
+        surfaceHighlightMaterial.opacity = 0;
+        glowingSurface = hovered;
+      }
+      surfaceHighlight.visible = true;
+      const source = ground.geometry.getAttribute('position');
+      const target = surfaceHighlightGeometry.getAttribute('position');
+      for (let i = 0; i < target.count; i++) {
+        const vertex = (hovered.z * SIZE + hovered.x) * 6 + i;
+        target.setXYZ(i, source.getX(vertex), Math.max(SEA + 0.015, source.getY(vertex)), source.getZ(vertex));
+      }
+      target.needsUpdate = true;
+      surfaceHighlightGeometry.computeVertexNormals();
+      surfaceHighlightGeometry.computeBoundingSphere();
+    }
+  } else {
+    surfaceHighlight.visible = false;
+    surfaceStrength = 0;
+    glowingSurface = null;
+  }
+  if (!shiftHeld && hoveredCorner) {
     if (!glowingCorner || glowingCorner.x !== hoveredCorner.x || glowingCorner.z !== hoveredCorner.z) {
       hoverStrength = 0;
       cornerMaterial.opacity = 0;
@@ -369,30 +412,46 @@ function updateHover(event: PointerEvent): void {
   if (hovered && tool === 'inspect') {
     const kind = hovered.height === 0 ? 'Open water' : hovered.house ? 'A settler’s cottage' : hovered.tree ? 'Woodland' : hovered.height === 1 ? 'Sandy shore' : 'Grassy highlands';
     const visitors = settlers.filter(s => s.tile === hovered).length;
-    const cornerInfo = hoveredCorner ? `Corner ${hoveredCorner.x}, ${hoveredCorner.z} · Height ${surface.level(hoveredCorner.x, hoveredCorner.z)}` : '';
+    const cornerInfo = shiftHeld ? 'Surface selected · All four corners' : hoveredCorner ? `Corner ${hoveredCorner.x}, ${hoveredCorner.z} · Height ${surface.level(hoveredCorner.x, hoveredCorner.z)}` : '';
     info.innerHTML = `<strong>${kind}</strong>${cornerInfo}<br>Tile ${hovered.x}, ${hovered.z} · Corners ${surface.level(hovered.x, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z + 1)}, ${surface.level(hovered.x, hovered.z + 1)}<br>${visitors ? `${visitors} settler${visitors > 1 ? 's' : ''} here` : 'Select a corner to shape the land.'}`;
   }
   canvas.style.cursor = hovered ? (tool === 'inspect' ? 'help' : 'crosshair') : 'grab';
 }
-canvas.addEventListener('pointermove', updateHover);
+function setShift(held: boolean): void {
+  if (shiftHeld === held) return;
+  shiftHeld = held;
+  selectTool(tool);
+  if (lastPointer) updateHover(lastPointer);
+}
+canvas.addEventListener('pointermove', event => {
+  setShift(event.shiftKey);
+  updateHover(event);
+});
 canvas.addEventListener('pointerleave', () => {
-  hoverTarget = 0; hovered = null; hoveredCorner = null;
+  hoverTarget = 0; surfaceTarget = 0; hovered = null; hoveredCorner = null; lastPointer = null;
   element('#tile-info').hidden = true;
 });
 canvas.addEventListener('pointerdown', event => { pointerDown = { x: event.clientX, y: event.clientY }; });
 canvas.addEventListener('pointerup', event => {
   if ((event.button !== 0 && event.button !== 2) || Math.hypot(event.clientX - pointerDown.x, event.clientY - pointerDown.y) > 5) return;
+  setShift(event.shiftKey);
   updateHover(event);
   if (!hovered || !hoveredCorner) return;
   // Mouse buttons directly choose elevation; touch keeps the selected toolbar tool.
   const action = event.pointerType === 'touch' ? tool : event.button === 2 ? 'lower' : 'raise';
   if (action === 'inspect') return;
   selectTool(action);
-  if (!surface.editCorner(hoveredCorner.x, hoveredCorner.z, action === 'raise' ? 1 : -1)) {
-    toast(action === 'raise' ? 'This corner is as close to the sky as it can go.' : 'This corner is already at sea level.');
+  const delta = action === 'raise' ? 1 : -1;
+  const points = shiftHeld ? surface.tileCorners(hovered.x, hovered.z) : [hoveredCorner];
+  const changed = shiftHeld
+    ? surface.editTile(hovered.x, hovered.z, delta)
+    : surface.editCorner(hoveredCorner.x, hoveredCorner.z, delta);
+  if (!changed) {
+    toast(shiftHeld ? 'All four corners must stay between sea level and height 8.'
+      : action === 'raise' ? 'This corner is as close to the sky as it can go.' : 'This corner is already at sea level.');
     return;
   }
-  const affected = new Set(surface.affectedTiles(hoveredCorner.x, hoveredCorner.z).map(point => tileAt(point.x, point.z)));
+  const affected = new Set(points.flatMap(point => surface.affectedTiles(point.x, point.z)).map(point => tileAt(point.x, point.z)));
   for (const tile of affected) {
     if (tile) { tile.tree = false; tile.house = false; }
   }
@@ -422,8 +481,8 @@ function selectTool(next: Tool): void {
     button.classList.toggle('active', active); button.setAttribute('aria-pressed', String(active));
   });
   const hints: Record<Tool, [string, string]> = {
-    raise: ['Raise a corner', 'Point at a corner · Left raises · Right lowers'],
-    lower: ['Lower a corner', 'Point at a corner · Left raises · Right lowers'],
+    raise: [shiftHeld ? 'Raise a surface' : 'Raise a corner', shiftHeld ? 'All four corners · Left raises · Right lowers' : 'Left raises · Right lowers · Shift selects surface'],
+    lower: [shiftHeld ? 'Lower a surface' : 'Lower a corner', shiftHeld ? 'All four corners · Left raises · Right lowers' : 'Left raises · Right lowers · Shift selects surface'],
     inspect: ['Explore your world', 'Hover a tile to discover what lives there'],
   };
   element('#tool-hint').innerHTML = `<strong>${hints[next][0]}</strong><span class="hint-detail">${hints[next][1]}</span>`;
@@ -452,18 +511,30 @@ document.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach(button => {
 element('#reset-view').addEventListener('click', resetCamera);
 element('#new-world').addEventListener('click', () => {
   seed += 17; simulationTime = 0; generateWorld(); resetCamera();
-  hovered = null; hoveredCorner = null; cornerMarker.visible = false;
+  hovered = null; hoveredCorner = null; cornerMarker.visible = false; lastPointer = null;
+  glowingSurface = null; surfaceStrength = 0; surfaceTarget = 0;
+  surfaceHighlight.visible = false; surfaceHighlightMaterial.opacity = 0;
   glowingCorner = null; hoverStrength = 0; hoverTarget = 0;
   cornerMaterial.opacity = 0; cornerGlowMaterial.opacity = 0;
   element('#tile-info').hidden = true;
   toast('A new shore. A fresh beginning.');
 });
 window.addEventListener('keydown', event => {
+  if (event.key === 'Shift') setShift(true);
   if (event.target instanceof HTMLButtonElement && event.code === 'Space') return;
   if (event.code === 'Space') { event.preventDefault(); togglePause(); }
   if (event.key === '1') selectTool('raise');
   if (event.key === '2') selectTool('lower');
   if (event.key === '3') selectTool('inspect');
+});
+
+window.addEventListener('keyup', event => {
+  if (event.key === 'Shift') setShift(event.shiftKey);
+});
+window.addEventListener('blur', () => {
+  lastPointer = null;
+  setShift(false);
+  hoverTarget = 0; surfaceTarget = 0;
 });
 
 function resize(): void {
@@ -483,6 +554,12 @@ function animate(): void {
   const elapsed = clock.getDelta();
   // Real-time easing keeps feedback responsive even when the simulation is paused.
   hoverStrength = THREE.MathUtils.lerp(hoverStrength, hoverTarget, 1 - Math.exp(-8 * Math.min(elapsed, 0.1)));
+  surfaceStrength = THREE.MathUtils.lerp(surfaceStrength, surfaceTarget, 1 - Math.exp(-8 * Math.min(elapsed, 0.1)));
+  surfaceHighlightMaterial.opacity = surfaceStrength * 0.68;
+  if (surfaceTarget === 0 && surfaceStrength < 0.005) {
+    surfaceHighlight.visible = false;
+    glowingSurface = null;
+  }
   cornerMaterial.opacity = hoverStrength;
   cornerGlowMaterial.opacity = hoverStrength;
   if (hoverTarget === 0 && hoverStrength < 0.005) {

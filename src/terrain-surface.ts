@@ -31,6 +31,20 @@ export class TerrainSurface {
     return true;
   }
 
+  tileCorners(x: number, z: number): GridPoint[] {
+    return [{ x, z }, { x: x + 1, z }, { x: x + 1, z: z + 1 }, { x, z: z + 1 }];
+  }
+
+  /** Move all four corners together, or leave all unchanged at the height limits. */
+  editTile(x: number, z: number, delta: number): boolean {
+    if (!Number.isInteger(x) || !Number.isInteger(z) || x < 0 || z < 0 || x >= this.size || z >= this.size) return false;
+    const change = Math.trunc(delta);
+    const corners = this.tileCorners(x, z);
+    if (!change || corners.some(point => this.level(point.x, point.z) + change < 0 || this.level(point.x, point.z) + change > 8)) return false;
+    for (const point of corners) this.editCorner(point.x, point.z, change);
+    return true;
+  }
+
   affectedTiles(x: number, z: number): GridPoint[] {
     const result: GridPoint[] = [];
     for (const tz of [z - 1, z]) {
