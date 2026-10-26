@@ -47,7 +47,7 @@ A home counts flat, same-height surfaces connected by tile edges within the **ce
 | 8 | 4 |
 | 9 | 5 — castle |
 
-House size reflects its power. Inspect a house to see its exact power and support count. At power 5, a castle occupies all nine tiles, clears vegetation there, and releases residents of other homes within its footprint. Roaming settlers cannot enter or build in a castle’s footprint. Existing castles have priority where footprints overlap; another home cannot expand into the same area.
+House size reflects its power. Inspect a house to see its exact power and support count. At power 5, a castle occupies all nine tiles, clears vegetation there, and releases residents of other homes within its footprint or its one-tile surrounding buffer. Houses must leave **at least one clear tile** between themselves and the castle footprint, including diagonally. Walkers can cross this buffer, but cannot settle there. Roaming settlers cannot enter or build in the castle footprint itself. Existing castles have priority; another home cannot expand a castle footprint into an existing footprint or its required buffer. Downgrading or removing a castle frees its buffer for new houses.
 
 Changing an outer tile recomputes support immediately, downgrading the castle to a house and freeing its footprint when support drops below nine. Making its center non-flat, submerged, or changing the center’s height releases the castle resident instead. Restoring nine connected flat tiles can upgrade a surviving house again. Total population is preserved throughout.
 

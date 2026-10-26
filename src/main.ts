@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 type Tool = 'raise' | 'lower' | 'inspect';
-interface Tile { x: number; z: number; height: number; tree: boolean; house: boolean; reserved?: boolean }
+interface Tile { x: number; z: number; height: number; tree: boolean; house: boolean; reserved?: boolean; castleGap?: boolean }
 interface Settler extends Resident<Tile> { mesh: THREE.Group; target: Tile | null; progress: number; wait: number; phase: number; legs: THREE.Mesh[] }
 
 function element<T extends HTMLElement>(selector: string): T {

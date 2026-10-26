@@ -150,11 +150,40 @@ test('farming permanently clears trees only from qualifying fertile tiles', () =
   assert.equal(tiles[5 * 8 + 5].tree,false); // Trees do not regrow after the farm disappears.
 });
 
-test('existing castles keep priority and overlapping castles cannot be built', () => {
+test('castle buffers block adjacent houses, but allow houses after one clear tile', () => {
   const {surface,tiles,resident} = world();
   const castle = resident(4,4);
   reconcileSettlements([castle],tiles,surface);
-  const neighbor = resident(6,4);
+  assert.equal(tiles.filter(tile=>tile.castleGap).length,16);
+  for (const [x,z] of [[6,4],[2,4],[4,6],[4,2],[6,6],[2,2]]) {
+    const walker = {tile:tiles[z * 8 + x],home:null,power:0,homeLevel:null,characterPower:10};
+    assert.equal(trySettle(walker,surface),false);
+    assert.equal(walker.tile.reserved,false); // Buffer is not part of the castle footprint.
+  }
+  assert.ok(resident(7,4).home);
+  assert.ok(resident(7,7).home);
+});
+
+test('castle expansion releases houses in the buffer, and downgrading frees the buffer', () => {
+  const {surface,tiles,resident} = world();
+  const castle = resident(4,4);
+  const adjacent = resident(6,4);
+  reconcileSettlements([castle,adjacent],tiles,surface);
+  assert.equal(adjacent.home,null);
+  assert.equal(adjacent.characterPower,10);
+  assert.equal(trySettle(adjacent,surface),false);
+  surface.editCorner(3,3,1);
+  reconcileSettlements([castle,adjacent],tiles,surface);
+  assert.equal(castle.power,4);
+  assert.equal(tiles.some(tile=>tile.castleGap),false);
+  assert.equal(trySettle(adjacent,surface),true);
+});
+
+test('existing castles keep priority and castle expansions respect the gap', () => {
+  const {surface,tiles,resident} = world();
+  const castle = resident(3,3);
+  reconcileSettlements([castle],tiles,surface);
+  const neighbor = resident(6,3);
   reconcileSettlements([neighbor,castle],tiles,surface);
   assert.equal(castle.power,5);
   assert.equal(neighbor.power,4);

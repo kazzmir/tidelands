@@ -1,7 +1,7 @@
 import type { GridPoint, TerrainSurface } from './terrain-surface';
 
 export type HousePower = 0 | 1 | 2 | 3 | 4 | 5;
-export interface SettlementTile { x: number; z: number; tree: boolean; house: boolean; reserved?: boolean }
+export interface SettlementTile { x: number; z: number; tree: boolean; house: boolean; reserved?: boolean; castleGap?: boolean }
 export interface Resident<T extends SettlementTile> { tile: T; home: T | null; power: HousePower; homeLevel: number | null; characterPower: number }
 
 export function totalBuildingPower<T extends SettlementTile>(residents: readonly Resident<T>[]): number {
@@ -54,7 +54,7 @@ export function fertileLand<T extends SettlementTile>(residents: readonly Reside
 
 export function trySettle<T extends SettlementTile>(resident: Resident<T>, surface: TerrainSurface): boolean {
   const tile = resident.tile;
-  if (resident.home || tile.house || tile.reserved || tile.tree || !isHabitable(surface, tile)) return false;
+  if (resident.home || tile.house || tile.reserved || tile.castleGap || tile.tree || !isHabitable(surface, tile)) return false;
   tile.house = true;
   resident.home = tile;
   resident.power = 1;
@@ -85,23 +85,31 @@ export function reconcileSettlements<T extends SettlementTile>(residents: readon
   const before = residents.map(resident => ({ home: resident.home, power: resident.power }));
   releaseInvalidHomes(residents, surface);
   const tileMap = new Map(tiles.map(tile => [`${tile.x},${tile.z}`, tile]));
-  for (const tile of tiles) tile.reserved = false;
+  for (const tile of tiles) { tile.reserved = false; tile.castleGap = false; }
   // Existing castles get first claim, then resident order breaks ties deterministically.
   const candidates = residents.filter(resident => resident.home).sort((a, b) => Number(b.power === 5) - Number(a.power === 5));
   for (const resident of candidates) {
     const home = resident.home;
     if (!home) continue; // An earlier castle may have displaced this resident.
+    if (home.castleGap) { release(resident); continue; }
     const support = homeSupport(surface, home);
     const footprint = support.tiles.map(point => tileMap.get(`${point.x},${point.z}`));
-    if (support.power === 5 && footprint.every(tile => tile && !tile.reserved)) {
+    if (support.power === 5 && footprint.every(tile => tile && !tile.reserved && !tile.castleGap)) {
       resident.power = 5;
       for (const tile of footprint) {
         if (!tile) continue;
         tile.reserved = true;
         tile.tree = false;
       }
+      // Reserve a walkable, unbuildable one-tile ring around the full 3×3 footprint.
+      for (let z = home.z - 2; z <= home.z + 2; z++) {
+        for (let x = home.x - 2; x <= home.x + 2; x++) {
+          const tile = tileMap.get(`${x},${z}`);
+          if (tile && (Math.abs(x - home.x) === 2 || Math.abs(z - home.z) === 2)) tile.castleGap = true;
+        }
+      }
       for (const other of residents) {
-        if (other !== resident && other.home && footprint.includes(other.home)) release(other);
+        if (other !== resident && other.home && (footprint.includes(other.home) || other.home.castleGap)) release(other);
       }
     } else {
       // A neighboring castle can reserve part of an otherwise suitable neighborhood.
