@@ -134,6 +134,22 @@ test('fertile land is deduplicated, flat, at home height, and limited to the inf
   assert.equal(fertileLand(owners,surface).length,0);
 });
 
+test('farming permanently clears trees only from qualifying fertile tiles', () => {
+  const {surface,tiles,resident} = world();
+  surface.editCorner(3,3,1); // Keep this a house rather than a nine-tile castle.
+  const owner = resident(4,4);
+  const fields = new Set(fertileLand([owner],surface).map(point=>`${point.x},${point.z}`));
+  for (const tile of tiles) if (!tile.house) tile.tree = true;
+  reconcileSettlements([owner],tiles,surface);
+  assert.equal(owner.power,4);
+  for (const tile of tiles) assert.equal(tile.tree,!fields.has(`${tile.x},${tile.z}`));
+  assert.equal(tiles[3 * 8 + 3].tree,true); // Non-flat tile in range retains its trees.
+  surface.editCorner(4,4,1);
+  reconcileSettlements([owner],tiles,surface);
+  assert.equal(owner.home,null);
+  assert.equal(tiles[5 * 8 + 5].tree,false); // Trees do not regrow after the farm disappears.
+});
+
 test('existing castles keep priority and overlapping castles cannot be built', () => {
   const {surface,tiles,resident} = world();
   const castle = resident(4,4);

@@ -105,5 +105,10 @@ export function reconcileSettlements<T extends SettlementTile>(residents: readon
     }
     resident.homeLevel = surface.level(home.x, home.z);
   }
+  // Cultivation clears trees permanently, just like a castle footprint.
+  for (const point of fertileLand(residents, surface)) {
+    const tile = tileMap.get(`${point.x},${point.z}`);
+    if (tile) tile.tree = false;
+  }
   return residents.some((resident, i) => resident.home !== before[i].home || resident.power !== before[i].power);
 }

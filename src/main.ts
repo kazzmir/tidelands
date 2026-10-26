@@ -170,6 +170,7 @@ function addTree(tile: Tile): void {
   const anchor = treeAnchor(tile);
   group.position.set(anchor.x - SIZE / 2, surface.sample(anchor.x, anchor.z), anchor.z - SIZE / 2);
   group.userData.tile = tile;
+  group.userData.tree = true;
   group.rotation.y = hash(tile.x + 47, tile.z) * Math.PI;
   group.scale.setScalar(0.65 + hash(tile.x + 59, tile.z) * 0.35);
   group.traverse(object => { if (object instanceof THREE.Mesh) object.castShadow = true; });
@@ -287,6 +288,11 @@ function rebuildFarms(): void {
     field.position.y += tile.reserved ? 0.085 : 0.012;
     field.renderOrder = 2;
     farms.add(field);
+  }
+  // New farms can appear without a terrain rebuild; remove their existing tree meshes now.
+  for (const decoration of [...scenery.children]) {
+    const tile = decoration.userData.tile as Tile | undefined;
+    if (decoration.userData.tree && tile && fertileTiles.has(tile)) scenery.remove(decoration);
   }
 }
 function rebuildBuildings(): void {
