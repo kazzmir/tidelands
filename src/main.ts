@@ -91,8 +91,18 @@ const terrain = new THREE.Group();
 const scenery = new THREE.Group();
 const people = new THREE.Group();
 scene.add(terrain, scenery, people);
-const sandColor = new THREE.Color('#d6c391');
-const grassColors = ['#9eb778', '#8eae6f', '#82a564', '#769d5b', '#6c9357', '#71965d', '#819f6d'].map(c => new THREE.Color(c));
+// Distinct elevation colors, interpolated across each slope from its corner heights.
+const heightColors = [
+  '#bca171', // 0: submerged sand
+  '#d4b573', // 1: golden shore
+  '#9bbd4b', // 2: bright lowland grass
+  '#629d3e', // 3: green hills
+  '#347c40', // 4: rich upland green
+  '#205e46', // 5: deep forest green
+  '#53675a', // 6: rocky highlands
+  '#8c9080', // 7: exposed stone
+  '#dce0d0', // 8: pale summit
+].map(color => new THREE.Color(color));
 const groundMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true });
 let ground: THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>;
 let surface: TerrainSurface;
@@ -188,15 +198,21 @@ function rebuild(): void {
   for (const tile of tiles) tile.height = surface.elevation(tile.x, tile.z);
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(surface.positions(), 3));
+  const vertices = geometry.getAttribute('position');
   const colors = new Float32Array(tiles.length * 6 * 3);
   ground = new THREE.Mesh(geometry, groundMaterial);
   ground.castShadow = true;
   ground.receiveShadow = true;
   for (let i = 0; i < tiles.length; i++) {
     const tile = tiles[i];
-    tempColor.copy(tile.height <= 1 ? sandColor : grassColors[Math.max(0, Math.min(Math.floor(tile.height) - 2, grassColors.length - 1))]);
-    tempColor.multiplyScalar(0.95 + hash(tile.x, tile.z) * 0.1);
-    for (let vertex = 0; vertex < 6; vertex++) tempColor.toArray(colors, (i * 6 + vertex) * 3);
+    for (let vertex = 0; vertex < 6; vertex++) {
+      const index = i * 6 + vertex;
+      const height = THREE.MathUtils.clamp(Math.round(vertices.getY(index) / STEP), 0, heightColors.length - 1);
+      tempColor.copy(heightColors[height]);
+      // Shared corners have identical colors, so adjoining tiles blend without seams.
+      tempColor.multiplyScalar(0.98 + hash(vertices.getX(index) + SIZE / 2, vertices.getZ(index) + SIZE / 2) * 0.04);
+      tempColor.toArray(colors, index * 3);
+    }
     if (tile.height > 1) {
       if (tile.house) addHouse(tile);
       else if (tile.tree) addTree(tile);
