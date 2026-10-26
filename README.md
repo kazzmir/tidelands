@@ -92,7 +92,7 @@ Both spells update homes, castles, farming, trees, and settler positions just li
 
 ## Structure
 
-- `src/main.ts` — procedural terrain, scenery, settler simulation, camera, and interaction.
+- `src/main.ts` — a single `startGame()` entry point owns game state; named functions create the scene/icons/water, bind terrain/spell/tool/simulation/keyboard input, and start rendering. Terrain, scenery, simulation, and interactions run inside functions rather than module-level initialization.
 - `src/terrain-surface.ts` — shared-corner triangle mesh and matching surface-height sampling.
 - `src/terrain-contours.ts` — elevation contour segments where sloping triangles intersect integer height planes.
 - `tests/terrain-contours.test.mjs` — contour placement, flat surfaces, shared edges, and height scaling tests.
