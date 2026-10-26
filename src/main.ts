@@ -306,36 +306,32 @@ function generateWorld(): void {
 }
 generateWorld();
 
-// Highlight the exact grid cell under the pointer, including submerged cells.
-const outlineGeometry = new THREE.BufferGeometry().setFromPoints([
-  new THREE.Vector3(-0.5, 0, -0.5), new THREE.Vector3(0.5, 0, -0.5),
-  new THREE.Vector3(0.5, 0, 0.5), new THREE.Vector3(-0.5, 0, 0.5), new THREE.Vector3(-0.5, 0, -0.5),
-]);
-const outlineMaterial = new THREE.LineBasicMaterial({ color: '#fff8d7', depthTest: false });
-const outline = new THREE.Line(outlineGeometry, outlineMaterial);
-outline.renderOrder = 10; outline.visible = false;
-scene.add(outline);
-// Tint every triangle of the hovered land tile, preserving the terrain underneath.
-const hoverGeometry = new THREE.BufferGeometry();
-hoverGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(18), 3));
-const hoverMaterial = new THREE.MeshStandardMaterial({
-  color: '#8c1e28', emissive: '#b32432', emissiveIntensity: 0.65, roughness: 1,
-  transparent: true, opacity: 0, depthWrite: false,
-  polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
-});
-const hoverGlow = new THREE.Mesh(hoverGeometry, hoverMaterial);
-hoverGlow.visible = false;
-hoverGlow.renderOrder = 5;
-scene.add(hoverGlow);
-const cornerMarker = new THREE.Mesh(
-  new THREE.SphereGeometry(0.075, 12, 8),
-  new THREE.MeshBasicMaterial({ color: '#fff0c3', depthTest: false }),
-);
-cornerMarker.renderOrder = 11;
+// Highlight only the editable corner, never the surrounding tile surface.
+const glowCanvas = document.createElement('canvas');
+glowCanvas.width = glowCanvas.height = 128;
+const glowContext = glowCanvas.getContext('2d');
+if (!glowContext) throw new Error('Unable to create corner glow texture');
+const gradient = glowContext.createRadialGradient(64, 64, 0, 64, 64, 64);
+gradient.addColorStop(0, 'rgba(235, 48, 60, 0.9)');
+gradient.addColorStop(0.3, 'rgba(190, 25, 40, 0.5)');
+gradient.addColorStop(1, 'rgba(160, 15, 30, 0)');
+glowContext.fillStyle = gradient;
+glowContext.fillRect(0, 0, 128, 128);
+const glowTexture = new THREE.CanvasTexture(glowCanvas);
+glowTexture.colorSpace = THREE.SRGBColorSpace;
+const cornerGlowMaterial = new THREE.SpriteMaterial({ map: glowTexture, transparent: true, opacity: 0, depthTest: false, depthWrite: false });
+const cornerGlow = new THREE.Sprite(cornerGlowMaterial);
+cornerGlow.scale.setScalar(0.65);
+cornerGlow.renderOrder = 10;
+const cornerMaterial = new THREE.MeshBasicMaterial({ color: '#d92c3c', transparent: true, opacity: 0, depthTest: false, depthWrite: false });
+const cornerPoint = new THREE.Mesh(new THREE.SphereGeometry(0.085, 12, 8), cornerMaterial);
+cornerPoint.renderOrder = 11;
+const cornerMarker = new THREE.Group();
+cornerMarker.add(cornerGlow, cornerPoint);
 cornerMarker.visible = false;
 scene.add(cornerMarker);
 let hoveredCorner: GridPoint | null = null;
-let glowingTile: Tile | null = null;
+let glowingCorner: GridPoint | null = null;
 let hoverStrength = 0;
 let hoverTarget = 0;
 const raycaster = new THREE.Raycaster();
@@ -357,42 +353,16 @@ function updateHover(event: PointerEvent): void {
     ? tiles[Math.floor(hit.faceIndex / 2)]
     : hit ? tileAt(Math.floor(hit.point.x + SIZE / 2), Math.floor(hit.point.z + SIZE / 2)) ?? null : null;
   hoveredCorner = hovered && hit ? surface.nearestCorner(hit.point.x + SIZE / 2, hit.point.z + SIZE / 2) : null;
-  cornerMarker.visible = hoveredCorner !== null;
+  hoverTarget = hoveredCorner ? 1 : 0;
   if (hoveredCorner) {
+    if (!glowingCorner || glowingCorner.x !== hoveredCorner.x || glowingCorner.z !== hoveredCorner.z) {
+      hoverStrength = 0;
+      cornerMaterial.opacity = 0;
+      cornerGlowMaterial.opacity = 0;
+      glowingCorner = { ...hoveredCorner };
+    }
+    cornerMarker.visible = true;
     cornerMarker.position.set(hoveredCorner.x - SIZE / 2, Math.max(SEA, surface.corner(hoveredCorner.x, hoveredCorner.z)) + 0.035, hoveredCorner.z - SIZE / 2);
-  }
-  outline.visible = hovered !== null;
-  const landTile = hovered && hovered.height > 0 ? hovered : null;
-  hoverTarget = landTile ? 1 : 0;
-  if (landTile && landTile !== glowingTile) {
-    glowingTile = landTile;
-    hoverStrength = 0;
-    hoverMaterial.opacity = 0;
-  }
-  if (landTile) hoverGlow.visible = true;
-  if (hovered && landTile) {
-    const tileIndex = hovered.z * SIZE + hovered.x;
-    const source = ground.geometry.getAttribute('position');
-    const target = hoverGeometry.getAttribute('position');
-    for (let i = 0; i < target.count; i++) {
-      const vertex = tileIndex * 6 + i;
-      target.setXYZ(i, source.getX(vertex), source.getY(vertex), source.getZ(vertex));
-    }
-    target.needsUpdate = true;
-    hoverGeometry.computeVertexNormals();
-    hoverGeometry.computeBoundingSphere();
-  }
-  if (hovered) {
-    outline.position.set(hovered.x - SIZE / 2 + 0.5, 0, hovered.z - SIZE / 2 + 0.5);
-    const vertices = outlineGeometry.getAttribute('position');
-    for (let i = 0; i < vertices.count; i++) {
-      const x = outline.position.x + vertices.getX(i);
-      const z = outline.position.z + vertices.getZ(i);
-      vertices.setY(i, Math.max(SEA, surface.sample(x + SIZE / 2, z + SIZE / 2)) + 0.025);
-    }
-    vertices.needsUpdate = true;
-    outlineGeometry.computeBoundingSphere();
-    outlineMaterial.color.set(tool === 'lower' ? '#e8ad85' : '#fff6cc');
   }
   const info = element('#tile-info');
   info.hidden = tool !== 'inspect' || !hovered;
@@ -406,7 +376,7 @@ function updateHover(event: PointerEvent): void {
 }
 canvas.addEventListener('pointermove', updateHover);
 canvas.addEventListener('pointerleave', () => {
-  outline.visible = false; cornerMarker.visible = false; hoverTarget = 0; hovered = null; hoveredCorner = null;
+  hoverTarget = 0; hovered = null; hoveredCorner = null;
   element('#tile-info').hidden = true;
 });
 canvas.addEventListener('pointerdown', event => { pointerDown = { x: event.clientX, y: event.clientY }; });
@@ -483,8 +453,8 @@ element('#reset-view').addEventListener('click', resetCamera);
 element('#new-world').addEventListener('click', () => {
   seed += 17; simulationTime = 0; generateWorld(); resetCamera();
   hovered = null; hoveredCorner = null; cornerMarker.visible = false;
-  glowingTile = null; hoverStrength = 0; hoverTarget = 0;
-  hoverMaterial.opacity = 0; outline.visible = false; hoverGlow.visible = false;
+  glowingCorner = null; hoverStrength = 0; hoverTarget = 0;
+  cornerMaterial.opacity = 0; cornerGlowMaterial.opacity = 0;
   element('#tile-info').hidden = true;
   toast('A new shore. A fresh beginning.');
 });
@@ -513,10 +483,11 @@ function animate(): void {
   const elapsed = clock.getDelta();
   // Real-time easing keeps feedback responsive even when the simulation is paused.
   hoverStrength = THREE.MathUtils.lerp(hoverStrength, hoverTarget, 1 - Math.exp(-8 * Math.min(elapsed, 0.1)));
-  hoverMaterial.opacity = hoverStrength * 0.68;
+  cornerMaterial.opacity = hoverStrength;
+  cornerGlowMaterial.opacity = hoverStrength;
   if (hoverTarget === 0 && hoverStrength < 0.005) {
-    hoverGlow.visible = false;
-    glowingTile = null;
+    cornerMarker.visible = false;
+    glowingCorner = null;
   }
   const dt = paused ? 0 : Math.min(elapsed, 0.05) * speed;
   simulationTime += dt;
