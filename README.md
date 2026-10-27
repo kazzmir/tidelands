@@ -113,6 +113,12 @@ Walking onto swamp or standing on newly swamped ground causes **persistent sickn
 
 All spells update homes, castles, farming, trees, and settler positions just like ordinary terrain edits. Spells can be cast while the simulation is paused.
 
+## Shared-island movement test
+
+The **flask button in the bottom bar** resets into a deterministic test scenario: 24 red and 24 blue characters on the same clear island, with camp centers just **six tiles apart**. They start in distinct unoccupied cells, wander freely, and reserve walking destinations so they go around each other instead of passing through or swapping head-on. Each side still has its own leader pole.
+
+**No combat occurs in this test.** Knight conversion, gathering, automatic houses/births, and enemy terraforming are disabled so both populations keep moving and meeting. Manual terrain edits and other spells remain available, so environmental hazards still apply if you create them. The test starts unpaused at 1× speed; pause/speed, minimap, and camera buttons continue working. Clicking the flask again restarts it. **New world** leaves the test and restores the regular archipelago and existing normal-game mechanics.
+
 ## Minimap
 
 The upper-left **WORLD** minimap shows the entire archipelago: teal water and elevation-colored land, red/blue house squares, and larger castle squares. Unhoused living characters appear as team-colored dots only where there is room; leaders and knights get priority and crowded dots are suppressed. A white outline indicates the camera's ground footprint. **Click/tap the minimap to move the camera** without changing zoom or orbit, spending power, or casting the selected spell. It works while paused.
@@ -167,6 +173,8 @@ Rock persists through dry terrain edits. Lowering it into water destroys the roc
 - `tests/survival.test.mjs` — two-second rescue window, pause, irreversible death, and sinking timing.
 - `src/population.ts` — resident character-power growth, equal-power births, and safe-spawn deferral.
 - `tests/population.test.mjs` — growth scaling, splits, inheritance, pause/speed, and blocked births.
+- `src/encounter-scenario.ts` — peaceful shared-island setup and occupied-step avoidance for movement testing.
+- `tests/encounter-scenario.test.mjs` — connected camps, movement reservations, and no-combat mode guards.
 - `src/minimap.ts` — incremental elevation raster, team markers, crowd suppression, and map navigation coordinates.
 - `tests/minimap.test.mjs` — terrain cache correctness, team glyphs, crowded characters, and coordinate bounds.
 - `src/enemy-ai.ts` — slow, paid terrace planning, friendly-home protection, and castle-site preparation.
