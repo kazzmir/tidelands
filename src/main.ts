@@ -3,6 +3,7 @@ import { generateWorldHeights } from './world-generation';
 import { TerrainSurface, type GridPoint, type TerrainBounds } from './terrain-surface';
 import { PowerMeter } from './power';
 import { Leadership, buildRallyField, rallySteps } from './leadership';
+import { createSilverArmorMaterial, equipKnightArmor } from './knight-armor';
 import {
   convertLeaderToKnight,
   nearestEnemy,
@@ -776,11 +777,7 @@ function startGame(): void {
     Settler,
     { goal: Tile; revision: number; distance: Map<Tile, number> }
   >();
-  const armorMaterial = new THREE.MeshStandardMaterial({
-    color: '#bfc7ce',
-    metalness: 0.65,
-    roughness: 0.35,
-  });
+  const armorMaterial = createSilverArmorMaterial();
   function equipKnight(settler: Settler): void {
     function part(
       parent: THREE.Object3D,
@@ -797,7 +794,7 @@ function startGame(): void {
       parent.add(mesh);
       return mesh;
     }
-    part(settler.mesh, new THREE.BoxGeometry(0.175, 0.11, 0.17), armorMaterial, 0, 0.51, 0);
+    equipKnightArmor(settler.mesh, settler.legs, armorMaterial, darkMaterial);
     const sword = new THREE.Group();
     sword.position.z = 0.09;
     part(sword, new THREE.BoxGeometry(0.045, 0.4, 0.025), armorMaterial, 0, 0.24, 0);
