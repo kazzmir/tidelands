@@ -1,6 +1,6 @@
 # Tidelands
 
-A small, Populous-inspired isometric sandbox built with **Three.js**, **strict TypeScript 7.0.2**, and **Vite 8.3.4**. All scenery is generated in code; no game assets are required. The optional Google Fonts stylesheet falls back to system fonts offline.
+A small, Populous-inspired isometric sandbox built with **Three.js 0.186.1**, **strict TypeScript 7.0.2**, and **Vite 8.3.4**. All scenery is generated in code; no game assets are required. The optional Google Fonts stylesheet falls back to system fonts offline.
 
 ## Run
 
