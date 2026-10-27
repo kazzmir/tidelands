@@ -109,6 +109,10 @@ Walking onto swamp or standing on newly swamped ground causes **persistent sickn
 
 All spells update homes, castles, farming, trees, and settler positions just like ordinary terrain edits. Spells can be cast while the simulation is paused.
 
+## Water waves
+
+The ocean uses animated, seamless **wave color and ripple-normal textures** on one continuous world-aligned surface. Patterns repeat smoothly every eight world tiles, including matching slopes at the texture edges, so neighboring water tiles have no visible seams. Mipmapping, linear filtering, and anisotropic filtering keep transitions smooth when zooming or viewing at an angle. Color and normals scroll together in simulation time; pausing freezes the waves. Camera movement never repositions or snaps the pattern. The water level, shore geometry, and drowning mechanics are unchanged.
+
 ## Population colors
 
 All members of the current population wear the same **red shirt**, including leaders and newborns. **Blue** is the reserved shirt color for a future enemy population; no enemies are spawned yet. Shirt color is independent of character count, sickness, and leadership. Every house (levels 1–4) and castle always displays a flag in its population's matching red/blue color; flags and shirts share the same palette.
@@ -145,6 +149,8 @@ Rock persists through dry terrain edits. Lowering it into water destroys the roc
 - `tests/survival.test.mjs` — two-second rescue window, pause, irreversible death, and sinking timing.
 - `src/population.ts` — resident character-power growth, equal-power births, and safe-spawn deferral.
 - `tests/population.test.mjs` — growth scaling, splits, inheritance, pause/speed, and blocked births.
+- `src/water-texture.ts` — seamless periodic wave textures, ripple normals, and lightweight simulation-time animation.
+- `tests/water-texture.test.mjs` — edge/derivative continuity, repeating filters, normals, and animation.
 - `src/knight-armor.ts` — 1.3×-scale silver armor attached to animated body parts.
 - `tests/knight-armor.test.mjs` — scale, full armor coverage, material, animation attachment, and cleanup ownership.
 - `src/knights.ts` — permanent leader conversion, enemy selection, and simultaneous melee combat.

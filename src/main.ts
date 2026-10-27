@@ -4,6 +4,7 @@ import { TerrainSurface, type GridPoint, type TerrainBounds } from './terrain-su
 import { PowerMeter } from './power';
 import { Leadership, buildRallyField, rallySteps } from './leadership';
 import { createSilverArmorMaterial, equipKnightArmor } from './knight-armor';
+import { createWaterTextures, animateWaterTextures } from './water-texture';
 import {
   convertLeaderToKnight,
   nearestEnemy,
@@ -748,34 +749,24 @@ function startGame(): void {
   }
 
   function createWater() {
+    const waterTextures = createWaterTextures(SIZE * 3, renderer.capabilities.getMaxAnisotropy());
     const water = new THREE.Mesh(
       new THREE.PlaneGeometry(SIZE * 3, SIZE * 3),
-      new THREE.MeshStandardMaterial({ color: '#659e95', roughness: 1, metalness: 0 }),
+      new THREE.MeshStandardMaterial({
+        map: waterTextures.map,
+        normalMap: waterTextures.normalMap,
+        normalScale: new THREE.Vector2(0.35, 0.35),
+        roughness: 0.85,
+        metalness: 0.03,
+      }),
     );
     water.rotation.x = -Math.PI / 2;
     water.position.y = SEA;
     water.receiveShadow = true;
     scene.add(water);
-    const wavePositions: number[] = [];
-    for (let i = 0; i < 900; i++) {
-      const x = random() * 110 - 55;
-      const z = random() * 110 - 55;
-      const length = 0.12 + random() * 0.6;
-      wavePositions.push(x, SEA + 0.015, z, x + length, SEA + 0.015, z);
-    }
-    const waveGeometry = new THREE.BufferGeometry();
-    waveGeometry.setAttribute('position', new THREE.Float32BufferAttribute(wavePositions, 3));
-    const waveMaterial = new THREE.LineBasicMaterial({
-      color: '#e3eed6',
-      transparent: true,
-      opacity: 0.25,
-      depthWrite: false,
-    });
-    const waves = new THREE.LineSegments(waveGeometry, waveMaterial);
-    scene.add(waves);
-    return { water, waves, waveMaterial };
+    return { water, waterTextures };
   }
-  const { water, waves, waveMaterial } = createWater();
+  const { water, waterTextures } = createWater();
 
   const settlers: Settler[] = [];
   const leadership = new Leadership<Tile, Settler>();
@@ -2231,11 +2222,7 @@ function startGame(): void {
     swampTime.value = simulationTime;
     animateSheep(dt);
     spawnSheep(dt);
-    waves.position.x =
-      Math.floor(controls.target.x / 32) * 32 + Math.sin(simulationTime * 0.15) * 0.4;
-    waves.position.z =
-      Math.floor(controls.target.z / 32) * 32 + Math.cos(simulationTime * 0.1) * 0.3;
-    waveMaterial.opacity = 0.2 + Math.sin(simulationTime * 0.7) * 0.045;
+    animateWaterTextures(waterTextures, simulationTime);
     powerMeter.advance(
       dt,
       totalBuildingPower(settlers, 'normal'),
