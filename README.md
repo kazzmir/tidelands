@@ -35,7 +35,8 @@ Only a padded camera region is converted into render geometry; that region strea
 - **3 / Inspect:** hover to see elevation, terrain, and inhabitants; touch taps inspect without editing.
 - **Arrow keys / drag:** pan; **hold middle button and drag:** orbit; **scroll:** zoom. Hold arrows for continuous, camera-relative movement, including while paused.
 - **Touch:** drag to pan; use two fingers to zoom/orbit.
-- **Space:** pause/resume; **1× / 2× / 4×:** simulation speed.
+- **Space / pause button:** pause/resume. Pausing dims the game area behind large centered **PAUSED** text; playback controls remain visible and usable. Camera movement, terrain editing, and spell casting still work while paused.
+- **1× / 2× / 4×:** simulation speed.
 - **Reset camera icon:** return to the original isometric view.
 - **New world:** generate a fresh island and population.
 

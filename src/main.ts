@@ -1926,9 +1926,11 @@ function startGame(): void {
   let simulationTime = 0;
   function togglePause(): void {
     paused = !paused;
+    element('#pause-overlay').hidden = !paused;
     const button = element<HTMLButtonElement>('#pause');
     button.innerHTML = icon(paused ? 'play' : 'pause');
     button.setAttribute('aria-label', paused ? 'Resume simulation' : 'Pause simulation');
+    button.setAttribute('aria-pressed', String(paused));
     button.title = `${paused ? 'Resume' : 'Pause'} simulation (Space)`;
   }
   function bindSimulationControls(): void {
