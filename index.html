@@ -14,7 +14,7 @@
     <div id="app">
       <header class="header">
         <a class="brand" href="./" aria-label="Tidelands home"><span class="brand-mark">≋</span><span>tidelands<span class="brand-dot">.</span></span></a>
-        <button id="new-world" class="text-button"><span data-icon="refresh"></span> New world</button>
+        <div class="header-actions"><button id="rally" class="text-button rally-button" aria-pressed="false" aria-label="Toggle gathering followers"><span data-icon="rally"></span><span id="rally-label" class="rally-label">Gather followers</span></button><button id="new-world" class="text-button"><span data-icon="refresh"></span> New world</button></div>
       </header>
       <main id="world">
         <canvas id="scene" aria-label="Interactive isometric island. Point at a corner, or hold Shift to select a surface. Left-click to raise, right-click to lower, drag to pan, middle-drag to orbit, arrow keys to pan, scroll to zoom."></canvas>

@@ -105,6 +105,14 @@ Walking onto swamp or standing on newly swamped ground causes **persistent sickn
 
 All spells update homes, castles, farming, trees, and settler positions just like ordinary terrain edits. Spells can be cast while the simulation is paused.
 
+## Leader and gathering
+
+Each new population starts with exactly **one leader**, marked by a large white object on a staff. While walking, the leader carries the object; when housed, the object marks the roof. In normal wandering mode the leader can build and produce children like other residents, so gathering down to one character does not prevent the population from regrowing. Inspect its tile or hover the Gather button to see its character power/HP.
+
+**Gather followers** is a free toggle. When enabled, residents—including a housed leader—leave their homes (retaining their character power). Followers stop building and use reachable dry routes toward the leader. On entering the leader's tile, a follower disappears and transfers **all remaining character power/HP** to the leader. This reduces the population by one, does not award player currency, and does not cap the leader at the normal birth threshold while gathering. Once gathering is disabled, the leader can settle again and normal birth/power-splitting rules resume. Vacated houses, castle reservations, farmland, and their sheep are removed. Clicking **Stop gathering** returns the remaining followers to wandering and building new homes.
+
+When the leader dies, the white object stays on the **actual tile of death**, including water, and remains after the corpse disappears. There is no automatic remote replacement: the next living walker to reach that tile picks up the object and becomes the sole new leader. A submerged object remains visible above the water and can be recovered after the ground is restored. Gathering remains enabled if already active, so followers target the dropped object until it is picked up; unreachable followers wait rather than walking into water. New world resets the role and gathering state.
+
 ## Volcanic rock
 
 Rock has a gray/basalt palette distinct from ordinary terrain, with matching contour colors. Flat, dry rock remains buildable and can be farmed. A building anchored on rock produces player power every **10 simulation seconds instead of 5**, and its resident gains character power at **half speed**, doubling all birth cycles (level 1: 240 seconds; castle: 60 seconds). Inspect shows the adjusted growth rate and birth interval, and the Power tooltip separates regular and rock income.
@@ -129,6 +137,8 @@ Rock persists through dry terrain edits. Lowering it into water destroys the roc
 - `tests/survival.test.mjs` — two-second rescue window, pause, irreversible death, and sinking timing.
 - `src/population.ts` — resident character-power growth, equal-power births, and safe-spawn deferral.
 - `tests/population.test.mjs` — growth scaling, splits, inheritance, pause/speed, and blocked births.
+- `src/leadership.ts` — unique leader/object ownership, additive absorption, and shared rally routing.
+- `tests/leadership.test.mjs` — succession, water drops, HP transfer, cancellation, pathfinding, and home evacuation.
 - `src/rock.ts` — volcano substrate conversion and permanent water cleansing.
 - `tests/rock.test.mjs` — cascade-wide conversion, flat-rock building, slower income/births, and cleansing.
 - `src/power.ts` — periodic simulation-time power collection, including the slower rock-building timer.

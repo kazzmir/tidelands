@@ -2,6 +2,7 @@ import './style.css';
 import { generateWorldHeights } from './world-generation';
 import { TerrainSurface, type GridPoint, type TerrainBounds } from './terrain-surface';
 import { PowerMeter } from './power';
+import { Leadership, buildRallyField, rallySteps } from './leadership';
 import { clearSubmergedRock, markVolcanicRock } from './rock';
 import { grazingNeighbors, planFlock, SheepSpawner, type GrazingSheep } from './sheep';
 import { elevationContours } from './terrain-contours';
@@ -26,6 +27,7 @@ import {
 } from './population';
 import {
   fertileLand,
+  evacuateSettlements,
   homeSupport,
   reconcileSettlements,
   totalBuildingPower,
@@ -75,6 +77,7 @@ function element<T extends HTMLElement>(selector: string): T {
 }
 function createIconRenderer(): (name: string) => string {
   const icons: Record<string, string> = {
+    rally: '<path d="M12 3v14m0-14h7l-2 3 2 3h-7M3 20h18M3 12l4 3-4 3m18-6-4 3 4 3"/>',
     refresh:
       '<path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 7a7 7 0 0 1 11.6-2L20 8M4 16l2.3 3A7 7 0 0 0 18 17"/>',
     people:
@@ -730,6 +733,137 @@ function startGame(): void {
   const { water, waves, waveMaterial } = createWater();
 
   const settlers: Settler[] = [];
+  const leadership = new Leadership<Tile, Settler>();
+  let navigationRevision = 0;
+  let rallyRevision = -1;
+  let rallyDestination: Tile | null = null;
+  let rallyDistance = new Map<Tile, number>();
+  const leaderObject = createLeaderObject();
+  function createLeaderObject(): THREE.Group {
+    const group = new THREE.Group();
+    const staff = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.015, 0.02, 0.8, 6),
+      new THREE.MeshStandardMaterial({ color: '#776b49', roughness: 1 }),
+    );
+    staff.position.y = 0.42;
+    const whiteObject = new THREE.Mesh(
+      new THREE.OctahedronGeometry(0.24),
+      new THREE.MeshStandardMaterial({
+        color: '#ffffff',
+        emissive: '#ffffff',
+        emissiveIntensity: 0.2,
+        roughness: 0.7,
+      }),
+    );
+    whiteObject.position.y = 0.98;
+    staff.castShadow = true;
+    whiteObject.castShadow = true;
+    group.add(staff, whiteObject);
+    group.visible = false;
+    scene.add(group);
+    return group;
+  }
+  function characterTile(settler: Settler): Tile {
+    return (
+      settler.home ??
+      tileAt(
+        Math.floor(settler.mesh.position.x + SIZE / 2),
+        Math.floor(settler.mesh.position.z + SIZE / 2),
+      ) ??
+      settler.tile
+    );
+  }
+  function updateLeadershipVisual(): void {
+    const owner = leadership.leader;
+    if (owner) {
+      if (owner.home) {
+        if (leaderObject.parent !== scene) scene.add(leaderObject);
+        leaderObject.position.copy(position(owner.home));
+        leaderObject.position.y += owner.power === 5 ? 2.15 : 0.55 + owner.power * 0.05;
+      } else {
+        if (leaderObject.parent !== owner.mesh) owner.mesh.add(leaderObject);
+        leaderObject.position.set(0.17, 0, 0.02);
+      }
+      leaderObject.visible = true;
+    } else if (leadership.droppedTile) {
+      if (leaderObject.parent !== scene) scene.add(leaderObject);
+      leaderObject.position.copy(position(leadership.droppedTile));
+      leaderObject.position.y = Math.max(SEA, leaderObject.position.y) + 0.02;
+      leaderObject.visible = true;
+    } else leaderObject.visible = false;
+  }
+  function updateRallyButton(): void {
+    const button = element<HTMLButtonElement>('#rally');
+    const label = leadership.rallying ? 'Stop gathering' : 'Gather followers';
+    if (element('#rally-label').textContent !== label) element('#rally-label').textContent = label;
+    button.classList.toggle('active', leadership.rallying);
+    button.setAttribute('aria-pressed', String(leadership.rallying));
+    button.title = `${leadership.leader ? `Leader HP ${leadership.leader.characterPower.toFixed(1)}` : 'Leader object awaiting pickup'} · ${leadership.rallying ? 'Click to resume wandering and building' : 'Residents leave homes and merge their HP/power into the leader'}`;
+  }
+  function encounterLeader(settler: Settler): boolean {
+    if (settler.home || settler.survival.phase !== 'alive') return false;
+    const owner = leadership.leader;
+    if (owner && owner.survival.phase !== 'alive') return false;
+    const result = leadership.encounter(
+      settler,
+      characterTile(settler),
+      owner ? characterTile(owner) : null,
+    );
+    if (result === 'none') return false;
+    if (result === 'absorbed') {
+      settler.survival.phase = 'dead';
+      settler.target = null;
+      settler.mesh.visible = false;
+    } else rallyDestination = null;
+    return true;
+  }
+  function resolveLeadership(): boolean {
+    let changed = false;
+    const owner = leadership.leader;
+    if (owner && (owner.survival.phase === 'sinking' || owner.survival.phase === 'dead')) {
+      leadership.drop(owner, characterTile(owner));
+      rallyDestination = null;
+      changed = true;
+    }
+    for (const settler of settlers) if (encounterLeader(settler)) changed = true;
+    return changed;
+  }
+  function followerOptions(settler: Settler): Tile[] {
+    const goal = leadership.leader ? characterTile(leadership.leader) : leadership.droppedTile;
+    if (!goal) return [];
+    if (goal !== rallyDestination || rallyRevision !== navigationRevision) {
+      rallyDestination = goal;
+      rallyRevision = navigationRevision;
+      rallyDistance = buildRallyField(isWalkable(goal) ? [goal] : neighbors(goal), neighbors);
+    }
+    return rallySteps(settler.tile, neighbors(settler.tile), rallyDistance);
+  }
+  function toggleRally(): void {
+    if (!leadership.leader && !leadership.droppedTile) {
+      toast('There is no leader object to gather around.');
+      return;
+    }
+    leadership.rallying = !leadership.rallying;
+    navigationRevision++;
+    rallyDestination = null;
+    if (leadership.rallying) {
+      evacuateSettlements(settlers, tileAt);
+      reconcileWorldSettlements();
+      rebuildBuildings();
+      syncResidentMeshes();
+    }
+    for (const settler of settlers) {
+      if (settler === leadership.leader || settler.home || settler.survival.phase !== 'alive')
+        continue;
+      settler.tile = characterTile(settler);
+      settler.target = null;
+      settler.progress = 0;
+      settler.wait = 0;
+    }
+    updateSettlementStats();
+    updateLeadershipVisual();
+    if (lastPointer) updateHover(lastPointer);
+  }
   const flock: Sheep[] = [];
   const sheepSpawner = new SheepSpawner();
   const woolMaterial = new THREE.MeshStandardMaterial({ color: '#f3efda', roughness: 1 });
@@ -912,6 +1046,12 @@ function startGame(): void {
     return settler;
   }
   function clearSettlers(): void {
+    leadership.reset();
+    leaderObject.visible = false;
+    rallyDistance.clear();
+    rallyDestination = null;
+    rallyRevision = -1;
+    navigationRevision = 0;
     for (const settler of settlers) settler.head.material.dispose();
     people.clear();
     settlers.length = 0;
@@ -927,6 +1067,7 @@ function startGame(): void {
     );
     for (let i = 0; i < Math.min(24, walkable.length); i++)
       createSettler(walkable[Math.floor(random() * walkable.length)]);
+    if (settlers[0]) leadership.appoint(settlers[0]);
     updateSettlementStats();
   }
   function findBirthTile(home: Tile): Tile | null {
@@ -983,6 +1124,12 @@ function startGame(): void {
     const castles = settlers.filter((settler) => settler.power === 5).length;
     element('#population').title =
       `${roaming} roaming · ${housed} at home${drowning ? ` · ${drowning} drowning` : ''}${castles ? ` · ${castles} castle${castles > 1 ? 's' : ''}` : ''}${sick ? ` · ${sick} sick` : ''} · ${flock.length} sheep`;
+    element('#population').title += leadership.leader
+      ? ` · Leader HP ${leadership.leader.characterPower.toFixed(1)}`
+      : leadership.droppedTile
+        ? ' · Leader object dropped'
+        : '';
+    updateRallyButton();
     element('#power').title =
       `+${totalBuildingPower(settlers, 'normal')} power / ${powerMeter.interval}s${totalBuildingPower(settlers, 'rock') ? ` · +${totalBuildingPower(settlers, 'rock')} rock power / ${powerMeter.interval * 2}s` : ''} · Terrain costs 1 power per affected point`;
   }
@@ -1151,7 +1298,7 @@ function startGame(): void {
     return true;
   }
   function reconcileWorldSettlements(): void {
-    reconcileSettlements(settlers, tiles, surface, tileAt);
+    if (reconcileSettlements(settlers, tiles, surface, tileAt)) navigationRevision++;
   }
   function generateWorld(): void {
     powerMeter.reset();
@@ -1350,6 +1497,8 @@ function startGame(): void {
       );
       const drowning = walkers.some((s) => s.survival.phase === 'drowning');
       const sheepHere = flock.filter((sheep) => sheep.tile === hovered).length;
+      const leaderHere = leadership.leader && characterTile(leadership.leader) === hovered;
+      const objectHere = leadership.droppedTile === hovered;
       const visitors = walkers.length;
       const walkerPower = walkers
         .reduce((sum, walker) => sum + walker.characterPower, 0)
@@ -1371,7 +1520,7 @@ function startGame(): void {
         : hoveredCorner
           ? `Corner ${hoveredCorner.x}, ${hoveredCorner.z} · Height ${surface.level(hoveredCorner.x, hoveredCorner.z)}`
           : '';
-      info.innerHTML = `<strong>${kind}</strong>${cornerInfo}<br>Tile ${hovered.x}, ${hovered.z} · Corners ${surface.level(hovered.x, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z + 1)}, ${surface.level(hovered.x, hovered.z + 1)}<br>${resident ? `${buildingInfo}<br>1 settler lives here.` : drowning ? 'Drowning — raise the land beneath them to rescue!' : visitors ? `${visitors} settler${visitors > 1 ? 's' : ''} here · HP ${walkerPower}${walkers.some((walker) => walker.sick) ? ' · Sick (-1 HP/s)' : ''}` : 'Select a corner to shape the land.'}${sheepHere ? `<br>${sheepHere} sheep grazing here` : ''}`;
+      info.innerHTML = `<strong>${kind}</strong>${cornerInfo}<br>Tile ${hovered.x}, ${hovered.z} · Corners ${surface.level(hovered.x, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z + 1)}, ${surface.level(hovered.x, hovered.z + 1)}<br>${resident ? `${buildingInfo}<br>1 settler lives here.` : drowning ? 'Drowning — raise the land beneath them to rescue!' : visitors ? `${visitors} settler${visitors > 1 ? 's' : ''} here · HP ${walkerPower}${walkers.some((walker) => walker.sick) ? ' · Sick (-1 HP/s)' : ''}` : 'Select a corner to shape the land.'}${sheepHere ? `<br>${sheepHere} sheep grazing here` : ''}${leaderHere ? `<br>Leader · HP/power ${leadership.leader?.characterPower.toFixed(1)}` : objectHere ? '<br>White leader object · Walk here to pick it up' : ''}`;
     }
     canvas.style.cursor = hovered
       ? tool === 'inspect' && !selectedSpell
@@ -1444,6 +1593,7 @@ function startGame(): void {
     canvas.addEventListener('contextmenu', (event) => event.preventDefault());
   }
   function refreshTerrainAfterEdit(): void {
+    navigationRevision++;
     clearSubmergedSwamps(surface, swampTiles);
     clearSubmergedRock(surface, rockTiles);
     const affected = new Set<Tile>();
@@ -1617,6 +1767,7 @@ function startGame(): void {
     button.title = `${paused ? 'Resume' : 'Pause'} simulation (Space)`;
   }
   function bindSimulationControls(): void {
+    element('#rally').addEventListener('click', toggleRally);
     element('#pause').addEventListener('click', togglePause);
     document.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach((button) => {
       button.addEventListener('click', () => {
@@ -1777,6 +1928,8 @@ function startGame(): void {
         }
       }
       if (settler.home) continue;
+      if (encounterLeader(settler)) survivalChanged = true;
+      if (settler.survival.phase === 'dead') continue;
       const previous = settler.survival.phase;
       const ground = surface.sample(
         settler.mesh.position.x + SIZE / 2,
@@ -1804,7 +1957,10 @@ function startGame(): void {
       if (!settler.target) {
         settler.wait -= dt;
         if (settler.wait > 0) continue;
-        const options = neighbors(settler.tile);
+        const options =
+          leadership.rallying && settler !== leadership.leader
+            ? followerOptions(settler)
+            : neighbors(settler.tile);
         if (!options.length) {
           settler.wait = 1;
           continue;
@@ -1830,6 +1986,8 @@ function startGame(): void {
         settler.legs[i].rotation.x =
           Math.sin(simulationTime * 9 + settler.phase) * (i < 2 ? 0.45 : -0.45);
       }
+      if (encounterLeader(settler)) survivalChanged = true;
+      if (settler.characterPower <= 0) continue;
       if (settler.progress >= 1) {
         settler.tile = settler.target;
         settler.target = null;
@@ -1837,7 +1995,7 @@ function startGame(): void {
         settler.legs.forEach((leg) => {
           leg.rotation.x = 0;
         });
-        if (trySettle(settler, surface)) {
+        if (!leadership.rallying && trySettle(settler, surface)) {
           settler.mesh.visible = false;
           settlementsChanged = true;
         }
@@ -1850,6 +2008,7 @@ function startGame(): void {
       updateSettlementStats();
       if (lastPointer) updateHover(lastPointer);
     }
+    if (resolveLeadership()) survivalChanged = true;
     for (let i = settlers.length - 1; i >= 0; i--) {
       if (settlers[i].survival.phase !== 'dead') continue;
       people.remove(settlers[i].mesh);
@@ -1881,6 +2040,8 @@ function startGame(): void {
       totalBuildingPower(settlers, 'rock'),
     );
     updatePowerDisplay();
+    updateLeadershipVisual();
+    updateRallyButton();
     controls.update();
     const viewChanged = updateVisibleTerrain();
     sun.position.copy(controls.target).add(new THREE.Vector3(-18, 32, 12));

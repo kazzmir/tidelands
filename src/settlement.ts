@@ -136,6 +136,27 @@ function release<T extends SettlementTile>(resident: Resident<T>): void {
   resident.homeLevel = null;
 }
 
+/** Rallying releases residents without losing their character power or leaving castle reservations. */
+export function evacuateSettlements<T extends SettlementTile>(
+  residents: readonly Resident<T>[],
+  lookup: (x: number, z: number) => T | undefined,
+): void {
+  for (const resident of residents) {
+    const home = resident.home;
+    if (!home) continue;
+    for (let z = home.z - 3; z <= home.z + 3; z++) {
+      for (let x = home.x - 3; x <= home.x + 3; x++) {
+        const tile = lookup(x, z);
+        if (tile) {
+          tile.reserved = false;
+          tile.castleGap = false;
+        }
+      }
+    }
+    release(resident);
+  }
+}
+
 /** A castle's center is its anchor: changing its height releases the resident too. */
 export function releaseInvalidHomes<T extends SettlementTile>(
   residents: readonly Resident<T>[],
