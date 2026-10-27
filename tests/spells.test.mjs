@@ -24,8 +24,8 @@ function assertSlopes(surface){
   }
 }
 
-test('spell costs are 500 for Earthquake, 2000 for Mountain and 3000 for Flood',()=>{
-  assert.deepEqual(SPELL_COSTS,{earthquake:500,mountain:2000,flood:3000});
+test('spells have their configured fixed power costs',()=>{
+  assert.deepEqual(SPELL_COSTS,{earthquake:500,mountain:2000,flood:3000,swamp:1500});
 });
 
 test('Flood lowers every terrain point globally by one and clamps at water level',()=>{

@@ -1,11 +1,17 @@
 import type { GridPoint, TerrainSurface } from './terrain-surface';
 
-export type Spell = 'earthquake' | 'mountain' | 'flood';
-export const SPELL_COSTS: Record<Spell, number> = { earthquake: 500, mountain: 2000, flood: 3000 };
+export type Spell = 'earthquake' | 'mountain' | 'flood' | 'swamp';
+export const SPELL_COSTS: Record<Spell, number> = {
+  earthquake: 500,
+  mountain: 2000,
+  flood: 3000,
+  swamp: 1500,
+};
 export const SPELL_NAMES: Record<Spell, string> = {
   earthquake: 'Earthquake',
   mountain: 'Mountain',
   flood: 'Flood',
+  swamp: 'Swamp',
 };
 
 /** Final changed points include the full cascade, not just the last edited point. */
@@ -59,6 +65,49 @@ export function earthquake(
     if (point.height < current) surface.editCorner(point.x, point.z, point.height - current);
   }
   return recordChanges(surface, before);
+}
+
+/** Plan a targeted conversion without mutating tiles before the spell cost is paid. */
+export function swampTargets<T extends GridPoint & { swamp?: boolean }>(
+  surface: TerrainSurface,
+  center: GridPoint,
+  lookup: (x: number, z: number) => T | undefined,
+  random: () => number,
+  radius = 20,
+): T[] {
+  const targets: T[] = [];
+  for (
+    let z = Math.max(0, center.z - radius);
+    z <= Math.min(surface.size - 1, center.z + radius);
+    z++
+  ) {
+    for (
+      let x = Math.max(0, center.x - radius);
+      x <= Math.min(surface.size - 1, center.x + radius);
+      x++
+    ) {
+      if (
+        Math.hypot(x - center.x, z - center.z) > radius ||
+        surface.sample(x + 0.5, z + 0.5) <= 0.08
+      )
+        continue;
+      const tile = lookup(x, z);
+      if (tile && !tile.swamp && random() < 0.75) targets.push(tile);
+    }
+  }
+  return targets;
+}
+
+/** Submerging a swamp destroys it rather than hiding it for a later terrain raise. */
+export function clearSubmergedSwamps<T extends GridPoint & { swamp?: boolean }>(
+  surface: TerrainSurface,
+  tiles: Set<T>,
+): void {
+  for (const tile of tiles) {
+    if (surface.sample(tile.x + 0.5, tile.z + 0.5) > 0.08) continue;
+    tile.swamp = false;
+    tiles.delete(tile);
+  }
 }
 
 /** A world-wide sea-level rise, represented by lowering all nonzero terrain by one. */

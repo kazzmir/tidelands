@@ -5,7 +5,17 @@ import { PowerMeter } from './power';
 import { grazingNeighbors, planFlock, SheepSpawner, type GrazingSheep } from './sheep';
 import { elevationContours } from './terrain-contours';
 import { advanceSurvival, createSurvival, SINKING_SECONDS, type Survival } from './survival';
-import { earthquake, flood, mountain, SPELL_COSTS, SPELL_NAMES, type Spell } from './spells';
+import {
+  clearSubmergedSwamps,
+  earthquake,
+  flood,
+  mountain,
+  swampTargets,
+  SPELL_COSTS,
+  SPELL_NAMES,
+  type Spell,
+} from './spells';
+import { advanceSickness } from './sickness';
 import {
   BIRTH_THRESHOLD,
   birthInterval,
@@ -32,12 +42,15 @@ interface Tile {
   height: number;
   tree: boolean;
   house: boolean;
+  swamp: boolean;
   reserved?: boolean;
   castleGap?: boolean;
 }
 interface Settler extends Resident<Tile> {
   mesh: THREE.Group;
   survival: Survival;
+  sick: boolean;
+  head: THREE.Mesh<THREE.BoxGeometry, THREE.MeshStandardMaterial>;
   target: Tile | null;
   progress: number;
   wait: number;
@@ -66,6 +79,8 @@ function createIconRenderer(): (name: string) => string {
       '<circle cx="9" cy="7" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 4a3 3 0 0 1 0 6M18 14a5 5 0 0 1 3 5v2"/>',
     power: '<path d="m13 2-9 12h7l-1 8 10-13h-7Z"/>',
     earthquake: '<path d="m3 17 6 3 4-2 8 3M3 12l5-2 4 2 9-3M13 2l-3 5 5 2-5 6 3 3"/>',
+    swamp:
+      '<path d="M3 18c2-2 4 2 6 0s4 2 6 0 4 2 6 0M6 14V7m-2 3 2 2 2-2M15 15V4m-3 4 3 3 3-3M10 21h6"/>',
     flood:
       '<path d="M12 2v8m-3-3 3 3 3-3M3 14c2-3 4 3 6 0s4 3 6 0 4 3 6 0M3 20c2-3 4 3 6 0s4 3 6 0 4 3 6 0"/>',
     mountain: '<path d="m2 19 7-13 5 8 3-5 5 10ZM6 12l3 2 3-2"/>',
@@ -174,6 +189,9 @@ function startGame(): void {
   const animals = new THREE.Group();
   const trees = new THREE.Group();
   const fertileTiles = new Set<Tile>();
+  const swampTiles = new Set<Tile>();
+  const wetlands = new THREE.Group();
+  scene.add(wetlands);
   scene.add(terrain, scenery, trees, farms, buildings, people, animals);
   // Distinct elevation colors, interpolated across each slope from its corner heights.
   const heightColors = [
@@ -241,6 +259,7 @@ function startGame(): void {
         height,
         tree: initialSurface.elevation(x, z) > 2 && hash(x, z) > 0.97,
         house: false,
+        swamp: false,
       };
       tileCache.set(index, tile);
       tiles.push(tile);
@@ -478,7 +497,7 @@ function startGame(): void {
   function rebuildFarms(): void {
     farms.clear();
     fertileTiles.clear();
-    for (const point of fertileLand(settlers, surface)) {
+    for (const point of fertileLand(settlers, surface, tileAt)) {
       const tile = tileAt(point.x, point.z);
       if (!tile) continue;
       fertileTiles.add(tile);
@@ -494,6 +513,57 @@ function startGame(): void {
     rebuildTrees();
     syncFlock();
   }
+  const swampTime = { value: 0 };
+  const swampMaterial = createSwampMaterial();
+  function createSwampMaterial(): THREE.ShaderMaterial {
+    return new THREE.ShaderMaterial({
+      uniforms: { uTime: swampTime },
+      transparent: true,
+      depthWrite: false,
+      vertexShader: `varying vec2 vWorld;
+        void main() { vWorld = position.xz;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position + vec3(0.0, 0.018, 0.0), 1.0); }`,
+      fragmentShader: `uniform float uTime; varying vec2 vWorld;
+        float hash2(vec2 p) { return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
+        float moldNoise(vec2 p) { vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
+          return mix(mix(hash2(i),hash2(i+vec2(1.,0.)),f.x),mix(hash2(i+vec2(0.,1.)),hash2(i+vec2(1.,1.)),f.x),f.y); }
+        void main() {
+          vec2 drift=vec2(sin(uTime*.3),cos(uTime*.24))*.15;
+          float patches=moldNoise(vWorld*3.5+drift);
+          float specks=moldNoise(vWorld*22.0-drift);
+          float mold=smoothstep(.22,.78,patches*.7+specks*.3);
+          vec3 color=mix(vec3(.018,.065,.008),vec3(.29,.46,.055),mold);
+          color*=.9+.1*sin(uTime*1.4+patches*10.0);
+          gl_FragColor=vec4(color,.82);
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+        }`,
+    });
+  }
+  function rebuildSwamps(): void {
+    wetlands.traverse((object) => {
+      if (object instanceof THREE.Mesh) object.geometry.dispose();
+    });
+    wetlands.clear();
+    const tiles = visibleTiles.filter((tile) => tile.swamp);
+    if (!tiles.length) return;
+    const source = ground.geometry.getAttribute('position');
+    const positions = new Float32Array(tiles.length * 18);
+    tiles.forEach((tile, index) => {
+      const start =
+        ((tile.z - renderedBounds.z) * renderedBounds.width + tile.x - renderedBounds.x) * 6;
+      for (let i = 0; i < 6; i++) {
+        positions[(index * 6 + i) * 3] = source.getX(start + i);
+        positions[(index * 6 + i) * 3 + 1] = source.getY(start + i);
+        positions[(index * 6 + i) * 3 + 2] = source.getZ(start + i);
+      }
+    });
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    const mesh = new THREE.Mesh(geometry, swampMaterial);
+    mesh.renderOrder = 3;
+    wetlands.add(mesh);
+  }
   function rebuildBuildings(): void {
     buildings.traverse((object) => {
       if (object.userData.ownedGeometry && object instanceof THREE.Mesh) object.geometry.dispose();
@@ -505,6 +575,7 @@ function startGame(): void {
       else addHouse(settler.home, settler.power);
     }
     rebuildFarms();
+    rebuildSwamps();
   }
   function rebuild(): void {
     if (ground) {
@@ -782,7 +853,7 @@ function startGame(): void {
       shirtMaterials[settlers.length % shirtMaterials.length],
     );
     body.position.y = 0.25;
-    const head = new THREE.Mesh(headGeometry, skinMaterial);
+    const head = new THREE.Mesh(headGeometry, skinMaterial.clone());
     head.position.y = 0.425;
     const hair = new THREE.Mesh(hairGeometry, hairMaterial);
     hair.position.set(0, 0.49, -0.01);
@@ -806,6 +877,8 @@ function startGame(): void {
       mesh,
       tile,
       survival: createSurvival(),
+      sick: false,
+      head,
       home: null,
       power: 0,
       homeLevel: null,
@@ -819,9 +892,13 @@ function startGame(): void {
     settlers.push(settler);
     return settler;
   }
-  function spawnSettlers(): void {
+  function clearSettlers(): void {
+    for (const settler of settlers) settler.head.material.dispose();
     people.clear();
     settlers.length = 0;
+  }
+  function spawnSettlers(): void {
+    clearSettlers();
     const walkable = visibleTiles.filter(
       (t) =>
         Math.hypot(t.x - SIZE / 2, t.z - SIZE / 2) < 14 &&
@@ -838,7 +915,7 @@ function startGame(): void {
     const visited = new Set(queue);
     for (let head = 0; head < queue.length; head++) {
       const tile = queue[head];
-      if (isWalkable(tile) && neighbors(tile).length > 0) return tile;
+      if (!tile.swamp && isWalkable(tile) && neighbors(tile).length > 0) return tile;
       for (const [dx, dz] of [
         [1, 0],
         [-1, 0],
@@ -882,10 +959,11 @@ function startGame(): void {
     const housed = living.filter((settler) => settler.home !== null).length;
     const drowning = living.filter((settler) => settler.survival.phase === 'drowning').length;
     const roaming = living.length - housed - drowning;
+    const sick = living.filter((settler) => settler.sick).length;
     element('#population').innerHTML = `${living.length} <small>settlers</small>`;
     const castles = settlers.filter((settler) => settler.power === 5).length;
     element('#population').title =
-      `${roaming} roaming · ${housed} at home${drowning ? ` · ${drowning} drowning` : ''}${castles ? ` · ${castles} castle${castles > 1 ? 's' : ''}` : ''} · ${flock.length} sheep`;
+      `${roaming} roaming · ${housed} at home${drowning ? ` · ${drowning} drowning` : ''}${castles ? ` · ${castles} castle${castles > 1 ? 's' : ''}` : ''}${sick ? ` · ${sick} sick` : ''} · ${flock.length} sheep`;
     element('#power').title =
       `+${totalBuildingPower(settlers)} power every ${powerMeter.interval} simulation seconds · Terrain costs 1 power per affected point`;
   }
@@ -923,6 +1001,17 @@ function startGame(): void {
       settler.mesh.position.y = SEA - 0.18 - (state.elapsed / SINKING_SECONDS) * 0.9;
     }
   }
+  function updateSickness(settler: Settler, seconds: number): boolean {
+    const tile =
+      settler.home ??
+      tileAt(
+        Math.floor(settler.mesh.position.x + SIZE / 2),
+        Math.floor(settler.mesh.position.z + SIZE / 2),
+      );
+    const died = advanceSickness(settler, seconds, Boolean(tile?.swamp));
+    settler.head.material.color.set(settler.sick ? '#a3b86b' : '#e3bb8b');
+    return died;
+  }
   function syncResidentMeshes(affected: ReadonlySet<Tile | undefined> = new Set()): void {
     for (const settler of settlers) {
       if (settler.survival.phase === 'sinking' || settler.survival.phase === 'dead') continue;
@@ -932,6 +1021,7 @@ function startGame(): void {
         continue;
       }
       if (!settler.mesh.visible) settler.mesh.position.copy(position(settler.tile));
+      updateSickness(settler, 0);
       const previous = settler.survival.phase;
       const ground = surface.sample(
         settler.mesh.position.x + SIZE / 2,
@@ -1042,8 +1132,8 @@ function startGame(): void {
     powerMeter.reset();
     updatePowerDisplay();
     randomState = seed;
-    people.clear();
-    settlers.length = 0;
+    clearSettlers();
+    swampTiles.clear();
     animals.clear();
     flock.length = 0;
     sheepSpawner.reset();
@@ -1209,8 +1299,9 @@ function startGame(): void {
     const info = element('#tile-info');
     info.hidden = selectedSpell !== null || tool !== 'inspect' || !hovered;
     if (!selectedSpell && hovered && tool === 'inspect') {
-      const kind =
-        hovered.height === 0
+      const kind = hovered.swamp
+        ? 'Swamp · Infectious ground'
+        : hovered.height === 0
           ? 'Open water'
           : hovered.reserved
             ? 'Castle grounds'
@@ -1245,14 +1336,14 @@ function startGame(): void {
             Math.abs(s.home.z - inspected.z) <= 1),
       );
       const buildingInfo = resident?.home
-        ? `${resident.power === 5 ? 'Castle' : 'House'} · Level ${resident.power} · ${homeSupport(surface, resident.home).count}/9 flat tiles<br>Resident power ${resident.characterPower.toFixed(1)} · Growth +${characterGrowthRate(resident.power).toFixed(3)}/s<br>Birth cycle ~${birthInterval(resident.power)}s · Threshold ${BIRTH_THRESHOLD}`
+        ? `${resident.power === 5 ? 'Castle' : 'House'} · Level ${resident.power} · ${homeSupport(surface, resident.home, tileAt).count}/9 flat tiles<br>Resident HP ${resident.characterPower.toFixed(1)}${resident.sick ? ' · Sick (-1 HP/s)' : ''} · Growth +${characterGrowthRate(resident.power).toFixed(3)}/s<br>Birth cycle ~${birthInterval(resident.power)}s · Threshold ${BIRTH_THRESHOLD}`
         : '';
       const cornerInfo = shiftHeld
         ? 'Surface selected · All four corners'
         : hoveredCorner
           ? `Corner ${hoveredCorner.x}, ${hoveredCorner.z} · Height ${surface.level(hoveredCorner.x, hoveredCorner.z)}`
           : '';
-      info.innerHTML = `<strong>${kind}</strong>${cornerInfo}<br>Tile ${hovered.x}, ${hovered.z} · Corners ${surface.level(hovered.x, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z + 1)}, ${surface.level(hovered.x, hovered.z + 1)}<br>${resident ? `${buildingInfo}<br>1 settler lives here.` : drowning ? 'Drowning — raise the land beneath them to rescue!' : visitors ? `${visitors} settler${visitors > 1 ? 's' : ''} here · Power ${walkerPower}` : 'Select a corner to shape the land.'}${sheepHere ? `<br>${sheepHere} sheep grazing here` : ''}`;
+      info.innerHTML = `<strong>${kind}</strong>${cornerInfo}<br>Tile ${hovered.x}, ${hovered.z} · Corners ${surface.level(hovered.x, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z + 1)}, ${surface.level(hovered.x, hovered.z + 1)}<br>${resident ? `${buildingInfo}<br>1 settler lives here.` : drowning ? 'Drowning — raise the land beneath them to rescue!' : visitors ? `${visitors} settler${visitors > 1 ? 's' : ''} here · HP ${walkerPower}${walkers.some((walker) => walker.sick) ? ' · Sick (-1 HP/s)' : ''}` : 'Select a corner to shape the land.'}${sheepHere ? `<br>${sheepHere} sheep grazing here` : ''}`;
     }
     canvas.style.cursor = hovered
       ? tool === 'inspect' && !selectedSpell
@@ -1325,6 +1416,7 @@ function startGame(): void {
     canvas.addEventListener('contextmenu', (event) => event.preventDefault());
   }
   function refreshTerrainAfterEdit(): void {
+    clearSubmergedSwamps(surface, swampTiles);
     const affected = new Set<Tile>();
     // A world-wide edit need not materialize tile objects in unvisited regions.
     for (const point of surface.changedPoints) {
@@ -1381,7 +1473,11 @@ function startGame(): void {
     camera.updateMatrixWorld();
     const preview = new TerrainSurface(SIZE, cornerLevels.slice(), STEP);
     let changed = false;
-    if (spell === 'flood') {
+    let marsh: Tile[] = [];
+    if (spell === 'swamp' && target) {
+      marsh = swampTargets(surface, target, tileAt, random);
+      changed = marsh.length > 0;
+    } else if (spell === 'flood') {
       changed = flood(preview);
     } else if (target) {
       const center = { x: target.x + 0.5, z: target.z + 0.5 };
@@ -1399,17 +1495,23 @@ function startGame(): void {
     }
     if (!changed) {
       toast(
-        spell === 'flood'
-          ? 'There is no land left to flood.'
-          : spell === 'earthquake'
-            ? 'No land changed here. Try another tile.'
-            : 'There are no points left to raise around this tile.',
+        spell === 'swamp'
+          ? 'No dry tiles remain to turn into swamp.'
+          : spell === 'flood'
+            ? 'There is no land left to flood.'
+            : spell === 'earthquake'
+              ? 'No land changed here. Try another tile.'
+              : 'There are no points left to raise around this tile.',
       );
       return;
     }
     if (!powerMeter.spend(cost)) return;
     selectedSpell = null;
     selectTool(tool);
+    for (const tile of marsh) {
+      tile.swamp = true;
+      swampTiles.add(tile);
+    }
     cornerLevels.set(preview.levels);
     surface.changedPoints.length = 0;
     for (const point of preview.changedPoints) surface.changedPoints.push(point);
@@ -1418,6 +1520,7 @@ function startGame(): void {
       earthquake: 'The earth trembles.',
       mountain: 'Mountains rise from the shore.',
       flood: 'The seas rise. All land sinks one level.',
+      swamp: 'A sickly marsh spreads across the land.',
     };
     toast(messages[spell]);
     if (spell === 'earthquake') {
@@ -1618,6 +1721,26 @@ function startGame(): void {
     let settlementsChanged = false;
     let survivalChanged = false;
     for (const settler of settlers) {
+      if (settler.survival.phase === 'alive' || settler.survival.phase === 'drowning') {
+        const wasSick = settler.sick;
+        const died = updateSickness(settler, dt);
+        if (settler.sick !== wasSick) survivalChanged = true;
+        if (died) {
+          if (settler.home) settlementsChanged = true;
+          const wet =
+            !settler.home &&
+            surface.sample(
+              settler.mesh.position.x + SIZE / 2,
+              settler.mesh.position.z + SIZE / 2,
+            ) <= SEA;
+          settler.survival.phase = wet ? 'sinking' : 'dead';
+          settler.survival.elapsed = 0;
+          settler.target = null;
+          renderSurvival(settler);
+          survivalChanged = true;
+          continue;
+        }
+      }
       if (settler.home) continue;
       const previous = settler.survival.phase;
       const ground = surface.sample(
@@ -1665,6 +1788,9 @@ function startGame(): void {
       settler.mesh.position.y =
         surface.sample(settler.mesh.position.x + SIZE / 2, settler.mesh.position.z + SIZE / 2) +
         Math.abs(Math.sin(settler.progress * Math.PI * 4)) * 0.035;
+      const wasSick = settler.sick;
+      updateSickness(settler, 0);
+      if (settler.sick !== wasSick) survivalChanged = true;
       for (let i = 0; i < settler.legs.length; i++) {
         settler.legs[i].rotation.x =
           Math.sin(simulationTime * 9 + settler.phase) * (i < 2 ? 0.45 : -0.45);
@@ -1692,6 +1818,7 @@ function startGame(): void {
     for (let i = settlers.length - 1; i >= 0; i--) {
       if (settlers[i].survival.phase !== 'dead') continue;
       people.remove(settlers[i].mesh);
+      settlers[i].head.material.dispose();
       settlers.splice(i, 1);
       survivalChanged = true;
     }
@@ -1705,6 +1832,7 @@ function startGame(): void {
       updateSettlementStats();
       if (lastPointer) updateHover(lastPointer);
     }
+    swampTime.value = simulationTime;
     animateSheep(dt);
     spawnSheep(dt);
     waves.position.x =
