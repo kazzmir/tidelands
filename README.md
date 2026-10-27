@@ -37,6 +37,7 @@ Playback, speed, and camera controls sit in a compact, right-aligned bottom pane
 - **3 (Inspect):** hover to see elevation, terrain, and inhabitants; touch taps inspect without editing.
 - **Arrow keys / drag:** pan; **hold middle button and drag:** orbit; **scroll:** zoom. Hold arrows for continuous, camera-relative movement, including while paused.
 - **Touch:** drag to pan; use two fingers to zoom/orbit.
+- **L / leader-pole button:** jump to your pole's current position, including when housed or dropped in water, without changing zoom/orbit.
 - **E / blue flag button:** view the enemy island; **Home / Reset View:** return to the human starting island.
 - **Space / pause button:** pause/resume. Pausing dims the game area behind large centered **PAUSED** text; playback controls remain visible and usable. Camera movement, terrain editing, and spell casting still work while paused.
 - **1× / 2× / 4×:** simulation speed.

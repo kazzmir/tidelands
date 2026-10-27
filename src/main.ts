@@ -97,6 +97,7 @@ function element<T extends HTMLElement>(selector: string): T {
 }
 function createIconRenderer(): (name: string) => string {
   const icons: Record<string, string> = {
+    pole: '<path d="M9 10v11m-4 0h8M9 2l4 4-4 4-4-4zM16 13h5m-2-2 2 2-2 2"/>',
     rally: '<path d="M12 3v14m0-14h7l-2 3 2 3h-7M3 20h18M3 12l4 3-4 3m18-6-4 3 4 3"/>',
     refresh:
       '<path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 7a7 7 0 0 1 11.6-2L20 8M4 16l2.3 3A7 7 0 0 0 18 17"/>',
@@ -1060,7 +1061,21 @@ function startGame(): void {
       } else object.visible = false;
     }
   }
+  function focusLeaderPole(): void {
+    if (!leadership.leader && !leadership.droppedTile) return;
+    updateLeadershipVisual();
+    const target = leaderObject.getWorldPosition(new THREE.Vector3());
+    camera.position.add(target.clone().sub(controls.target));
+    controls.target.copy(target);
+    controls.update();
+    lastMinimapPaint = 0;
+  }
   function updateRallyButton(): void {
+    const poleButton = element<HTMLButtonElement>('#leader-view');
+    poleButton.disabled = !leadership.leader && !leadership.droppedTile;
+    poleButton.title = leadership.droppedTile
+      ? 'Locate your dropped leader pole, including in water (L)'
+      : 'Locate your leader pole (L)';
     const button = element<HTMLButtonElement>('#rally');
     const label = leadership.rallying ? 'Stop gathering' : 'Gather followers';
     if (element('#rally-label').textContent !== label) element('#rally-label').textContent = label;
@@ -2147,6 +2162,7 @@ function startGame(): void {
     minimapCanvas.addEventListener('contextmenu', (event) => event.preventDefault());
     element('#rally').addEventListener('click', toggleRally);
     element('#pause').addEventListener('click', togglePause);
+    element('#leader-view').addEventListener('click', focusLeaderPole);
     element('#enemy-view').addEventListener('click', resetEnemyCamera);
     document.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach((button) => {
       button.addEventListener('click', () => {
@@ -2210,6 +2226,7 @@ function startGame(): void {
         event.preventDefault();
         togglePause();
       }
+      if (event.code === 'KeyL' && !event.ctrlKey && !event.metaKey) focusLeaderPole();
       if (event.code === 'KeyE') resetEnemyCamera();
       if (event.code === 'Home') {
         event.preventDefault();
