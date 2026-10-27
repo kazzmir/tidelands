@@ -143,9 +143,9 @@ Human characters wear **red shirts** and enemy characters wear **blue shirts**, 
 
 ## Combat
 
-Nearby opposing outdoor characters automatically stop, face one another, and fight in stable one-on-one engagements (within 1.35 tiles). Both take damage simultaneously at **opposing combat power / 10 HP per simulation second**: a 20-power character deals 2 HP/s, while a 10-power character deals 1 HP/s. Attack power is captured when the engagement begins; wounds reduce HP without weakening the attack rate, so equal fights end rather than approaching zero forever. Power absorbed during a fight increases attack strength. Fighting pauses with the simulation and respects speed controls.
+Nearby opposing outdoor characters automatically face one another and fight in stable one-on-one engagements (triggered within 1.35 tiles). They step smoothly toward each other to roughly **0.4 tiles apart**, adjusted for model size, without overshooting or stepping onto unwalkable/submerged ground. Both take damage simultaneously at **opposing combat power / 10 HP per simulation second**: a 20-power character deals 2 HP/s, while a 10-power character deals 1 HP/s. Attack power is captured when the engagement begins; wounds reduce HP without weakening the attack rate, so equal fights end rather than approaching zero forever. Power absorbed during a fight increases attack strength. Fighting pauses with the simulation and respects speed controls.
 
-Fighters animate alternating strikes and a small body lean, with isolated red emissive materials and soft pulsing red auras. Other characters and shared team materials do not glow. The effects clear after combat or a world reset. Defeated characters use normal death and leader-pole succession. Knights can also engage housed defenders, who appear outside their buildings while fighting; fighting residents do not grow or produce births. Inspect identifies fighting characters.
+Fighters animate alternating strikes and a small body lean, with isolated red emissive materials and soft pulsing red auras. Bright **yellow zigzag lightning bolts** arc back and forth between the fighters at head height, with a moving spark marking each direction. Closing motion and lightning use simulation time, so pause freezes them and speed controls accelerate them. Other characters and shared team materials do not glow. The effects clear after combat or a world reset. Defeated characters use normal death and leader-pole succession. Knights can also engage housed defenders, who appear outside their buildings while fighting; fighting residents do not grow or produce births. Inspect identifies fighting characters.
 
 ## Leader and gathering
 
@@ -190,7 +190,7 @@ Rock persists through dry terrain edits. Lowering it into water destroys the roc
 - `src/knight-armor.ts` — 1.3×-scale silver armor attached to animated body parts.
 - `tests/knight-armor.test.mjs` — scale, full armor coverage, material, animation attachment, and cleanup ownership.
 - `src/combat.ts` — stable opponent pairing and simultaneous proportional damage.
-- `src/combat-effects.ts` — facing, strikes, isolated red emission, and soft combat auras.
+- `src/combat-effects.ts` — facing, strikes, isolated red emission, soft combat auras, and traveling yellow lightning.
 - `tests/combat*.test.mjs` — damage, pairing, death, pause, animation, glow isolation, and cleanup.
 - `src/knights.ts` — permanent leader conversion, enemy selection, and simultaneous melee combat.
 - `tests/knights.test.mjs` — spell validation/payment, multiplier, targeting, combat, and normal pole succession.

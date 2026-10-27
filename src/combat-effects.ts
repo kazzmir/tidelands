@@ -19,6 +19,29 @@ export function createCombatEffects() {
   texture.magFilter = THREE.LinearFilter;
   texture.minFilter = THREE.LinearFilter;
   texture.needsUpdate = true;
+  const boltGeometry = new THREE.CylinderGeometry(0.028, 0.028, 1, 5);
+  const sparkGeometry = new THREE.OctahedronGeometry(0.045);
+  const boltMaterial = new THREE.MeshBasicMaterial({
+    color: '#ffe52b',
+    toneMapped: false,
+    depthWrite: false,
+    depthTest: false,
+  });
+  const lightning = new Map<
+    FightingVisual,
+    {
+      enemy: FightingVisual;
+      group: THREE.Group;
+      segments: THREE.Mesh[];
+      spark: THREE.Mesh;
+    }
+  >();
+  function clearLightning(actor: FightingVisual): void {
+    const bolt = lightning.get(actor);
+    if (!bolt) return;
+    bolt.group.removeFromParent();
+    lightning.delete(actor);
+  }
   const active = new Map<
     FightingVisual,
     {
@@ -30,6 +53,8 @@ export function createCombatEffects() {
   >();
 
   function clear(actor: FightingVisual): void {
+    for (const [owner, bolt] of lightning)
+      if (owner === actor || bolt.enemy === actor) clearLightning(owner);
     const state = active.get(actor);
     if (!state) return;
     for (const [mesh, material] of state.originals) mesh.material = material;
@@ -85,6 +110,53 @@ export function createCombatEffects() {
     return state;
   }
 
+  function updateLightning(a: FightingVisual, b: FightingVisual, time: number): void {
+    let bolt = lightning.get(a);
+    if (bolt && bolt.enemy !== b) {
+      clearLightning(a);
+      bolt = undefined;
+    }
+    if (!bolt) {
+      const group = new THREE.Group();
+      group.name = 'combat-yellow-lightning';
+      group.renderOrder = 10;
+      const segments = Array.from({ length: 5 }, () => new THREE.Mesh(boltGeometry, boltMaterial));
+      const spark = new THREE.Mesh(sparkGeometry, boltMaterial);
+      group.add(...segments, spark);
+      (a.mesh.parent ?? a.mesh).add(group);
+      bolt = { enemy: b, group, segments, spark };
+      lightning.set(a, bolt);
+    }
+    const parent = bolt.group.parent!;
+    const from = parent.worldToLocal(a.mesh.localToWorld(new THREE.Vector3(0, 0.45, 0)));
+    const to = parent.worldToLocal(b.mesh.localToWorld(new THREE.Vector3(0, 0.45, 0)));
+    const side = new THREE.Vector3(-(to.z - from.z), 0, to.x - from.x).normalize();
+    const cycle = (((time * 3) % 2) + 2) % 2;
+    const head = cycle <= 1 ? cycle : 2 - cycle;
+    const tail = THREE.MathUtils.clamp(head + (cycle <= 1 ? -0.6 : 0.6), 0, 1);
+    const points = Array.from({ length: 6 }, (_, index) => {
+      const travel = THREE.MathUtils.lerp(tail, head, index / 5);
+      const point = new THREE.Vector3().lerpVectors(from, to, travel);
+      point.y += Math.sin(travel * Math.PI) * 0.22;
+      if (index > 0 && index < 5) point.addScaledVector(side, (index % 2 ? 1 : -1) * 0.065);
+      return point;
+    });
+    const up = new THREE.Vector3(0, 1, 0);
+    bolt.segments.forEach((segment, index) => {
+      const direction = new THREE.Vector3().subVectors(points[index + 1], points[index]);
+      segment.position
+        .copy(points[index])
+        .add(points[index + 1])
+        .multiplyScalar(0.5);
+      segment.scale.y = direction.length();
+      segment.quaternion.setFromUnitVectors(up, direction.normalize());
+      segment.visible = segment.scale.y > 0.001;
+    });
+    bolt.spark.position.copy(points[5]);
+    bolt.spark.scale.setScalar(0.85 + Math.sin(time * 24) * 0.15);
+    bolt.group.userData.travel = head;
+  }
+
   return {
     update<C extends FightingVisual>(pairs: readonly { a: C; b: C }[], time: number): void {
       const fighting = new Set<FightingVisual>();
@@ -119,6 +191,12 @@ export function createCombatEffects() {
             material.emissiveIntensity = 0.65 + Math.sin(phase) * 0.15;
           state.aura.material.opacity = 0.32 + Math.sin(phase) * 0.08;
         }
+      const owners = new Set<FightingVisual>();
+      for (const { a, b } of pairs) {
+        owners.add(a);
+        updateLightning(a, b, time);
+      }
+      for (const owner of lightning.keys()) if (!owners.has(owner)) clearLightning(owner);
     },
     clear(): void {
       for (const actor of active.keys()) clear(actor);
@@ -126,6 +204,9 @@ export function createCombatEffects() {
     dispose(): void {
       for (const actor of active.keys()) clear(actor);
       texture.dispose();
+      boltGeometry.dispose();
+      sparkGeometry.dispose();
+      boltMaterial.dispose();
     },
   };
 }

@@ -3,7 +3,15 @@ import {readFile} from 'node:fs/promises';
 import test from 'node:test';
 import {transformWithOxc} from 'vite';
 const {code}=await transformWithOxc(await readFile(new URL('../src/combat.ts',import.meta.url),'utf8'),'combat.ts',{target:'es2022'});
-const {CombatSystem}=await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
+const {CombatSystem,combatClosingOffset}=await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
+test('fighters close smoothly to striking distance without overshooting, moving while paused, or separating close pairs',()=>{
+ const a={x:0,z:0},b={x:1.2,z:0};
+ const small=combatClosingOffset(a,b,.05);assert.ok(small.x>0&&small.x<=.09+1e-10);assert.equal(small.z,0);
+ const offset=combatClosingOffset(a,b,10);assert.ok(Math.abs((b.x-offset.x)-(a.x+offset.x)-.4)<1e-10);
+ assert.deepEqual(combatClosingOffset(a,b,0),{x:0,z:0});
+ assert.deepEqual(combatClosingOffset(a,{x:.2,z:0},1),{x:0,z:0});
+ assert.deepEqual(combatClosingOffset(a,a,1),{x:0,z:0});
+});
 function actor(population,x,power=10,extra={}){return {population,x,z:0,characterPower:power,knight:false,home:null,survival:{phase:'alive',elapsed:0},...extra};}
 
 test('nearby ordinary opponents engage and exchange simultaneous proportional damage',()=>{

@@ -1,6 +1,21 @@
 import type { CombatCharacter } from './knights';
 import type { GridPoint } from './terrain-surface';
 
+/** Symmetric, bounded closing motion; callers validate each proposed step against terrain. */
+export function combatClosingOffset(
+  a: GridPoint,
+  b: GridPoint,
+  seconds: number,
+  gap = 0.4,
+): GridPoint {
+  const dx = b.x - a.x,
+    dz = b.z - a.z;
+  const distance = Math.hypot(dx, dz);
+  if (!Number.isFinite(seconds) || seconds <= 0 || distance <= gap) return { x: 0, z: 0 };
+  const step = Math.min((distance - gap) / 2, seconds * 1.8);
+  return { x: (dx / distance) * step, z: (dz / distance) * step };
+}
+
 export interface CombatPair<C> {
   a: C;
   b: C;

@@ -2,7 +2,7 @@ import './style.css';
 import { generateWorldHeights, playerStartAnchor, enemyStartAnchor } from './world-generation';
 import { EnemyTerraformer } from './enemy-ai';
 import { createEncounterScenario, unoccupiedWalkSteps } from './encounter-scenario';
-import { CombatSystem } from './combat';
+import { CombatSystem, combatClosingOffset } from './combat';
 import { createCombatEffects } from './combat-effects';
 import {
   MinimapTerrain,
@@ -904,7 +904,7 @@ function startGame(): void {
       return (point.x - origin.x) ** 2 + (point.z - origin.z) ** 2 <= 1.6 ** 2;
     });
   }
-  function updateCombatVisuals(): void {
+  function updateCombatVisuals(seconds: number): void {
     for (const settler of settlers) if (settler.home) settler.mesh.visible = false;
     const pairs = combat.pairs.filter((pair) => combat.opponent(pair.a) === pair.b);
     // A resident defending against a knight stands outside the building, not invisibly inside it.
@@ -923,6 +923,23 @@ function startGame(): void {
         );
         actor.mesh.visible = true;
       }
+    for (const { a, b } of pairs) {
+      const gap = (0.4 * (a.mesh.scale.x + b.mesh.scale.x)) / (2 * 1.15);
+      const offset = combatClosingOffset(a.mesh.position, b.mesh.position, seconds, gap);
+      for (const [actor, direction] of [
+        [a, 1],
+        [b, -1],
+      ] as const) {
+        if (actor.home) continue;
+        const x = actor.mesh.position.x + offset.x * direction;
+        const z = actor.mesh.position.z + offset.z * direction;
+        const tile = tileAt(Math.floor(x + SIZE / 2), Math.floor(z + SIZE / 2));
+        const height = surface.sample(x + SIZE / 2, z + SIZE / 2);
+        if (!tile || !isWalkable(tile) || height <= SEA) continue;
+        actor.mesh.position.set(x, height, z);
+        actor.tile = characterTile(actor);
+      }
+    }
     combatEffects.update(pairs, simulationTime);
   }
   const leadership = new Leadership<Tile, Settler>();
@@ -2562,7 +2579,7 @@ function startGame(): void {
       updateSettlementStats();
       if (lastPointer) updateHover(lastPointer);
     }
-    updateCombatVisuals();
+    updateCombatVisuals(dt);
     if (resolveLeadership()) survivalChanged = true;
     for (let i = settlers.length - 1; i >= 0; i--) {
       if (settlers[i].survival.phase !== 'dead') continue;
