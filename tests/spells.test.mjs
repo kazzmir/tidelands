@@ -9,7 +9,7 @@ async function loadModule(path) {
   return import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
 }
 const {TerrainSurface}=await loadModule('../src/terrain-surface.ts');
-const {earthquake,mountain,SPELL_COSTS}=await loadModule('../src/spells.ts');
+const {earthquake,flood,mountain,SPELL_COSTS}=await loadModule('../src/spells.ts');
 function randomGenerator(){
   let seed=42;
   return()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;};
@@ -24,8 +24,29 @@ function assertSlopes(surface){
   }
 }
 
-test('spell costs are 500 for Earthquake and 2000 for Mountain',()=>{
-  assert.deepEqual(SPELL_COSTS,{earthquake:500,mountain:2000});
+test('spell costs are 500 for Earthquake, 2000 for Mountain and 3000 for Flood',()=>{
+  assert.deepEqual(SPELL_COSTS,{earthquake:500,mountain:2000,flood:3000});
+});
+
+test('Flood lowers every terrain point globally by one and clamps at water level',()=>{
+  const levels=Uint8Array.from({length:441},(_,i)=>i%9);
+  const surface=new TerrainSurface(20,levels,0.65);
+  surface.enforceSlopeLimit();
+  const before=levels.slice();
+  assert.equal(flood(surface),true);
+  for(let i=0;i<levels.length;i++)assert.equal(levels[i],Math.max(0,before[i]-1));
+  assert.equal(surface.changedPoints.length,before.filter(height=>height>0).length);
+  assertSlopes(surface);
+});
+
+test('repeated Flood casts can submerge the entire world and stop changing empty water',()=>{
+  const surface=new TerrainSurface(10,new Uint8Array(121).fill(2),0.65);
+  assert.equal(flood(surface),true);
+  assert.ok(surface.levels.every(height=>height===1));
+  assert.equal(flood(surface),true);
+  assert.ok(surface.levels.every(height=>height===0));
+  assert.equal(flood(surface),false);
+  assert.equal(surface.changedPoints.length,0);
 });
 
 test('earthquake reshapes the focus area, preserving all neighboring height limits',()=>{

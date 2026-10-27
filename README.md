@@ -97,8 +97,9 @@ The right-hand spell palette shows icons with hover/focus tooltips. Affordable s
 
 - **Earthquake — 500 power:** reshapes points within roughly six tiles of the selected tile: each point has a **10% chance to rise** by one or two levels and a **90% chance to lower**, potentially all the way to water (height 0). Subsidence is applied after uplift so most affected land sinks. Neighboring heights still differ by at most one. The entire interface shakes for one real-time second (suppressed for reduced-motion preferences).
 - **Mountain — 2,000 power:** raises up to three spaced-out points around the selected tile to maximum height 8, prioritizing a corner of that tile; cascading adjustments create surrounding hills. No power is spent if no eligible nearby points remain.
+- **Flood — 3,000 power:** lowers **every point in the entire world** by one height level, clamped at 0—equivalent to raising the sea level by one. The clicked tile confirms the cast, but the effect is global, including offscreen land. Repeated casts can submerge all land; a cast on an already all-water world costs nothing. Flood can destroy homes, remove farming/sheep, and strand settlers who then begin drowning.
 
-Both spells update homes, castles, farming, trees, and settler positions just like ordinary terrain edits. Spells can be cast while the simulation is paused.
+All spells update homes, castles, farming, trees, and settler positions just like ordinary terrain edits. Spells can be cast while the simulation is paused.
 
 ## Structure
 
@@ -108,7 +109,7 @@ Both spells update homes, castles, farming, trees, and settler positions just li
 - `tests/world-generation.test.mjs` — world dimensions, clustered-land connectivity, exact peak-derived heights (no artificial connectors), full-map slope limits, reproducibility, and bounded rendering.
 - `src/terrain-contours.ts` — elevation contour segments where sloping triangles intersect integer height planes.
 - `tests/terrain-contours.test.mjs` — contour placement, flat surfaces, shared edges, and height scaling tests.
-- `src/spells.ts` — Earthquake and Mountain terrain effects and fixed power costs.
+- `src/spells.ts` — Earthquake, Mountain, and global Flood effects with fixed power costs.
 - `tests/spells.test.mjs` — spell costs, effects, maximum peaks, slope limits, and valid targets.
 - `src/sheep.ts` — timed probabilistic spawning, bounded flock planning, and farmland-only grazing routes.
 - `tests/sheep.test.mjs` — two-per-building caps, lost farmland, blocked footprints, spawn space, and grazing paths.

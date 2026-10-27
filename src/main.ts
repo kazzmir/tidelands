@@ -5,7 +5,7 @@ import { PowerMeter } from './power';
 import { grazingNeighbors, planFlock, SheepSpawner, type GrazingSheep } from './sheep';
 import { elevationContours } from './terrain-contours';
 import { advanceSurvival, createSurvival, SINKING_SECONDS, type Survival } from './survival';
-import { earthquake, mountain, SPELL_COSTS, type Spell } from './spells';
+import { earthquake, flood, mountain, SPELL_COSTS, SPELL_NAMES, type Spell } from './spells';
 import {
   BIRTH_THRESHOLD,
   birthInterval,
@@ -66,6 +66,8 @@ function createIconRenderer(): (name: string) => string {
       '<circle cx="9" cy="7" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 4a3 3 0 0 1 0 6M18 14a5 5 0 0 1 3 5v2"/>',
     power: '<path d="m13 2-9 12h7l-1 8 10-13h-7Z"/>',
     earthquake: '<path d="m3 17 6 3 4-2 8 3M3 12l5-2 4 2 9-3M13 2l-3 5 5 2-5 6 3 3"/>',
+    flood:
+      '<path d="M12 2v8m-3-3 3 3 3-3M3 14c2-3 4 3 6 0s4 3 6 0 4 3 6 0M3 20c2-3 4 3 6 0s4 3 6 0 4 3 6 0"/>',
     mountain: '<path d="m2 19 7-13 5 8 3-5 5 10ZM6 12l3 2 3-2"/>',
     raise: '<path d="m3 16 9 5 9-5M3 12l9 5 9-5M12 12V2m-4 4 4-4 4 4"/>',
     lower: '<path d="m3 17 9 5 9-5M3 13l9 5 9-5M12 2v10m-4-4 4 4 4-4"/>',
@@ -700,6 +702,10 @@ function startGame(): void {
         sheep.wait = 1;
         sheep.mesh.position.copy(position(current));
       }
+      sheep.mesh.position.y = surface.sample(
+        sheep.mesh.position.x + SIZE / 2,
+        sheep.mesh.position.z + SIZE / 2,
+      );
       return true;
     });
     const plan = planFlock(
@@ -1319,11 +1325,17 @@ function startGame(): void {
     canvas.addEventListener('contextmenu', (event) => event.preventDefault());
   }
   function refreshTerrainAfterEdit(): void {
-    const affected = new Set(
-      surface.changedPoints
-        .flatMap((point) => surface.affectedTiles(point.x, point.z))
-        .map((point) => tileAt(point.x, point.z)),
-    );
+    const affected = new Set<Tile>();
+    // A world-wide edit need not materialize tile objects in unvisited regions.
+    for (const point of surface.changedPoints) {
+      for (const z of [point.z - 1, point.z]) {
+        for (const x of [point.x - 1, point.x]) {
+          if (x < 0 || z < 0 || x >= SIZE || z >= SIZE) continue;
+          const tile = tileCache.get(z * SIZE + x);
+          if (tile) affected.add(tile);
+        }
+      }
+    }
     for (const tile of affected) if (tile) tile.height = surface.elevation(tile.x, tile.z);
     reconcileWorldSettlements();
     rebuild();
@@ -1345,9 +1357,7 @@ function startGame(): void {
       return;
     }
     if (powerMeter.value < SPELL_COSTS[spell]) {
-      toast(
-        `${spell === 'earthquake' ? 'Earthquake' : 'Mountain'} needs ${SPELL_COSTS[spell].toLocaleString()} power.`,
-      );
+      toast(`${SPELL_NAMES[spell]} needs ${SPELL_COSTS[spell].toLocaleString()} power.`);
       return;
     }
     selectedSpell = spell;
@@ -1358,9 +1368,7 @@ function startGame(): void {
   function castSpell(spell: Spell, target: Tile): void {
     const cost = SPELL_COSTS[spell];
     if (powerMeter.value < cost) {
-      toast(
-        `${spell === 'earthquake' ? 'Earthquake' : 'Mountain'} needs ${cost.toLocaleString()} power.`,
-      );
+      toast(`${SPELL_NAMES[spell]} needs ${cost.toLocaleString()} power.`);
       return;
     }
     controls.update();
@@ -1368,7 +1376,9 @@ function startGame(): void {
     const preview = new TerrainSurface(SIZE, cornerLevels.slice(), STEP);
     let changed = false;
     const center = { x: target.x + 0.5, z: target.z + 0.5 };
-    if (spell === 'earthquake') {
+    if (spell === 'flood') {
+      changed = flood(preview);
+    } else if (spell === 'earthquake') {
       changed = earthquake(preview, center, random);
     } else {
       const nearby: GridPoint[] = [];
@@ -1381,9 +1391,11 @@ function startGame(): void {
     }
     if (!changed) {
       toast(
-        spell === 'earthquake'
-          ? 'No land changed here. Try another tile.'
-          : 'There are no points left to raise around this tile.',
+        spell === 'flood'
+          ? 'There is no land left to flood.'
+          : spell === 'earthquake'
+            ? 'No land changed here. Try another tile.'
+            : 'There are no points left to raise around this tile.',
       );
       return;
     }
@@ -1392,9 +1404,14 @@ function startGame(): void {
     selectTool(tool);
     cornerLevels.set(preview.levels);
     surface.changedPoints.length = 0;
-    surface.changedPoints.push(...preview.changedPoints);
+    for (const point of preview.changedPoints) surface.changedPoints.push(point);
     refreshTerrainAfterEdit();
-    toast(spell === 'earthquake' ? 'The earth trembles.' : 'Mountains rise from the shore.');
+    const messages: Record<Spell, string> = {
+      earthquake: 'The earth trembles.',
+      mountain: 'Mountains rise from the shore.',
+      flood: 'The seas rise. All land sinks one level.',
+    };
+    toast(messages[spell]);
     if (spell === 'earthquake') {
       clearTimeout(shakeTimer);
       document.body.classList.remove('earthquake-shake');
@@ -1431,7 +1448,7 @@ function startGame(): void {
       inspect: ['Explore your world', 'Hover a tile to discover what lives there'],
     };
     element('#tool-hint').innerHTML = selectedSpell
-      ? `<strong>Cast ${selectedSpell === 'earthquake' ? 'Earthquake' : 'Mountain'}</strong><span class="hint-detail">Click a tile to cast · Esc or right-click to cancel</span>`
+      ? `<strong>Cast ${SPELL_NAMES[selectedSpell]}</strong><span class="hint-detail">${selectedSpell === 'flood' ? 'Click any tile to flood the world' : 'Click a tile to cast'} · Esc or right-click to cancel</span>`
       : `<strong>${hints[next][0]}</strong><span class="hint-detail">${hints[next][1]}</span>`;
     element('#tile-info').hidden = true;
   }
