@@ -27,7 +27,7 @@ Only a padded camera region is converted into render geometry; that region strea
 
 ## Controls
 
-Playback, speed, and camera controls sit in a compact, right-aligned bottom panel, stacking on mobile rather than spanning the full game width.
+Gathering, playback, speed, and camera controls sit in a compact, right-aligned bottom panel, stacking on mobile rather than spanning the full game width.
 
 - **Left-click:** raise the nearest grid corner one level, regardless of the selected tool.
 - **Right-click:** lower the nearest grid corner one level. Level 0 is water.
@@ -38,7 +38,7 @@ Playback, speed, and camera controls sit in a compact, right-aligned bottom pane
 - **Arrow keys / drag:** pan; **hold middle button and drag:** orbit; **scroll:** zoom. Hold arrows for continuous, camera-relative movement, including while paused.
 - **Touch:** drag to pan; use two fingers to zoom/orbit.
 - **L / leader-pole button:** jump to your pole's current position, including when housed or dropped in water, without changing zoom/orbit.
-- **E / blue flag button:** view the enemy island; **Home / Reset View:** return to the human starting island.
+- **E / minimap:** view the enemy island; **Home / Reset View:** return to the human starting island.
 - **Space / pause button:** pause/resume. Pausing dims the game area behind large centered **PAUSED** text; playback controls remain visible and usable. Camera movement, terrain editing, and spell casting still work while paused.
 - **1× / 2× / 4×:** simulation speed.
 - **Reset camera icon:** return to the original isometric view.
@@ -115,9 +115,9 @@ All spells update homes, castles, farming, trees, and settler positions just lik
 
 ## Shared-island movement test
 
-The **flask button in the bottom bar** resets into a deterministic test scenario: 24 red and 24 blue characters on the same clear island, with camp centers just **six tiles apart**. They start in distinct unoccupied cells, wander freely, and reserve walking destinations so they go around each other instead of passing through or swapping head-on. Each side still has its own leader pole.
+The **Test scenario button beside New world** resets into a deterministic test scenario: 24 red and 24 blue characters on the same clear island, with camp centers just **six tiles apart**. They start in distinct unoccupied cells, wander freely, and reserve walking destinations so they go around each other instead of passing through or swapping head-on. Each side still has its own leader pole.
 
-**No combat occurs in this test.** Knight conversion, gathering, automatic houses/births, and enemy terraforming are disabled so both populations keep moving and meeting. Manual terrain edits and other spells remain available, so environmental hazards still apply if you create them. The test starts unpaused at 1× speed; pause/speed, minimap, and camera buttons continue working. Clicking the flask again restarts it. **New world** leaves the test and restores the regular archipelago and existing normal-game mechanics.
+**No combat occurs in this test.** Knight conversion, gathering, automatic houses/births, and enemy terraforming are disabled so both populations keep moving and meeting. Manual terrain edits and other spells remain available, so environmental hazards still apply if you create them. The test starts unpaused at 1× speed; pause/speed, minimap, and camera buttons continue working. Clicking Test scenario again restarts it. **New world** leaves the test and restores the regular archipelago and existing normal-game mechanics.
 
 ## Minimap
 
@@ -127,7 +127,7 @@ Terrain is cached at coarse resolution to keep small islands visible, and only c
 
 ## Enemy population and terrain AI
 
-Both sides start with **24 characters, their own leader/pole, and 10,000 power**. The enemy occupies the opposite southeastern corner island; its houses, castles, and shirts are blue (the opposite of the human population). The Population display counts human settlers, with an enemy count alongside it. Human Power and income exclude enemy buildings. Hover the blue enemy-view button for enemy population, housed/castle counts, power, and paid edit count. Click that button or press **E** to inspect the enemy side; **Home / Reset View** returns to the human start.
+Both sides start with **24 characters, their own leader/pole, and 10,000 power**. The enemy occupies the opposite southeastern corner island; its houses, castles, and shirts are blue (the opposite of the human population). The Population display counts human settlers, with an enemy count alongside it. Human Power and income exclude enemy buildings. Hover the enemy count beside Population for enemy population, housed/castle counts, power, and paid edit count. Press **E** or click the enemy area on the minimap to inspect that side; **Home / Reset View** returns to the human start.
 
 The enemy pays the **same full cascade costs and obeys the same slope limits** as the player. It makes at most **one one-level corner edit every 4 simulation seconds**, pauses with the game, and never catches up with bursts of edits after a stall. Its separate power budget is replenished by its own occupied homes on the same normal/rock income schedule as the human side. It stops editing if eliminated and cannot edit without sufficient power; it gets no free spells or resource bonuses.
 
@@ -145,7 +145,7 @@ Human characters wear **red shirts** and enemy characters wear **blue shirts**, 
 
 Each new population starts with exactly **one leader**, marked by a large white object on a staff. While walking, the leader carries the object; when housed, the object marks the roof. In normal wandering mode a non-knight leader can build and produce children like other residents, so gathering down to one character does not prevent the population from regrowing. Inspect its tile or hover the Gather button to see its character power/HP.
 
-**Gather followers** is a free toggle. When enabled, residents—including a housed leader—leave their homes (retaining their character power). Followers stop building and use reachable dry routes toward the leader. On entering the leader's tile, a follower disappears and transfers **all remaining character power/HP** to the leader. This reduces the population by one, does not award player currency, and does not cap the leader at the normal birth threshold while gathering. Once gathering is disabled, a non-knight leader can settle again and normal birth/power-splitting rules resume. Vacated houses, castle reservations, farmland, and their sheep are removed. Clicking **Stop gathering** returns the remaining followers to wandering and building new homes.
+**Gather followers** in the bottom toolbar is a free toggle. When enabled, residents—including a housed leader—leave their homes (retaining their character power). Followers stop building and use reachable dry routes toward the leader. On entering the leader's tile, a follower disappears and transfers **all remaining character power/HP** to the leader. This reduces the population by one, does not award player currency, and does not cap the leader at the normal birth threshold while gathering. Once gathering is disabled, a non-knight leader can settle again and normal birth/power-splitting rules resume. Vacated houses, castle reservations, farmland, and their sheep are removed. Clicking **Stop gathering** returns the remaining followers to wandering and building new homes.
 
 When the leader dies, the white object stays on the **actual tile of death**, including water, and remains after the corpse disappears. There is no automatic remote replacement: the next living walker to reach that tile picks up the object and becomes the sole new leader. A submerged object remains visible above the water and can be recovered after the ground is restored. Gathering remains enabled if already active, so followers target the dropped object until it is picked up; unreachable followers wait rather than walking into water. New world resets the role and gathering state.
 

@@ -1443,14 +1443,15 @@ function startGame(): void {
     });
   }
   function updateEnemyStatus(): void {
-    element('#enemy-view').style.color = populationShirtColor(enemyColor);
+    const badge = document.querySelector<HTMLElement>('#enemy-status');
+    if (!badge) return;
+    badge.style.color = populationShirtColor(enemyColor);
     const living = settlers.filter(
       (settler) =>
         settler.population === enemyColor &&
         (settler.survival.phase === 'alive' || settler.survival.phase === 'drowning'),
     );
-    element('#enemy-view').title =
-      `${enemyColor} enemy: ${living.length} settlers · ${living.filter((settler) => settler.home).length} housed · ${living.filter((settler) => settler.power === 5).length} castles · ${enemyPowerMeter.value.toLocaleString()} power · ${enemyAI.edits} paid terrain edits (one / ${enemyAI.interval}s) · ${enemyAI.spent} spent · E to view${encounterTest ? ' · Movement test: AI and combat disabled' : ''}`;
+    badge.title = `${enemyColor} enemy: ${living.length} settlers · ${living.filter((settler) => settler.home).length} housed · ${living.filter((settler) => settler.power === 5).length} castles · ${enemyPowerMeter.value.toLocaleString()} power · ${enemyAI.edits} paid terrain edits (one / ${enemyAI.interval}s) · ${enemyAI.spent} spent · E to view${encounterTest ? ' · Movement test: AI and combat disabled' : ''}`;
   }
   function updateSettlementStats(): void {
     const living = settlers.filter(
@@ -1469,7 +1470,7 @@ function startGame(): void {
     const roaming = living.length - housed - drowning;
     const sick = living.filter((settler) => settler.sick).length;
     element('#population').innerHTML =
-      `${living.length} <small>settlers · <span class="enemy-count" style="color:${populationShirtColor(enemyColor)}">${enemyLiving.length} enemy</span></small>`;
+      `${living.length} <small>settlers · <span id="enemy-status" class="enemy-count" style="color:${populationShirtColor(enemyColor)}">${enemyLiving.length} enemy</span></small>`;
     const castles = living.filter((settler) => settler.power === 5).length;
     element('#population').title =
       `${roaming} roaming · ${housed} at home${drowning ? ` · ${drowning} drowning` : ''}${castles ? ` · ${castles} castle${castles > 1 ? 's' : ''}` : ''}${sick ? ` · ${sick} sick` : ''} · ${flock.length} sheep`;
@@ -2188,7 +2189,6 @@ function startGame(): void {
     element('#rally').addEventListener('click', toggleRally);
     element('#pause').addEventListener('click', togglePause);
     element('#leader-view').addEventListener('click', focusLeaderPole);
-    element('#enemy-view').addEventListener('click', resetEnemyCamera);
     document.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach((button) => {
       button.addEventListener('click', () => {
         speed = Number(button.dataset.speed);
