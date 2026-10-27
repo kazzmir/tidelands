@@ -67,9 +67,10 @@ export class TerrainSurface {
   }
 
   /** Normalize generated terrain without lowering its peaks. */
-  enforceSlopeLimit(): void {
+  enforceSlopeLimit(seeds?: readonly GridPoint[]): void {
     this.changedPoints.length = 0;
-    this.propagate(Array.from(this.levels.keys()), 1, new Set<number>());
+    const queue = seeds ? seeds.map(point => point.z * (this.size + 1) + point.x) : Array.from(this.levels.keys());
+    this.propagate(queue, 1, new Set<number>());
   }
 
   private propagate(queue: number[], direction: 1 | -1, changed: Set<number>): void {
