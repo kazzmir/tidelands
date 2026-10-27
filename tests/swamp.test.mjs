@@ -20,11 +20,11 @@ const world=(size=8)=>{
   return{surface,tiles,lookup,resident};
 };
 
-test('Swamp plans a 75 percent conversion inside a 20-tile circle without mutating land',()=>{
+test('Swamp plans a 75 percent conversion inside a 10-tile circle without mutating land',()=>{
   const {surface,tiles,lookup}=world(50);
   const chosen=swampTargets(surface,{x:25,z:25},lookup,()=>0.749);
-  assert.equal(chosen.length,1257);
-  assert.ok(chosen.every(tile=>Math.hypot(tile.x-25,tile.z-25)<=20));
+  assert.equal(chosen.length,317);
+  assert.ok(chosen.every(tile=>Math.hypot(tile.x-25,tile.z-25)<=10));
   assert.equal(swampTargets(surface,{x:25,z:25},lookup,()=>0.75).length,0);
   assert.ok(tiles.every(tile=>!tile.swamp));
   surface.levels.fill(0);

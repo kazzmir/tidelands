@@ -73,7 +73,7 @@ export function swampTargets<T extends GridPoint & { swamp?: boolean }>(
   center: GridPoint,
   lookup: (x: number, z: number) => T | undefined,
   random: () => number,
-  radius = 20,
+  radius = 10,
 ): T[] {
   const targets: T[] = [];
   for (

@@ -1532,9 +1532,14 @@ function startGame(): void {
     }
   }
   function bindSpellControls(): void {
-    document.querySelectorAll<HTMLButtonElement>('[data-spell]').forEach((button) => {
+    const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-spell]'));
+    buttons.sort(
+      (a, b) => SPELL_COSTS[a.dataset.spell as Spell] - SPELL_COSTS[b.dataset.spell as Spell],
+    );
+    for (const button of buttons) {
+      button.parentElement?.append(button);
       button.addEventListener('click', () => selectSpell(button.dataset.spell as Spell));
-    });
+    }
   }
   function selectTool(next: Tool): void {
     tool = next;
