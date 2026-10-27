@@ -58,8 +58,8 @@ test('spatial buckets find opponents across boundaries and snapshot each positio
  const system=new CombatSystem();system.match([a,b,...distant],character=>{calls++;return character;});
  assert.equal(calls,202);assert.equal(system.pairs.length,1);assert.equal(system.opponent(a),b);
 });
-test('additional gathered power increases attack strength once, and a knight can engage a resident',()=>{
- const a=actor('red',0,15,{knight:true}),b=actor('blue',2,10,{home:{}}),system=new CombatSystem();system.match([a,b],x=>x);
+test('additional gathered power increases attack strength once',()=>{
+ const a=actor('red',0,15,{knight:true}),b=actor('blue',1),system=new CombatSystem();system.match([a,b],x=>x);
  a.characterPower+=10;system.advance(1);assert.equal(b.characterPower,7.5);
  system.match([a,b],x=>x);system.advance(1);assert.equal(b.characterPower,5);
 });

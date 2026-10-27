@@ -3,6 +3,7 @@ import { generateWorldHeights, playerStartAnchor, enemyStartAnchor } from './wor
 import { EnemyTerraformer } from './enemy-ai';
 import { createEncounterScenario, unoccupiedWalkSteps } from './encounter-scenario';
 import { CombatSystem, combatClosingOffset } from './combat';
+import { enemyBuildingContacts, buildingDefenderPoint, touchesBuilding } from './building-contact';
 import { createCombatEffects } from './combat-effects';
 import {
   MinimapTerrain,
@@ -904,25 +905,43 @@ function startGame(): void {
       return (point.x - origin.x) ** 2 + (point.z - origin.z) ** 2 <= 1.6 ** 2;
     });
   }
-  function updateCombatVisuals(seconds: number): void {
-    for (const settler of settlers) if (settler.home) settler.mesh.visible = false;
-    const pairs = combat.pairs.filter((pair) => combat.opponent(pair.a) === pair.b);
-    // A resident defending against a knight stands outside the building, not invisibly inside it.
-    for (const pair of pairs)
-      for (const [actor, enemy] of [
-        [pair.a, pair.b],
-        [pair.b, pair.a],
-      ]) {
-        if (!actor.home) continue;
-        actor.mesh.position.copy(position(actor.home));
-        const direction = enemy.mesh.position.clone().sub(actor.mesh.position).setY(0).normalize();
-        actor.mesh.position.addScaledVector(direction, actor.power === 5 ? 1.7 : 0.65);
-        actor.mesh.position.y = surface.sample(
-          actor.mesh.position.x + SIZE / 2,
-          actor.mesh.position.z + SIZE / 2,
-        );
-        actor.mesh.visible = true;
+  function triggerBuildingContacts(seconds: number): boolean {
+    if (seconds <= 0) return false;
+    const contacts = enemyBuildingContacts<Tile, Settler>(
+      settlers,
+      combatPosition,
+      (actor) => !combat.opponent(actor),
+    );
+    if (!contacts.length) return false;
+    evacuateSettlements(
+      contacts.map((contact) => contact.defender),
+      tileAt,
+    );
+    reconcileWorldSettlements();
+    navigationRevision++;
+    for (const { attacker, defender, home } of contacts) {
+      const point = buildingDefenderPoint(home, combatPosition(attacker));
+      defender.mesh.position.set(
+        point.x - SIZE / 2,
+        surface.sample(point.x, point.z),
+        point.z - SIZE / 2,
+      );
+      defender.mesh.visible = true;
+      for (const actor of [attacker, defender]) {
+        actor.tile = characterTile(actor);
+        actor.target = null;
+        actor.progress = 0;
+        actor.wait = 0;
+        resetWalkingPose(actor);
       }
+      combat.engage(attacker, defender);
+    }
+    rebuildBuildings();
+    syncResidentMeshes();
+    return true;
+  }
+  function updateCombatVisuals(seconds: number): void {
+    const pairs = combat.pairs.filter((pair) => combat.opponent(pair.a) === pair.b);
     for (const { a, b } of pairs) {
       const gap = (0.4 * (a.mesh.scale.x + b.mesh.scale.x)) / (2 * 1.15);
       const offset = combatClosingOffset(a.mesh.position, b.mesh.position, seconds, gap);
@@ -1046,13 +1065,20 @@ function startGame(): void {
     let route = knightRoutes.get(knight);
     if (!route || route.goal !== goal || route.revision !== navigationRevision) {
       const starts: Tile[] = [];
-      const range = enemy.home ? 2 : 1;
+      const range = enemy.home && enemy.power === 5 ? 2 : 1;
       if (isWalkable(goal)) starts.push(goal);
       else
         for (let z = goal.z - range; z <= goal.z + range; z++)
           for (let x = goal.x - range; x <= goal.x + range; x++) {
             const tile = tileAt(x, z);
-            if (tile && inCombatRange(tile, goal, range) && isWalkable(tile)) starts.push(tile);
+            if (
+              tile &&
+              isWalkable(tile) &&
+              (enemy.home
+                ? touchesBuilding({ x: x + 0.5, z: z + 0.5 }, enemy.home, enemy.power)
+                : inCombatRange(tile, goal, range))
+            )
+              starts.push(tile);
           }
       route = {
         goal,
@@ -2420,7 +2446,7 @@ function startGame(): void {
       updateEnemyBuilder();
     }
     let settlementsChanged = false;
-    let survivalChanged = false;
+    let survivalChanged = triggerBuildingContacts(dt);
     combat.match(settlers, combatPosition);
     for (const settler of settlers) {
       if (settler.survival.phase === 'alive' || settler.survival.phase === 'drowning') {

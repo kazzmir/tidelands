@@ -37,7 +37,44 @@ export class CombatSystem<C extends CombatCharacter> {
 
   opponent(character: C): C | null {
     const enemy = this.opponents.get(character);
-    return enemy && this.alive(character) && this.alive(enemy) ? enemy : null;
+    return enemy && !character.home && !enemy.home && this.alive(character) && this.alive(enemy)
+      ? enemy
+      : null;
+  }
+
+  /** Start a specific contact duel before ordinary proximity matching can choose another foe. */
+  engage(a: C, b: C): boolean {
+    if (
+      a.home ||
+      b.home ||
+      a.population === b.population ||
+      !this.alive(a) ||
+      !this.alive(b) ||
+      this.opponent(a) ||
+      this.opponent(b)
+    )
+      return false;
+    this.pairs = this.pairs.filter((pair) => {
+      if (pair.a !== a && pair.b !== a && pair.a !== b && pair.b !== b) return true;
+      this.opponents.delete(pair.a);
+      this.opponents.delete(pair.b);
+      return false;
+    });
+    this.add({
+      a,
+      b,
+      powerA: a.characterPower,
+      powerB: b.characterPower,
+      healthA: a.characterPower,
+      healthB: b.characterPower,
+    });
+    return true;
+  }
+
+  private add(pair: CombatPair<C>): void {
+    this.pairs.push(pair);
+    this.opponents.set(pair.a, pair.b);
+    this.opponents.set(pair.b, pair.a);
   }
 
   private alive(character: C): boolean {
@@ -56,25 +93,18 @@ export class CombatSystem<C extends CombatCharacter> {
     };
     const eligible = (a: C, b: C, ongoing: boolean): boolean => {
       if (!this.alive(a) || !this.alive(b) || a.population === b.population) return false;
-      if (a.home && b.home) return false;
-      // Preserve knights' ability to engage a defending resident at a building.
-      if ((a.home || b.home) && !a.knight && !b.knight) return false;
-      const range = a.home || b.home ? 2.25 : ongoing ? 1.6 : 1.35;
+      if (a.home || b.home) return false;
+      const range = ongoing ? 1.6 : 1.35;
       return distance(a, b) <= range ** 2;
-    };
-    const add = (pair: CombatPair<C>): void => {
-      this.pairs.push(pair);
-      this.opponents.set(pair.a, pair.b);
-      this.opponents.set(pair.b, pair.a);
     };
     for (const pair of previous) {
       if (available.has(pair.a) && available.has(pair.b) && eligible(pair.a, pair.b, true))
-        add(pair);
+        this.add(pair);
     }
     const candidates: { a: C; b: C; distance: number }[] = [];
     // Spatial buckets keep distant islands/populations out of melee searches.
     const free = characters.filter(
-      (character) => !this.opponents.has(character) && this.alive(character),
+      (character) => !character.home && !this.opponents.has(character) && this.alive(character),
     );
     const order = new Map(free.map((character, index) => [character, index]));
     const buckets = new Map<string, C[]>();
@@ -100,7 +130,7 @@ export class CombatSystem<C extends CombatCharacter> {
     candidates.sort((a, b) => a.distance - b.distance);
     for (const { a, b } of candidates) {
       if (this.opponents.has(a) || this.opponents.has(b)) continue;
-      add({
+      this.add({
         a,
         b,
         powerA: a.characterPower,
