@@ -795,6 +795,11 @@ function startGame(): void {
       return mesh;
     }
     equipKnightArmor(settler.mesh, settler.legs, armorMaterial, darkMaterial);
+    const teamFlag = createPopulationFlag(settler.population);
+    teamFlag.name = 'knight-team-flag';
+    teamFlag.position.set(-0.27, 0.23, -0.08);
+    teamFlag.rotation.y = Math.PI; // Fly outward, clear of the white leader object and sword.
+    settler.mesh.add(teamFlag);
     const sword = new THREE.Group();
     sword.position.z = 0.09;
     part(sword, new THREE.BoxGeometry(0.045, 0.4, 0.025), armorMaterial, 0, 0.24, 0);

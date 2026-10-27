@@ -25,7 +25,7 @@ test('populations have uniform red or blue shirts rather than per-character colo
   assert.doesNotMatch(source,/shirtMaterials\[/);
 });
 
-test('every house and castle gets a flag from the same red/blue palette as shirts',async()=>{
+test('houses, castles, and knights carry flags from the same red/blue palette as shirts',async()=>{
   const source=await readFile(new URL('../src/main.ts',import.meta.url),'utf8');
   const {program}=parseSync('main.ts',source);
   const functions=new Map();
@@ -39,6 +39,9 @@ test('every house and castle gets a flag from the same red/blue palette as shirt
   }
   visit(program);
   for(const name of ['addHouse','addCastle'])assert.match(functions.get(name),/createPopulationFlag\(population\)/);
+  assert.match(functions.get('equipKnight'),/createPopulationFlag\(settler.population\)/);
+  assert.match(functions.get('equipKnight'),/settler.mesh.add\(teamFlag\)/);
+  assert.doesNotMatch(functions.get('equipKnight'),/leaderObject.add\(teamFlag\)/);
   assert.match(functions.get('createPopulationFlag'),/populationMaterials\[population\]/);
   assert.match(source,/const shirtMaterial = populationMaterials\[population\]/);
   assert.match(source,/const populationColor: PopulationColor = 'red'/);
