@@ -26,12 +26,12 @@ function character(){
 }
 function ownBounds(mesh){mesh.geometry.computeBoundingBox();return mesh.geometry.boundingBox.clone().applyMatrix4(mesh.matrixWorld);}
 
-test('knight armor doubles normal character scale exactly once',()=>{
+test('knight armor scales a normal character by 1.3 exactly once',()=>{
  const c=character();equipKnightArmor(c.group,c.limbs,c.silver,c.dark);
- assert.deepEqual(c.group.scale.toArray(),[2.3,2.3,2.3]);
+ assert.deepEqual(c.group.scale.toArray(),Array(3).fill(1.15*1.3));
  const count=c.group.children.length;
  equipKnightArmor(c.group,c.limbs,c.silver,c.dark);
- assert.deepEqual(c.group.scale.toArray(),[2.3,2.3,2.3]);assert.equal(c.group.children.length,count);
+ assert.deepEqual(c.group.scale.toArray(),Array(3).fill(1.15*1.3));assert.equal(c.group.children.length,count);
 });
 
 test('silver helmet and torso fully enclose the original head, hair, and shirt',()=>{

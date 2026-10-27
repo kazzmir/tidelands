@@ -12,7 +12,7 @@ export function equipKnightArmor(
   dark: THREE.Material,
 ): void {
   if (character.getObjectByName('knight-cuirass')) return;
-  character.scale.multiplyScalar(2);
+  character.scale.multiplyScalar(1.3);
 
   function plate(
     parent: THREE.Object3D,
