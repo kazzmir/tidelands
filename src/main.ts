@@ -2,6 +2,8 @@ import './style.css';
 import { generateWorldHeights, playerStartAnchor, enemyStartAnchor } from './world-generation';
 import { EnemyTerraformer } from './enemy-ai';
 import { createEncounterScenario, unoccupiedWalkSteps } from './encounter-scenario';
+import { CombatSystem } from './combat';
+import { createCombatEffects } from './combat-effects';
 import {
   MinimapTerrain,
   layoutMinimapMarkers,
@@ -17,7 +19,6 @@ import {
   convertLeaderToKnight,
   nearestEnemy,
   inCombatRange,
-  advanceKnightCombat,
   type KnightConversion,
 } from './knights';
 import { clearSubmergedRock, markVolcanicRock } from './rock';
@@ -879,6 +880,51 @@ function startGame(): void {
   const { water, waterTextures } = createWater();
 
   const settlers: Settler[] = [];
+  const combat = new CombatSystem<Settler>();
+  const combatEffects = createCombatEffects();
+  let combatHudElapsed = 0;
+  let displayedPopulation = '';
+  function combatPosition(settler: Settler): { x: number; z: number } {
+    return settler.home
+      ? { x: settler.home.x + 0.5, z: settler.home.z + 0.5 }
+      : { x: settler.mesh.position.x + SIZE / 2, z: settler.mesh.position.z + SIZE / 2 };
+  }
+  function hasNearbyOpponent(settler: Settler): boolean {
+    const origin = combatPosition(settler);
+    return settlers.some((other) => {
+      if (
+        other === settler ||
+        other.population === settler.population ||
+        other.home ||
+        other.survival.phase !== 'alive' ||
+        other.characterPower <= 0
+      )
+        return false;
+      const point = combatPosition(other);
+      return (point.x - origin.x) ** 2 + (point.z - origin.z) ** 2 <= 1.6 ** 2;
+    });
+  }
+  function updateCombatVisuals(): void {
+    for (const settler of settlers) if (settler.home) settler.mesh.visible = false;
+    const pairs = combat.pairs.filter((pair) => combat.opponent(pair.a) === pair.b);
+    // A resident defending against a knight stands outside the building, not invisibly inside it.
+    for (const pair of pairs)
+      for (const [actor, enemy] of [
+        [pair.a, pair.b],
+        [pair.b, pair.a],
+      ]) {
+        if (!actor.home) continue;
+        actor.mesh.position.copy(position(actor.home));
+        const direction = enemy.mesh.position.clone().sub(actor.mesh.position).setY(0).normalize();
+        actor.mesh.position.addScaledVector(direction, actor.power === 5 ? 1.7 : 0.65);
+        actor.mesh.position.y = surface.sample(
+          actor.mesh.position.x + SIZE / 2,
+          actor.mesh.position.z + SIZE / 2,
+        );
+        actor.mesh.visible = true;
+      }
+    combatEffects.update(pairs, simulationTime);
+  }
   const leadership = new Leadership<Tile, Settler>();
   const enemyLeadership = new Leadership<Tile, Settler>();
   let enemyBuilder: Settler | null = null;
@@ -1085,7 +1131,7 @@ function startGame(): void {
     if (element('#rally-label').textContent !== label) element('#rally-label').textContent = label;
     button.classList.toggle('active', leadership.rallying);
     button.setAttribute('aria-pressed', String(leadership.rallying));
-    button.title = `${leadership.leader ? `Leader HP ${leadership.leader.characterPower.toFixed(1)}${leadership.leader.knight ? ' · Knight' : ''}` : 'Leader object awaiting pickup'} · ${encounterTest ? 'Gathering disabled in movement test' : leadership.rallying ? 'Click to resume wandering and building' : 'Residents leave homes and merge their HP/power into the leader'}`;
+    button.title = `${leadership.leader ? `Leader HP ${leadership.leader.characterPower.toFixed(1)}${leadership.leader.knight ? ' · Knight' : ''}` : 'Leader object awaiting pickup'} · ${encounterTest ? 'Gathering disabled in encounter test' : leadership.rallying ? 'Click to resume wandering and building' : 'Residents leave homes and merge their HP/power into the leader'}`;
   }
   function encounterLeader(settler: Settler): boolean {
     if (settler.home || settler.survival.phase !== 'alive') return false;
@@ -1346,6 +1392,8 @@ function startGame(): void {
     return settler;
   }
   function clearSettlers(): void {
+    combatEffects.clear();
+    combat.reset();
     leadership.reset();
     enemyLeadership.reset();
     leaderObject.visible = false;
@@ -1438,7 +1486,7 @@ function startGame(): void {
       button.classList.toggle('affordable', affordable);
       button.classList.toggle('selected', selectedSpell === spell);
       button.setAttribute('aria-pressed', String(selectedSpell === spell));
-      button.disabled = encounterTest && spell === 'knight';
+      button.disabled = false;
       button.setAttribute('aria-disabled', String(!affordable || button.disabled));
     });
   }
@@ -1451,7 +1499,7 @@ function startGame(): void {
         settler.population === enemyColor &&
         (settler.survival.phase === 'alive' || settler.survival.phase === 'drowning'),
     );
-    badge.title = `${enemyColor} enemy: ${living.length} settlers · ${living.filter((settler) => settler.home).length} housed · ${living.filter((settler) => settler.power === 5).length} castles · ${enemyPowerMeter.value.toLocaleString()} power · ${enemyAI.edits} paid terrain edits (one / ${enemyAI.interval}s) · ${enemyAI.spent} spent · E to view${encounterTest ? ' · Movement test: AI and combat disabled' : ''}`;
+    badge.title = `${enemyColor} enemy: ${living.length} settlers · ${living.filter((settler) => settler.home).length} housed · ${living.filter((settler) => settler.power === 5).length} castles · ${enemyPowerMeter.value.toLocaleString()} power · ${enemyAI.edits} paid terrain edits (one / ${enemyAI.interval}s) · ${enemyAI.spent} spent · E to view${encounterTest ? ' · Encounter test: combat enabled; terraforming AI disabled' : ''}`;
   }
   function updateSettlementStats(): void {
     const living = settlers.filter(
@@ -1469,8 +1517,11 @@ function startGame(): void {
     const drowning = living.filter((settler) => settler.survival.phase === 'drowning').length;
     const roaming = living.length - housed - drowning;
     const sick = living.filter((settler) => settler.sick).length;
-    element('#population').innerHTML =
-      `${living.length} <small>settlers · <span id="enemy-status" class="enemy-count" style="color:${populationShirtColor(enemyColor)}">${enemyLiving.length} enemy</span></small>`;
+    const populationMarkup = `${living.length} <small>settlers · <span id="enemy-status" class="enemy-count" style="color:${populationShirtColor(enemyColor)}">${enemyLiving.length} enemy</span></small>`;
+    if (populationMarkup !== displayedPopulation) {
+      element('#population').innerHTML = populationMarkup;
+      displayedPopulation = populationMarkup;
+    }
     const castles = living.filter((settler) => settler.power === 5).length;
     element('#population').title =
       `${roaming} roaming · ${housed} at home${drowning ? ` · ${drowning} drowning` : ''}${castles ? ` · ${castles} castle${castles > 1 ? 's' : ''}` : ''}${sick ? ` · ${sick} sick` : ''} · ${flock.length} sheep`;
@@ -1673,8 +1724,8 @@ function startGame(): void {
     testButton.classList.toggle('active', encounterTest);
     testButton.setAttribute('aria-pressed', String(encounterTest));
     testButton.title = encounterTest
-      ? 'Restart shared-island movement test (no combat)'
-      : 'Set up shared-island movement test (resets world; no combat)';
+      ? 'Restart shared-island combat test'
+      : 'Set up shared-island combat test (resets world)';
     surface = new TerrainSurface(SIZE, cornerLevels, STEP);
     initialSurface = new TerrainSurface(SIZE, cornerLevels.slice(), STEP);
     minimapTerrain.invalidate();
@@ -1888,7 +1939,7 @@ function startGame(): void {
         : hoveredCorner
           ? `Corner ${hoveredCorner.x}, ${hoveredCorner.z} · Height ${surface.level(hoveredCorner.x, hoveredCorner.z)}`
           : '';
-      info.innerHTML = `<strong>${kind}</strong>${cornerInfo}<br>Tile ${hovered.x}, ${hovered.z} · Corners ${surface.level(hovered.x, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z + 1)}, ${surface.level(hovered.x, hovered.z + 1)}<br>${resident ? `${buildingInfo}<br>1 settler lives here.` : drowning ? 'Drowning — raise the land beneath them to rescue!' : visitors ? `${visitors} settler${visitors > 1 ? 's' : ''} here · ${[...new Set(walkers.map((walker) => walker.population))].join('/')} · HP ${walkerPower}${walkers.some((walker) => walker.sick) ? ' · Sick (-1 HP/s)' : ''}` : 'Select a corner to shape the land.'}${sheepHere ? `<br>${sheepHere} sheep grazing here` : ''}${leaderHere ? `<br>Leader · HP/power ${leaderHere?.characterPower.toFixed(1)}${leaderHere?.knight ? ' · Knight' : ''} · ${leaderHere?.population}` : objectHere ? '<br>White leader object · Walk here to pick it up' : ''}`;
+      info.innerHTML = `<strong>${kind}</strong>${cornerInfo}<br>Tile ${hovered.x}, ${hovered.z} · Corners ${surface.level(hovered.x, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z + 1)}, ${surface.level(hovered.x, hovered.z + 1)}<br>${resident ? `${buildingInfo}<br>1 settler lives here.` : drowning ? 'Drowning — raise the land beneath them to rescue!' : visitors ? `${visitors} settler${visitors > 1 ? 's' : ''} here · ${[...new Set(walkers.map((walker) => walker.population))].join('/')} · HP ${walkerPower}${walkers.some((walker) => combat.opponent(walker)) ? ' · Fighting' : ''}${walkers.some((walker) => walker.sick) ? ' · Sick (-1 HP/s)' : ''}` : 'Select a corner to shape the land.'}${sheepHere ? `<br>${sheepHere} sheep grazing here` : ''}${leaderHere ? `<br>Leader · HP/power ${leaderHere?.characterPower.toFixed(1)}${leaderHere?.knight ? ' · Knight' : ''} · ${leaderHere?.population}` : objectHere ? '<br>White leader object · Walk here to pick it up' : ''}`;
     }
     canvas.style.cursor = hovered
       ? tool === 'inspect' && !selectedSpell
@@ -2022,10 +2073,6 @@ function startGame(): void {
   }
   function castSpell(spell: Spell, target?: Tile): void {
     if (spell === 'knight') {
-      if (encounterTest) {
-        toast('Knight conversion is disabled in the peaceful movement test.');
-        return;
-      }
       const owner = leadership.leader;
       const result = convertLeaderToKnight(owner, () => powerMeter.spend(SPELL_COSTS.knight));
       const messages: Record<KnightConversion, string> = {
@@ -2234,7 +2281,7 @@ function startGame(): void {
     element('#tile-info').hidden = true;
     toast(
       test
-        ? 'Shared-island movement test: both teams wander. No combat or building.'
+        ? 'Shared-island combat test: nearby enemies fight. Building and terraforming AI disabled.'
         : 'A new shore. A fresh beginning.',
     );
   }
@@ -2357,6 +2404,7 @@ function startGame(): void {
     }
     let settlementsChanged = false;
     let survivalChanged = false;
+    combat.match(settlers, combatPosition);
     for (const settler of settlers) {
       if (settler.survival.phase === 'alive' || settler.survival.phase === 'drowning') {
         const wasSick = settler.sick;
@@ -2405,31 +2453,25 @@ function startGame(): void {
         settler.target = null;
         settler.mesh.position.copy(position(settler.tile));
       }
+      if (combat.opponent(settler)) {
+        settler.tile = characterTile(settler);
+        settler.target = null;
+        settler.progress = 0;
+        continue;
+      }
       if (
         !encounterTest &&
         settler === enemyBuilder &&
         !settler.target &&
         settler.tile === enemyBuildingSite &&
+        !hasNearbyOpponent(settler) &&
         trySettle(settler, surface)
       ) {
         settler.mesh.visible = false;
         settlementsChanged = true;
         continue;
       }
-      const enemy =
-        !encounterTest && settler.knight ? nearestEnemy(settler, settlers, characterTile) : null;
-      if (
-        enemy &&
-        inCombatRange(characterTile(settler), characterTile(enemy), enemy.home ? 2 : 1)
-      ) {
-        settler.tile = characterTile(settler);
-        settler.target = null;
-        settler.progress = 0;
-        const goal = characterTile(enemy);
-        settler.mesh.rotation.y = Math.atan2(goal.x - settler.tile.x, goal.z - settler.tile.z);
-        settler.legs[3].rotation.x = -0.7 + Math.sin(simulationTime * 12) * 0.7;
-        continue;
-      }
+      const enemy = settler.knight ? nearestEnemy(settler, settlers, characterTile) : null;
       if (!settler.target) {
         settler.wait -= dt;
         if (enemy || settler === enemyBuilder) settler.wait = 0;
@@ -2488,6 +2530,7 @@ function startGame(): void {
         if (
           !encounterTest &&
           !settler.knight &&
+          !hasNearbyOpponent(settler) &&
           (!leadership.rallying || settler.population !== populationColor) &&
           (settler.population !== enemyColor ||
             (!enemyAI.blocksSettlement(settler.tile) &&
@@ -2499,7 +2542,7 @@ function startGame(): void {
         }
       }
     }
-    for (const defeated of encounterTest ? [] : advanceKnightCombat(settlers, dt, characterTile)) {
+    for (const defeated of combat.advance(dt)) {
       if (defeated.home) settlementsChanged = true;
       const wet =
         !defeated.home &&
@@ -2519,6 +2562,7 @@ function startGame(): void {
       updateSettlementStats();
       if (lastPointer) updateHover(lastPointer);
     }
+    updateCombatVisuals();
     if (resolveLeadership()) survivalChanged = true;
     for (let i = settlers.length - 1; i >= 0; i--) {
       if (settlers[i].survival.phase !== 'dead') continue;
@@ -2528,11 +2572,19 @@ function startGame(): void {
       settlers.splice(i, 1);
       survivalChanged = true;
     }
-    if (survivalChanged) {
+    combatHudElapsed += dt;
+    if (survivalChanged || (combat.pairs.length > 0 && combatHudElapsed >= 0.15)) {
+      combatHudElapsed = 0;
       updateSettlementStats();
       if (lastPointer) updateHover(lastPointer);
     }
-    const births = encounterTest ? [] : growPopulation(settlers, dt, findBirthTile);
+    const births = encounterTest
+      ? []
+      : growPopulation(
+          settlers.filter((settler) => !combat.opponent(settler)),
+          dt,
+          findBirthTile,
+        );
     for (const birth of births)
       createSettler(birth.tile, birth.characterPower, birth.population ?? populationColor).wait = 0;
     if (births.length) {

@@ -103,7 +103,7 @@ Raising or lowering costs **1 power per height level changed per point**. Every 
 The right-hand spell palette lists icons from lowest to highest power cost: Earthquake, Knight, Swamp, Volcano, Flood, with hover/focus tooltips. Affordable spell names are light; unaffordable names and icons are dimmed. For **Earthquake, Volcano, and Swamp**, click an icon to select the spell, then **left-click a highlighted tile** to cast at that location. Selection spends no power. **Knight and Flood cast immediately when their icons are clicked**, without selecting a map tile. Press **Escape**, right-click, click the selected spell again, or choose a terrain tool to cancel. Spells use a fixed power cost (no additional per-point terraforming cost), and only spend power when they have a valid effect.
 
 - **Earthquake — 500 power:** reshapes points within roughly six tiles of the selected tile: each point has a **10% chance to rise** by one or two levels and a **90% chance to lower**, potentially all the way to water (height 0). Subsidence is applied after uplift so most affected land sinks. Neighboring heights still differ by at most one. The entire interface shakes for one real-time second (suppressed for reduced-motion preferences).
-- **Knight — 1,000 power:** permanently converts the current living, outdoor leader into a knight, multiplying their current character power/HP by **1.5** once. Housed, drowning, missing, or already-knighted leaders cannot be converted; rejected casts spend nothing. Knights render at **1.3× a normal character's scale**, clad head-to-toe in reflective **silver plate armor**: a closed helmet, gorget, cuirass, hip plates, shoulder plates, arm guards, gauntlets, greaves, knee guards, and boots. Armor follows the animated limbs and fully covers the original clothes and skin. They retain their sword, population-colored shield, and white leader pole, and carry a separate prominent **red/blue team flag** beside the pole. The team flag stays with the knight's equipment; only the white leader pole drops for succession. This visual size increase does not change the existing 1.5× HP/power bonus. They remain outside, do not build houses, and seek living enemy characters along reachable land routes when enemies exist; with no enemies they wander. Melee exchanges simultaneous damage and retaliation based on remaining character power, with minimum damage of 1.5 HP/s for knights versus 1 HP/s for normal characters so even equal-strength fights finish. Housed enemies can be engaged from outside their buildings. Blue enemy residents are valid opponents. If the enemy island is disconnected, knights advance to their nearest reachable shore and wait rather than drowning; a completed land bridge lets them continue toward enemies. There is no reversal spell. Death drops only the leader pole: a successor who picks it up remains a normal character unless separately converted.
+- **Knight — 1,000 power:** permanently converts the current living, outdoor leader into a knight, multiplying their current character power/HP by **1.5** once. Housed, drowning, missing, or already-knighted leaders cannot be converted; rejected casts spend nothing. Knights render at **1.3× a normal character's scale**, clad head-to-toe in reflective **silver plate armor**: a closed helmet, gorget, cuirass, hip plates, shoulder plates, arm guards, gauntlets, greaves, knee guards, and boots. Armor follows the animated limbs and fully covers the original clothes and skin. They retain their sword, population-colored shield, and white leader pole, and carry a separate prominent **red/blue team flag** beside the pole. The team flag stays with the knight's equipment; only the white leader pole drops for succession. This visual size increase does not change the existing 1.5× HP/power bonus. They remain outside, do not build houses, and seek living enemy characters along reachable land routes when enemies exist; with no enemies they wander. Melee uses the same simultaneous, strength-based combat as ordinary characters, with the knight's increased power contributing to attack strength. Housed enemies can be engaged from outside their buildings. Blue enemy residents are valid opponents. If the enemy island is disconnected, knights advance to their nearest reachable shore and wait rather than drowning; a completed land bridge lets them continue toward enemies. There is no reversal spell. Death drops only the leader pole: a successor who picks it up remains a normal character unless separately converted.
 - **Volcano — 2,000 power:** raises up to three spaced-out points around the selected tile to maximum height **14** (six levels above the old cap), prioritizing a corner of that tile. All land touched by the full height cascade becomes distinctly gray **volcanic rock**, replacing any swamp there. No power is spent if no eligible nearby points remain.
 - **Flood — 3,000 power:** lowers **every point in the entire world** by one height level, clamped at 0—equivalent to raising the sea level by one. Clicking its icon casts immediately; the effect is global, including offscreen land. Repeated casts can submerge all land; a cast on an already all-water world costs nothing. Flood can destroy homes, remove farming/sheep, and strand settlers who then begin drowning.
 
@@ -113,11 +113,11 @@ Walking onto swamp or standing on newly swamped ground causes **persistent sickn
 
 All spells update homes, castles, farming, trees, and settler positions just like ordinary terrain edits. Spells can be cast while the simulation is paused.
 
-## Shared-island movement test
+## Shared-island encounter test
 
 The **Test scenario button beside New world** resets into a deterministic test scenario: 24 red and 24 blue characters on the same clear island, with camp centers just **six tiles apart**. They start in distinct unoccupied cells, wander freely, and reserve walking destinations so they go around each other instead of passing through or swapping head-on. Each side still has its own leader pole.
 
-**No combat occurs in this test.** Knight conversion, gathering, automatic houses/births, and enemy terraforming are disabled so both populations keep moving and meeting. Manual terrain edits and other spells remain available, so environmental hazards still apply if you create them. The test starts unpaused at 1× speed; pause/speed, minimap, and camera buttons continue working. Clicking Test scenario again restarts it. **New world** leaves the test and restores the regular archipelago and existing normal-game mechanics.
+**Nearby opposing characters now fight in this test**, with facing, strike animations, and a red glow. Knight conversion is available to test a stronger combatant. Gathering, automatic houses/births, and enemy terraforming remain disabled to keep the test focused on encounters. Manual terrain edits and other spells remain available, so environmental hazards still apply if you create them. The test starts unpaused at 1× speed; pause/speed, minimap, and camera buttons continue working. Clicking Test scenario again restarts it. **New world** leaves the test and restores the regular archipelago and existing normal-game mechanics.
 
 ## Minimap
 
@@ -140,6 +140,12 @@ The ocean uses animated, seamless **wave color and ripple-normal textures** on o
 ## Population colors
 
 Human characters wear **red shirts** and enemy characters wear **blue shirts**, including newborns, which inherit their parent's population. Shirt color is independent of character count, sickness, and leadership. Every house (levels 1–4) and castle always displays a flag in its population's matching red/blue color; flags and shirts share the same palette.
+
+## Combat
+
+Nearby opposing outdoor characters automatically stop, face one another, and fight in stable one-on-one engagements (within 1.35 tiles). Both take damage simultaneously at **opposing combat power / 10 HP per simulation second**: a 20-power character deals 2 HP/s, while a 10-power character deals 1 HP/s. Attack power is captured when the engagement begins; wounds reduce HP without weakening the attack rate, so equal fights end rather than approaching zero forever. Power absorbed during a fight increases attack strength. Fighting pauses with the simulation and respects speed controls.
+
+Fighters animate alternating strikes and a small body lean, with isolated red emissive materials and soft pulsing red auras. Other characters and shared team materials do not glow. The effects clear after combat or a world reset. Defeated characters use normal death and leader-pole succession. Knights can also engage housed defenders, who appear outside their buildings while fighting; fighting residents do not grow or produce births. Inspect identifies fighting characters.
 
 ## Leader and gathering
 
@@ -173,8 +179,8 @@ Rock persists through dry terrain edits. Lowering it into water destroys the roc
 - `tests/survival.test.mjs` — two-second rescue window, pause, irreversible death, and sinking timing.
 - `src/population.ts` — resident character-power growth, equal-power births, and safe-spawn deferral.
 - `tests/population.test.mjs` — growth scaling, splits, inheritance, pause/speed, and blocked births.
-- `src/encounter-scenario.ts` — peaceful shared-island setup and occupied-step avoidance for movement testing.
-- `tests/encounter-scenario.test.mjs` — connected camps, movement reservations, and no-combat mode guards.
+- `src/encounter-scenario.ts` — shared-island setup and occupied-step avoidance for encounter testing.
+- `tests/encounter-scenario.test.mjs` — connected camps, movement reservations, and combat-enabled scenario guards.
 - `src/minimap.ts` — incremental elevation raster, team markers, crowd suppression, and map navigation coordinates.
 - `tests/minimap.test.mjs` — terrain cache correctness, team glyphs, crowded characters, and coordinate bounds.
 - `src/enemy-ai.ts` — slow, paid terrace planning, friendly-home protection, and castle-site preparation.
@@ -183,6 +189,9 @@ Rock persists through dry terrain edits. Lowering it into water destroys the roc
 - `tests/water-texture.test.mjs` — edge/derivative continuity, repeating filters, normals, and animation.
 - `src/knight-armor.ts` — 1.3×-scale silver armor attached to animated body parts.
 - `tests/knight-armor.test.mjs` — scale, full armor coverage, material, animation attachment, and cleanup ownership.
+- `src/combat.ts` — stable opponent pairing and simultaneous proportional damage.
+- `src/combat-effects.ts` — facing, strikes, isolated red emission, and soft combat auras.
+- `tests/combat*.test.mjs` — damage, pairing, death, pause, animation, glow isolation, and cleanup.
 - `src/knights.ts` — permanent leader conversion, enemy selection, and simultaneous melee combat.
 - `tests/knights.test.mjs` — spell validation/payment, multiplier, targeting, combat, and normal pole succession.
 - `src/leadership.ts` — unique leader/object ownership, additive absorption, and shared rally routing.

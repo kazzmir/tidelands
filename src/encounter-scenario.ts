@@ -6,7 +6,7 @@ export interface EncounterScenario {
   enemyStart: GridPoint;
 }
 
-/** A clear shared island with neighboring camps, reserved for peaceful movement testing. */
+/** A clear shared island with neighboring camps, for movement and combat testing. */
 export function createEncounterScenario(size: number): EncounterScenario {
   const center = Math.floor(size / 2);
   const radius = Math.min(18, Math.floor(size / 4));

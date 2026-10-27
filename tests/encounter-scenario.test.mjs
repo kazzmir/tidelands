@@ -11,7 +11,7 @@ const terrainUrl=await moduleUrl('../src/terrain-surface.ts');
 const {TerrainSurface}=await import(terrainUrl);
 const {createEncounterScenario,unoccupiedWalkSteps}=await import(await moduleUrl('../src/encounter-scenario.ts',{'./terrain-surface':terrainUrl}));
 
-test('peaceful test camps are close together on one connected dry island',()=>{
+test('encounter test camps are close together on one connected dry island',()=>{
  const scenario=createEncounterScenario(500),surface=new TerrainSurface(500,scenario.levels,.65);
  assert.equal(scenario.levels.length,501**2);
  assert.equal(Math.hypot(scenario.playerStart.x-scenario.enemyStart.x,scenario.playerStart.z-scenario.enemyStart.z),6);
@@ -45,10 +45,11 @@ test('walkers cannot swap head-on, but can follow after another walker vacates a
  second.tile=c;second.target=null;assert.deepEqual(unoccupiedWalkSteps(first,[b],[first,second]),[b]);
 });
 
-test('scenario button resets into movement-only mode and explicitly suppresses combat and births',async()=>{
+test('scenario button enables combat while keeping automatic births disabled',async()=>{
  const source=await readFile(new URL('../src/main.ts',import.meta.url),'utf8');
  assert.match(source,/element\('#test-scenario'\).addEventListener\('click', \(\) => startWorld\(true\)\)/);
- assert.match(source,/encounterTest\s*\?\s*\[\]\s*:\s*advanceKnightCombat/);
+ assert.match(source,/for \(const defeated of combat.advance\(dt\)\)/);
+ assert.doesNotMatch(source,/encounterTest\s*\?\s*\[\]\s*:\s*combat.advance/);
  assert.match(source,/encounterTest\s*\?\s*\[\]\s*:\s*growPopulation/);
  assert.match(source,/unoccupiedWalkSteps\(/);
 });
