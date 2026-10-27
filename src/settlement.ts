@@ -1,4 +1,5 @@
 import type { GridPoint, TerrainSurface } from './terrain-surface';
+import type { PopulationColor } from './population';
 
 export type HousePower = 0 | 1 | 2 | 3 | 4 | 5;
 export interface SettlementTile {
@@ -12,6 +13,7 @@ export interface SettlementTile {
   rock?: boolean;
 }
 export interface Resident<T extends SettlementTile> {
+  population?: PopulationColor;
   tile: T;
   home: T | null;
   power: HousePower;

@@ -34,10 +34,16 @@ test('every house and castle gets a flag from the same red/blue palette as shirt
     ts.forEachChild(node,visit);
   }
   visit(ast);
-  for(const name of ['addHouse','addCastle'])assert.match(functions.get(name),/createPopulationFlag\(populationColor\)/);
+  for(const name of ['addHouse','addCastle'])assert.match(functions.get(name),/createPopulationFlag\(population\)/);
   assert.match(functions.get('createPopulationFlag'),/populationMaterials\[population\]/);
-  assert.match(source,/const shirtMaterial = populationMaterials\[populationColor\]/);
+  assert.match(source,/const shirtMaterial = populationMaterials\[population\]/);
   assert.match(source,/const populationColor: PopulationColor = 'red'/);
+});
+
+test('newborns retain their parent population for future enemy targeting and team colors',()=>{
+  const parent=resident(1,21);parent.population='blue';
+  const births=growPopulation([parent],0.01,()=>spawn);
+  assert.equal(births.length,1);assert.equal(births[0].population,'blue');
 });
 
 test('birth intervals scale from 120 seconds at level 1 to 30 seconds for castles',()=>{

@@ -3,6 +3,13 @@ import { generateWorldHeights } from './world-generation';
 import { TerrainSurface, type GridPoint, type TerrainBounds } from './terrain-surface';
 import { PowerMeter } from './power';
 import { Leadership, buildRallyField, rallySteps } from './leadership';
+import {
+  convertLeaderToKnight,
+  nearestEnemy,
+  inCombatRange,
+  advanceKnightCombat,
+  type KnightConversion,
+} from './knights';
 import { clearSubmergedRock, markVolcanicRock } from './rock';
 import { grazingNeighbors, planFlock, SheepSpawner, type GrazingSheep } from './sheep';
 import { elevationContours } from './terrain-contours';
@@ -53,6 +60,8 @@ interface Tile {
   castleGap?: boolean;
 }
 interface Settler extends Resident<Tile> {
+  population: PopulationColor;
+  knight: boolean;
   mesh: THREE.Group;
   survival: Survival;
   sick: boolean;
@@ -88,6 +97,8 @@ function createIconRenderer(): (name: string) => string {
     earthquake: '<path d="m3 17 6 3 4-2 8 3M3 12l5-2 4 2 9-3M13 2l-3 5 5 2-5 6 3 3"/>',
     swamp:
       '<path d="M3 18c2-2 4 2 6 0s4 2 6 0 4 2 6 0M6 14V7m-2 3 2 2 2-2M15 15V4m-3 4 3 3 3-3M10 21h6"/>',
+    knight:
+      '<path d="m5 3 9 9m-3-9-8 8m1-7 7 7M4 12l-2 2m12-5 7 2v5c0 3-3 5-4 6-2-1-5-3-5-6v-5z"/>',
     flood:
       '<path d="M12 2v8m-3-3 3 3 3-3M3 14c2-3 4 3 6 0s4 3 6 0 4 3 6 0M3 20c2-3 4 3 6 0s4 3 6 0 4 3 6 0"/>',
     volcano: '<path d="m3 21 5-11h8l5 11ZM8 10l4 3 4-3M9 6 7 3m5 3V1m3 5 3-3"/>',
@@ -396,7 +407,11 @@ function startGame(): void {
     flag.add(pole, cloth);
     return flag;
   }
-  function addHouse(tile: Tile, power: HousePower): void {
+  function addHouse(
+    tile: Tile,
+    power: HousePower,
+    population: PopulationColor = populationColor,
+  ): void {
     // Remove incidental rocks/paths when a settler claims this tile.
     for (const decoration of [...scenery.children]) {
       if (decoration.userData.tile !== tile) continue;
@@ -416,7 +431,7 @@ function startGame(): void {
     door.position.set(0.08, 0.125, 0.3);
     const chimney = new THREE.Mesh(chimneyGeometry, wallMaterial);
     chimney.position.set(-0.2, 0.72, -0.15);
-    const flag = createPopulationFlag(populationColor);
+    const flag = createPopulationFlag(population);
     flag.position.set(0.12, 0.68, 0.08);
     flag.scale.setScalar(0.7);
     group.add(walls, roof, door, chimney, flag);
@@ -449,7 +464,7 @@ function startGame(): void {
   const castleStone = new THREE.MeshStandardMaterial({ color: '#b6b9a4', roughness: 1 });
   const castleTrim = new THREE.MeshStandardMaterial({ color: '#8c9889', roughness: 1 });
   const castleRoof = new THREE.MeshStandardMaterial({ color: '#855443', roughness: 1 });
-  function addCastle(home: Tile): void {
+  function addCastle(home: Tile, population: PopulationColor = populationColor): void {
     for (const decoration of [...scenery.children]) {
       const tile = decoration.userData.tile as Tile | undefined;
       if (!tile || Math.abs(tile.x - home.x) > 1 || Math.abs(tile.z - home.z) > 1) continue;
@@ -500,7 +515,7 @@ function startGame(): void {
         }
       }
     }
-    const flag = createPopulationFlag(populationColor);
+    const flag = createPopulationFlag(population);
     flag.position.y = 1.855;
     castle.add(flag);
     castle.position.copy(position(home));
@@ -610,8 +625,8 @@ function startGame(): void {
     buildings.clear();
     for (const settler of settlers) {
       if (!settler.home) continue;
-      if (settler.power === 5) addCastle(settler.home);
-      else addHouse(settler.home, settler.power);
+      if (settler.power === 5) addCastle(settler.home, settler.population);
+      else addHouse(settler.home, settler.power, settler.population);
     }
     rebuildFarms();
     rebuildSwamps();
@@ -757,6 +772,83 @@ function startGame(): void {
 
   const settlers: Settler[] = [];
   const leadership = new Leadership<Tile, Settler>();
+  const knightRoutes = new Map<
+    Settler,
+    { goal: Tile; revision: number; distance: Map<Tile, number> }
+  >();
+  const armorMaterial = new THREE.MeshStandardMaterial({
+    color: '#bfc7ce',
+    metalness: 0.65,
+    roughness: 0.35,
+  });
+  function equipKnight(settler: Settler): void {
+    function part(
+      parent: THREE.Object3D,
+      geometry: THREE.BufferGeometry,
+      material: THREE.Material,
+      x: number,
+      y: number,
+      z: number,
+    ): THREE.Mesh {
+      const mesh = new THREE.Mesh(geometry, material);
+      mesh.position.set(x, y, z);
+      mesh.castShadow = true;
+      mesh.userData.ownedGeometry = true;
+      parent.add(mesh);
+      return mesh;
+    }
+    part(settler.mesh, new THREE.BoxGeometry(0.175, 0.11, 0.17), armorMaterial, 0, 0.51, 0);
+    const sword = new THREE.Group();
+    sword.position.z = 0.09;
+    part(sword, new THREE.BoxGeometry(0.045, 0.4, 0.025), armorMaterial, 0, 0.24, 0);
+    part(sword, new THREE.BoxGeometry(0.15, 0.028, 0.045), darkMaterial, 0, 0.035, 0);
+    part(sword, new THREE.BoxGeometry(0.035, 0.11, 0.035), darkMaterial, 0, -0.03, 0);
+    settler.legs[3].add(sword);
+    const shield = new THREE.Group();
+    shield.position.set(-0.04, 0.02, 0.1);
+    const rim = part(
+      shield,
+      new THREE.CylinderGeometry(0.155, 0.155, 0.06, 6),
+      armorMaterial,
+      0,
+      0,
+      0,
+    );
+    rim.rotation.x = Math.PI / 2;
+    part(
+      shield,
+      new THREE.CircleGeometry(0.125, 6),
+      populationMaterials[settler.population],
+      0,
+      0,
+      0.032,
+    );
+    settler.legs[1].add(shield);
+  }
+  function disposeSettlerVisual(settler: Settler): void {
+    settler.head.material.dispose();
+    settler.mesh.traverse((object) => {
+      if (object instanceof THREE.Mesh && object.userData.ownedGeometry) object.geometry.dispose();
+    });
+  }
+  function knightOptions(knight: Settler, enemy: Settler): Tile[] {
+    const goal = characterTile(enemy);
+    let route = knightRoutes.get(knight);
+    if (!route || route.goal !== goal || route.revision !== navigationRevision) {
+      const starts: Tile[] = [];
+      const range = enemy.home ? 2 : 1;
+      if (isWalkable(goal)) starts.push(goal);
+      else
+        for (let z = goal.z - range; z <= goal.z + range; z++)
+          for (let x = goal.x - range; x <= goal.x + range; x++) {
+            const tile = tileAt(x, z);
+            if (tile && inCombatRange(tile, goal, range) && isWalkable(tile)) starts.push(tile);
+          }
+      route = { goal, revision: navigationRevision, distance: buildRallyField(starts, neighbors) };
+      knightRoutes.set(knight, route);
+    }
+    return rallySteps(knight.tile, neighbors(knight.tile), route.distance);
+  }
   let navigationRevision = 0;
   let rallyRevision = -1;
   let rallyDestination: Tile | null = null;
@@ -805,7 +897,7 @@ function startGame(): void {
         leaderObject.position.y += owner.power === 5 ? 2.15 : 0.55 + owner.power * 0.05;
       } else {
         if (leaderObject.parent !== owner.mesh) owner.mesh.add(leaderObject);
-        leaderObject.position.set(0.17, 0, 0.02);
+        leaderObject.position.set(owner.knight ? 0 : 0.17, 0, owner.knight ? -0.13 : 0.02);
       }
       leaderObject.visible = true;
     } else if (leadership.droppedTile) {
@@ -821,10 +913,15 @@ function startGame(): void {
     if (element('#rally-label').textContent !== label) element('#rally-label').textContent = label;
     button.classList.toggle('active', leadership.rallying);
     button.setAttribute('aria-pressed', String(leadership.rallying));
-    button.title = `${leadership.leader ? `Leader HP ${leadership.leader.characterPower.toFixed(1)}` : 'Leader object awaiting pickup'} · ${leadership.rallying ? 'Click to resume wandering and building' : 'Residents leave homes and merge their HP/power into the leader'}`;
+    button.title = `${leadership.leader ? `Leader HP ${leadership.leader.characterPower.toFixed(1)}${leadership.leader.knight ? ' · Knight' : ''}` : 'Leader object awaiting pickup'} · ${leadership.rallying ? 'Click to resume wandering and building' : 'Residents leave homes and merge their HP/power into the leader'}`;
   }
   function encounterLeader(settler: Settler): boolean {
-    if (settler.home || settler.survival.phase !== 'alive') return false;
+    if (
+      settler.population !== populationColor ||
+      settler.home ||
+      settler.survival.phase !== 'alive'
+    )
+      return false;
     const owner = leadership.leader;
     if (owner && owner.survival.phase !== 'alive') return false;
     const result = leadership.encounter(
@@ -870,13 +967,21 @@ function startGame(): void {
     navigationRevision++;
     rallyDestination = null;
     if (leadership.rallying) {
-      evacuateSettlements(settlers, tileAt);
+      evacuateSettlements(
+        settlers.filter((settler) => settler.population === populationColor),
+        tileAt,
+      );
       reconcileWorldSettlements();
       rebuildBuildings();
       syncResidentMeshes();
     }
     for (const settler of settlers) {
-      if (settler === leadership.leader || settler.home || settler.survival.phase !== 'alive')
+      if (
+        settler.population !== populationColor ||
+        settler === leadership.leader ||
+        settler.home ||
+        settler.survival.phase !== 'alive'
+      )
         continue;
       settler.tile = characterTile(settler);
       settler.target = null;
@@ -1015,12 +1120,16 @@ function startGame(): void {
   const skinMaterial = new THREE.MeshStandardMaterial({ color: '#e3bb8b', roughness: 1 });
   const hairMaterial = new THREE.MeshStandardMaterial({ color: '#685139', roughness: 1 });
   const trouserMaterial = new THREE.MeshStandardMaterial({ color: '#54665a', roughness: 1 });
-  const shirtMaterial = populationMaterials[populationColor];
   const bodyGeometry = new THREE.BoxGeometry(0.17, 0.21, 0.12);
   const headGeometry = new THREE.BoxGeometry(0.135, 0.14, 0.13);
   const hairGeometry = new THREE.BoxGeometry(0.145, 0.055, 0.14);
   const limbGeometry = new THREE.BoxGeometry(0.055, 0.16, 0.065);
-  function createSettler(tile: Tile, characterPower = INITIAL_CHARACTER_POWER): Settler {
+  function createSettler(
+    tile: Tile,
+    characterPower = INITIAL_CHARACTER_POWER,
+    population: PopulationColor = populationColor,
+  ): Settler {
+    const shirtMaterial = populationMaterials[population];
     const mesh = new THREE.Group();
     const body = new THREE.Mesh(bodyGeometry, shirtMaterial);
     body.position.y = 0.25;
@@ -1045,6 +1154,8 @@ function startGame(): void {
     mesh.scale.setScalar(1.15);
     people.add(mesh);
     const settler: Settler = {
+      population,
+      knight: false,
       mesh,
       tile,
       survival: createSurvival(),
@@ -1070,7 +1181,8 @@ function startGame(): void {
     rallyDestination = null;
     rallyRevision = -1;
     navigationRevision = 0;
-    for (const settler of settlers) settler.head.material.dispose();
+    knightRoutes.clear();
+    for (const settler of settlers) disposeSettlerVisual(settler);
     people.clear();
     settlers.length = 0;
   }
@@ -1538,7 +1650,7 @@ function startGame(): void {
         : hoveredCorner
           ? `Corner ${hoveredCorner.x}, ${hoveredCorner.z} · Height ${surface.level(hoveredCorner.x, hoveredCorner.z)}`
           : '';
-      info.innerHTML = `<strong>${kind}</strong>${cornerInfo}<br>Tile ${hovered.x}, ${hovered.z} · Corners ${surface.level(hovered.x, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z + 1)}, ${surface.level(hovered.x, hovered.z + 1)}<br>${resident ? `${buildingInfo}<br>1 settler lives here.` : drowning ? 'Drowning — raise the land beneath them to rescue!' : visitors ? `${visitors} settler${visitors > 1 ? 's' : ''} here · HP ${walkerPower}${walkers.some((walker) => walker.sick) ? ' · Sick (-1 HP/s)' : ''}` : 'Select a corner to shape the land.'}${sheepHere ? `<br>${sheepHere} sheep grazing here` : ''}${leaderHere ? `<br>Leader · HP/power ${leadership.leader?.characterPower.toFixed(1)}` : objectHere ? '<br>White leader object · Walk here to pick it up' : ''}`;
+      info.innerHTML = `<strong>${kind}</strong>${cornerInfo}<br>Tile ${hovered.x}, ${hovered.z} · Corners ${surface.level(hovered.x, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z + 1)}, ${surface.level(hovered.x, hovered.z + 1)}<br>${resident ? `${buildingInfo}<br>1 settler lives here.` : drowning ? 'Drowning — raise the land beneath them to rescue!' : visitors ? `${visitors} settler${visitors > 1 ? 's' : ''} here · HP ${walkerPower}${walkers.some((walker) => walker.sick) ? ' · Sick (-1 HP/s)' : ''}` : 'Select a corner to shape the land.'}${sheepHere ? `<br>${sheepHere} sheep grazing here` : ''}${leaderHere ? `<br>Leader · HP/power ${leadership.leader?.characterPower.toFixed(1)}${leadership.leader?.knight ? ' · Knight' : ''}` : objectHere ? '<br>White leader object · Walk here to pick it up' : ''}`;
     }
     canvas.style.cursor = hovered
       ? tool === 'inspect' && !selectedSpell
@@ -1649,7 +1761,7 @@ function startGame(): void {
       toast(`${SPELL_NAMES[spell]} needs ${SPELL_COSTS[spell].toLocaleString()} power.`);
       return;
     }
-    if (spell === 'flood') {
+    if (spell === 'flood' || spell === 'knight') {
       cancelSpell();
       castSpell(spell);
       return;
@@ -1660,6 +1772,31 @@ function startGame(): void {
     if (lastPointer) updateHover(lastPointer);
   }
   function castSpell(spell: Spell, target?: Tile): void {
+    if (spell === 'knight') {
+      const owner = leadership.leader;
+      const result = convertLeaderToKnight(owner, () => powerMeter.spend(SPELL_COSTS.knight));
+      const messages: Record<KnightConversion, string> = {
+        converted: 'The leader becomes a knight. This transformation is permanent.',
+        'no-leader': 'A character must pick up the leader pole first.',
+        housed: 'The leader must leave their building before becoming a knight.',
+        'already-knight': 'The leader is already a knight.',
+        unavailable: 'Only a living leader on dry land can become a knight.',
+        insufficient: 'Knight needs 1,000 power.',
+      };
+      if (result === 'converted' && owner) {
+        equipKnight(owner);
+        owner.tile = characterTile(owner);
+        owner.target = null;
+        owner.progress = 0;
+        owner.wait = 0;
+        updateSettlementStats();
+        updatePowerDisplay();
+        updateLeadershipVisual();
+        if (lastPointer) updateHover(lastPointer);
+      }
+      toast(messages[result]);
+      return;
+    }
     if (spell !== 'flood' && !target) return;
     const cost = SPELL_COSTS[spell];
     if (powerMeter.value < cost) {
@@ -1715,6 +1852,7 @@ function startGame(): void {
     if (spell === 'volcano') markVolcanicRock(surface, tileAt, rockTiles, swampTiles);
     refreshTerrainAfterEdit();
     const messages: Record<Spell, string> = {
+      knight: 'The leader becomes a knight.',
       earthquake: 'The earth trembles.',
       volcano: 'A volcano rises above the land.',
       flood: 'The seas rise. All land sinks one level.',
@@ -1972,11 +2110,28 @@ function startGame(): void {
         settler.target = null;
         settler.mesh.position.copy(position(settler.tile));
       }
+      const enemy = settler.knight ? nearestEnemy(settler, settlers, characterTile) : null;
+      if (
+        enemy &&
+        inCombatRange(characterTile(settler), characterTile(enemy), enemy.home ? 2 : 1)
+      ) {
+        settler.tile = characterTile(settler);
+        settler.target = null;
+        settler.progress = 0;
+        const goal = characterTile(enemy);
+        settler.mesh.rotation.y = Math.atan2(goal.x - settler.tile.x, goal.z - settler.tile.z);
+        settler.legs[3].rotation.x = -0.7 + Math.sin(simulationTime * 12) * 0.7;
+        continue;
+      }
       if (!settler.target) {
         settler.wait -= dt;
+        if (enemy) settler.wait = 0;
         if (settler.wait > 0) continue;
-        const options =
-          leadership.rallying && settler !== leadership.leader
+        const options = enemy
+          ? knightOptions(settler, enemy)
+          : leadership.rallying &&
+              settler.population === populationColor &&
+              settler !== leadership.leader
             ? followerOptions(settler)
             : neighbors(settler.tile);
         if (!options.length) {
@@ -2013,13 +2168,30 @@ function startGame(): void {
         settler.legs.forEach((leg) => {
           leg.rotation.x = 0;
         });
-        if (!leadership.rallying && trySettle(settler, surface)) {
+        if (
+          !settler.knight &&
+          (!leadership.rallying || settler.population !== populationColor) &&
+          trySettle(settler, surface)
+        ) {
           settler.mesh.visible = false;
           settlementsChanged = true;
         }
       }
     }
+    for (const defeated of advanceKnightCombat(settlers, dt, characterTile)) {
+      if (defeated.home) settlementsChanged = true;
+      const wet =
+        !defeated.home &&
+        surface.sample(defeated.mesh.position.x + SIZE / 2, defeated.mesh.position.z + SIZE / 2) <=
+          SEA;
+      defeated.survival.phase = wet ? 'sinking' : 'dead';
+      defeated.survival.elapsed = 0;
+      defeated.target = null;
+      renderSurvival(defeated);
+      survivalChanged = true;
+    }
     if (settlementsChanged) {
+      navigationRevision++;
       reconcileWorldSettlements();
       rebuildBuildings();
       syncResidentMeshes();
@@ -2030,7 +2202,8 @@ function startGame(): void {
     for (let i = settlers.length - 1; i >= 0; i--) {
       if (settlers[i].survival.phase !== 'dead') continue;
       people.remove(settlers[i].mesh);
-      settlers[i].head.material.dispose();
+      knightRoutes.delete(settlers[i]);
+      disposeSettlerVisual(settlers[i]);
       settlers.splice(i, 1);
       survivalChanged = true;
     }
@@ -2039,7 +2212,8 @@ function startGame(): void {
       if (lastPointer) updateHover(lastPointer);
     }
     const births = growPopulation(settlers, dt, findBirthTile);
-    for (const birth of births) createSettler(birth.tile, birth.characterPower).wait = 0;
+    for (const birth of births)
+      createSettler(birth.tile, birth.characterPower, birth.population ?? populationColor).wait = 0;
     if (births.length) {
       updateSettlementStats();
       if (lastPointer) updateHover(lastPointer);

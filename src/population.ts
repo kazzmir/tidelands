@@ -18,6 +18,7 @@ export function characterGrowthRate(level: HousePower, rock = false): number {
   return BIRTH_THRESHOLD / 2 / birthInterval(level, rock);
 }
 export interface Newborn<T> {
+  population?: PopulationColor;
   tile: T;
   characterPower: number;
 }
@@ -41,7 +42,11 @@ export function growPopulation<T extends SettlementTile>(
       const tile = findSpawnTile(resident.home);
       if (!tile) break; // Keep the power until there is a safe place for the newborn.
       resident.characterPower /= 2;
-      births.push({ tile, characterPower: resident.characterPower });
+      births.push({
+        tile,
+        characterPower: resident.characterPower,
+        population: resident.population,
+      });
     }
   }
   return births;
