@@ -31,8 +31,8 @@ Only a padded camera region is converted into render geometry; that region strea
 - **Right-click:** lower the nearest grid corner one level. Level 0 is water.
 - A red point with a softly fading halo highlights the selected corner. Its height is shared by up to four neighboring tiles. Surrounding points automatically adjust as needed so neighboring heights never differ by more than one level, including diagonally.
 - **Hold Shift:** select and highlight the whole surface instead of a point. **Shift+left-click** raises all four corners; **Shift+right-click** lowers all four. The tile keeps its shape, and neighboring tiles follow the shared points. If any corner would exceed heights 0–14, the entire edit is rejected.
-- **1 / Raise, 2 / Lower:** select the action for touch taps; mouse clicks always use the button mapping above.
-- **3 / Inspect:** hover to see elevation, terrain, and inhabitants; touch taps inspect without editing.
+- **1 / 2:** select the action for touch taps; mouse clicks always use the button mapping above.
+- **3 (Inspect):** hover to see elevation, terrain, and inhabitants; touch taps inspect without editing.
 - **Arrow keys / drag:** pan; **hold middle button and drag:** orbit; **scroll:** zoom. Hold arrows for continuous, camera-relative movement, including while paused.
 - **Touch:** drag to pan; use two fingers to zoom/orbit.
 - **E / blue flag button:** view the enemy island; **Home / Reset View:** return to the human starting island.

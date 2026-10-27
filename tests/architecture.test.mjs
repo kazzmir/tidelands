@@ -3,6 +3,12 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { parseSync } from 'vite';
 
+test('the removed Shape toolbox stays absent while minimap and spell controls remain',async()=>{
+  const html=await readFile(new URL('../index.html',import.meta.url),'utf8');
+  assert.doesNotMatch(html,/class="toolbox"|data-tool=/);
+  assert.match(html,/id="minimap"/);assert.match(html,/data-spell="knight"/);
+});
+
 test('main keeps initialization inside functions with only one top-level entry call', async () => {
   const source = await readFile(new URL('../src/main.ts', import.meta.url), 'utf8');
   const { program } = parseSync('main.ts', source);

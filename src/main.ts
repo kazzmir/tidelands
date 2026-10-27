@@ -2091,11 +2091,6 @@ function startGame(): void {
   }
   function selectTool(next: Tool): void {
     tool = next;
-    document.querySelectorAll<HTMLButtonElement>('[data-tool]').forEach((button) => {
-      const active = button.dataset.tool === next;
-      button.classList.toggle('active', active);
-      button.setAttribute('aria-pressed', String(active));
-    });
     const hints: Record<Tool, [string, string]> = {
       raise: [
         shiftHeld ? 'Raise a surface' : 'Raise a corner',
@@ -2115,14 +2110,6 @@ function startGame(): void {
       ? `<strong>Cast ${SPELL_NAMES[selectedSpell]}</strong><span class="hint-detail">Click a tile to cast · Esc or right-click to cancel</span>`
       : `<strong>${hints[next][0]}</strong><span class="hint-detail">${hints[next][1]}</span>`;
     element('#tile-info').hidden = true;
-  }
-  function bindToolControls(): void {
-    document.querySelectorAll<HTMLButtonElement>('[data-tool]').forEach((button) => {
-      button.addEventListener('click', () => {
-        cancelSpell();
-        selectTool(button.dataset.tool as Tool);
-      });
-    });
   }
   let paused = false;
   let speed = 1;
@@ -2523,7 +2510,6 @@ function startGame(): void {
   generateWorld();
   bindTerrainInput();
   bindSpellControls();
-  bindToolControls();
   bindSimulationControls();
   bindKeyboardControls();
   startRendering();
