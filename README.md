@@ -69,7 +69,7 @@ Sheep do not appear immediately when farmland is created. While grazing space is
 
 Every starting settler has **10 character power**, separate from the player’s spendable Power and a building’s terrain-derived level. Character power stays with the settler when they build a home, leave it, or are displaced by a castle.
 
-Housed residents accumulate character power at a rate tuned to these nominal birth intervals:
+On ordinary ground, housed residents accumulate character power at a rate tuned to these nominal birth intervals:
 
 | Building level | Simulation seconds per birth |
 | --- | --- |
@@ -85,7 +85,7 @@ Newborns appear on the nearest reachable dry, unobstructed walking tile outside 
 
 ## Accumulated power
 
-The upper-right HUD shows total population and accumulated **Power**. Each world starts with **10,000 power**. Every **5 simulation seconds**, power increases by the sum of all occupied building power levels (houses 1–4, castles 5). For example, two power-2 houses and a castle produce 9 power per collection. Roaming settlers produce none. Pausing stops collection; 2×/4× speed accelerates it. Existing power is retained if a building is lost; creating a new world resets the balance to 10,000 and resets the collection timer. Hover the Power number to see the current income rate.
+The upper-right HUD shows total population and accumulated **Power**. Each world starts with **10,000 power**. Every **5 simulation seconds**, power increases by the sum of occupied ordinary-ground building power levels (houses 1–4, castles 5). Rock-ground buildings pay their full level only every **10 simulation seconds**. For example, two power-2 houses and a castle on ordinary ground produce 9 power per collection. Roaming settlers produce none. Pausing stops collection; 2×/4× speed accelerates it. Existing power is retained if a building is lost; creating a new world resets the balance to 10,000 and resets the collection timer. Hover the Power number to see the current income rate.
 
 ### Terraforming costs
 
@@ -96,7 +96,7 @@ Raising or lowering costs **1 power per height level changed per point**. Every 
 The right-hand spell palette lists icons from lowest to highest power cost: Earthquake, Swamp, Volcano, Flood, with hover/focus tooltips. Affordable spell names are light; unaffordable names and icons are dimmed. For **Earthquake, Volcano, and Swamp**, click an icon to select the spell, then **left-click a highlighted tile** to cast at that location. Selection spends no power. **Flood casts immediately when its icon is clicked**, without selecting a map tile. Press **Escape**, right-click, click the selected spell again, or choose a terrain tool to cancel. Spells use a fixed power cost (no additional per-point terraforming cost), and only spend power when they have a valid effect.
 
 - **Earthquake — 500 power:** reshapes points within roughly six tiles of the selected tile: each point has a **10% chance to rise** by one or two levels and a **90% chance to lower**, potentially all the way to water (height 0). Subsidence is applied after uplift so most affected land sinks. Neighboring heights still differ by at most one. The entire interface shakes for one real-time second (suppressed for reduced-motion preferences).
-- **Volcano — 2,000 power:** raises up to three spaced-out points around the selected tile to maximum height **14** (six levels above the old cap), prioritizing a corner of that tile; cascading adjustments create surrounding hills. No power is spent if no eligible nearby points remain.
+- **Volcano — 2,000 power:** raises up to three spaced-out points around the selected tile to maximum height **14** (six levels above the old cap), prioritizing a corner of that tile. All land touched by the full height cascade becomes distinctly gray **volcanic rock**, replacing any swamp there. No power is spent if no eligible nearby points remain.
 - **Flood — 3,000 power:** lowers **every point in the entire world** by one height level, clamped at 0—equivalent to raising the sea level by one. Clicking its icon casts immediately; the effect is global, including offscreen land. Repeated casts can submerge all land; a cast on an already all-water world costs nothing. Flood can destroy homes, remove farming/sheep, and strand settlers who then begin drowning.
 
 - **Swamp — 1,500 power:** each dry surface within a **10-tile Euclidean radius** of the targeted tile has a **75% chance** of becoming swamp. Animated, mottled green mold covers both flat and sloping swamp ground. Swamp is excluded from building support and farmland: a home on swamp releases its resident, and any swamp in a castle’s central nine tiles downgrades it (or releases the owner when the center is swamped). Submerging a swamp tile destroys it permanently; raising that ground later does not restore swamp.
@@ -104,6 +104,12 @@ The right-hand spell palette lists icons from lowest to highest power cost: Eart
 Walking onto swamp or standing on newly swamped ground causes **persistent sickness**. Character power is HP; sick settlers take **1 HP of damage per simulation second**, including after leaving the marsh or moving into a healthy house. Their heads turn green, and Inspect/Population show sickness. There is no automatic cure. At 0 HP they die and leave the population; an occupied building is removed if its resident dies. Pausing stops damage, and speed controls accelerate it. Newborns do not inherit sickness.
 
 All spells update homes, castles, farming, trees, and settler positions just like ordinary terrain edits. Spells can be cast while the simulation is paused.
+
+## Volcanic rock
+
+Rock has a gray/basalt palette distinct from ordinary terrain, with matching contour colors. Flat, dry rock remains buildable and can be farmed. A building anchored on rock produces player power every **10 simulation seconds instead of 5**, and its resident gains character power at **half speed**, doubling all birth cycles (level 1: 240 seconds; castle: 60 seconds). Inspect shows the adjusted growth rate and birth interval, and the Power tooltip separates regular and rock income.
+
+Rock persists through dry terrain edits. Lowering it into water destroys the rock substrate permanently; raising the ground later produces ordinary land. Trees retain the existing preservation rules unless farming or a castle clears them.
 
 ## Structure
 
@@ -123,7 +129,9 @@ All spells update homes, castles, farming, trees, and settler positions just lik
 - `tests/survival.test.mjs` — two-second rescue window, pause, irreversible death, and sinking timing.
 - `src/population.ts` — resident character-power growth, equal-power births, and safe-spawn deferral.
 - `tests/population.test.mjs` — growth scaling, splits, inheritance, pause/speed, and blocked births.
-- `src/power.ts` — periodic simulation-time power collection.
+- `src/rock.ts` — volcano substrate conversion and permanent water cleansing.
+- `tests/rock.test.mjs` — cascade-wide conversion, flat-rock building, slower income/births, and cleansing.
+- `src/power.ts` — periodic simulation-time power collection, including the slower rock-building timer.
 - `tests/power.test.mjs` — building income, timing, speed, pause, and reset tests.
 - `src/settlement.ts` — flat-ground house placement, connected-land power, castle footprints, ownership, and resident release.
 - `tests/settlement.test.mjs` — settlement, occupancy, flooding, and terrain-driven release tests.

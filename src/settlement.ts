@@ -9,6 +9,7 @@ export interface SettlementTile {
   reserved?: boolean;
   castleGap?: boolean;
   swamp?: boolean;
+  rock?: boolean;
 }
 export interface Resident<T extends SettlementTile> {
   tile: T;
@@ -20,8 +21,16 @@ export interface Resident<T extends SettlementTile> {
 
 export function totalBuildingPower<T extends SettlementTile>(
   residents: readonly Resident<T>[],
+  terrain: 'all' | 'normal' | 'rock' = 'all',
 ): number {
-  return residents.reduce((sum, resident) => sum + (resident.home ? resident.power : 0), 0);
+  return residents.reduce((sum, resident) => {
+    if (
+      !resident.home ||
+      (terrain !== 'all' && Boolean(resident.home.rock) !== (terrain === 'rock'))
+    )
+      return sum;
+    return sum + resident.power;
+  }, 0);
 }
 
 /** A home needs horizontal, dry ground, not merely a coplanar hillside. */
