@@ -110,6 +110,12 @@ Walking onto swamp or standing on newly swamped ground causes **persistent sickn
 
 All spells update homes, castles, farming, trees, and settler positions just like ordinary terrain edits. Spells can be cast while the simulation is paused.
 
+## Minimap
+
+The upper-left **WORLD** minimap shows the entire archipelago: teal water and elevation-colored land, red/blue house squares, and larger castle squares. Unhoused living characters appear as team-colored dots only where there is room; leaders and knights get priority and crowded dots are suppressed. A white outline indicates the camera's ground footprint. **Click/tap the minimap to move the camera** without changing zoom or orbit, spending power, or casting the selected spell. It works while paused.
+
+Terrain is cached at coarse resolution to keep small islands visible, and only cells affected by terrain edits are rescanned. Building/character markers and the camera outline refresh approximately seven times per second. The minimap scales down on mobile and short windows to avoid covering the tools.
+
 ## Enemy population and terrain AI
 
 Both sides start with **24 characters, their own leader/pole, and 10,000 power**. The enemy occupies the opposite southeastern corner island; its houses, castles, and shirts are blue (the opposite of the human population). The Population display counts human settlers, with an enemy count alongside it. Human Power and income exclude enemy buildings. Hover the blue enemy-view button for enemy population, housed/castle counts, power, and paid edit count. Click that button or press **E** to inspect the enemy side; **Home / Reset View** returns to the human start.
@@ -158,6 +164,8 @@ Rock persists through dry terrain edits. Lowering it into water destroys the roc
 - `tests/survival.test.mjs` — two-second rescue window, pause, irreversible death, and sinking timing.
 - `src/population.ts` — resident character-power growth, equal-power births, and safe-spawn deferral.
 - `tests/population.test.mjs` — growth scaling, splits, inheritance, pause/speed, and blocked births.
+- `src/minimap.ts` — incremental elevation raster, team markers, crowd suppression, and map navigation coordinates.
+- `tests/minimap.test.mjs` — terrain cache correctness, team glyphs, crowded characters, and coordinate bounds.
 - `src/enemy-ai.ts` — slow, paid terrace planning, friendly-home protection, and castle-site preparation.
 - `tests/enemy-ai.test.mjs` — edit pacing, budgets/cascade costs, castle support, varied heights, and elimination.
 - `src/water-texture.ts` — seamless periodic wave textures, ripple normals, and lightweight simulation-time animation.

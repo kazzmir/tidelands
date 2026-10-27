@@ -1,6 +1,12 @@
 import './style.css';
 import { generateWorldHeights, playerStartAnchor, enemyStartAnchor } from './world-generation';
 import { EnemyTerraformer } from './enemy-ai';
+import {
+  MinimapTerrain,
+  layoutMinimapMarkers,
+  minimapWorldPoint,
+  type MinimapMarker,
+} from './minimap';
 import { TerrainSurface, type GridPoint, type TerrainBounds } from './terrain-surface';
 import { PowerMeter } from './power';
 import { Leadership, buildRallyField, buildPursuitField, rallySteps } from './leadership';
@@ -248,6 +254,98 @@ function startGame(): void {
   const rockColors = Array.from({ length: TerrainSurface.MAX_HEIGHT + 1 }, (_, height) =>
     new THREE.Color('#454853').lerp(new THREE.Color('#aeb1b7'), height / TerrainSurface.MAX_HEIGHT),
   );
+  const minimapCanvas = element<HTMLCanvasElement>('#minimap');
+  const minimapBase = document.createElement('canvas');
+  minimapBase.width = minimapCanvas.width;
+  minimapBase.height = minimapCanvas.height;
+  function minimapContext(canvas: HTMLCanvasElement): CanvasRenderingContext2D {
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Unable to create minimap');
+    return context;
+  }
+  const mapContext = minimapContext(minimapCanvas);
+  const mapBaseContext = minimapContext(minimapBase);
+  const minimapTerrain = new MinimapTerrain(SIZE, minimapCanvas.width, minimapCanvas.height, [
+    '#659e95',
+    ...heightColors.slice(1).map((color) => `#${color.getHexString()}`),
+  ]);
+  const minimapImage = mapBaseContext.createImageData(minimapCanvas.width, minimapCanvas.height);
+  const minimapRay = new THREE.Raycaster();
+  const minimapPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+  let lastMinimapPaint = 0;
+  function updateMinimap(): void {
+    const now = performance.now();
+    if (now - lastMinimapPaint < 150 && !minimapTerrain.needsUpdate) return;
+    lastMinimapPaint = now;
+    const width = minimapCanvas.width,
+      height = minimapCanvas.height;
+    if (minimapTerrain.update(surface)) {
+      minimapImage.data.set(minimapTerrain.pixels);
+      mapBaseContext.putImageData(minimapImage, 0, 0);
+    }
+    mapContext.clearRect(0, 0, width, height);
+    mapContext.drawImage(minimapBase, 0, 0);
+    const markers: MinimapMarker[] = [];
+    for (const settler of settlers) {
+      if (settler.survival.phase !== 'alive' && settler.survival.phase !== 'drowning') continue;
+      if (settler.home)
+        markers.push({
+          x: settler.home.x + 0.5,
+          z: settler.home.z + 0.5,
+          population: settler.population,
+          kind: settler.power === 5 ? 'castle' : 'house',
+        });
+      else
+        markers.push({
+          x: settler.mesh.position.x + SIZE / 2,
+          z: settler.mesh.position.z + SIZE / 2,
+          population: settler.population,
+          kind: 'character',
+          priority:
+            settler === leadership.leader || settler === enemyLeadership.leader
+              ? 3
+              : settler.knight
+                ? 2
+                : 0,
+        });
+    }
+    for (const glyph of layoutMinimapMarkers(SIZE, width, height, markers)) {
+      const x = Math.round(glyph.px - glyph.size / 2),
+        y = Math.round(glyph.py - glyph.size / 2);
+      mapContext.fillStyle = populationShirtColor(glyph.population);
+      mapContext.fillRect(x, y, glyph.size, glyph.size);
+      mapContext.strokeStyle = glyph.priority ? '#ffffff' : '#173c45';
+      mapContext.lineWidth = 1;
+      mapContext.strokeRect(x - 0.5, y - 0.5, glyph.size + 1, glyph.size + 1);
+    }
+    mapContext.beginPath();
+    let first = true;
+    for (const [x, y] of [
+      [-1, -1],
+      [1, -1],
+      [1, 1],
+      [-1, 1],
+    ]) {
+      minimapRay.setFromCamera(new THREE.Vector2(x, y), camera);
+      const point = minimapRay.ray.intersectPlane(minimapPlane, new THREE.Vector3());
+      if (!point) continue;
+      const px = ((point.x + SIZE / 2) / SIZE) * width,
+        py = ((point.z + SIZE / 2) / SIZE) * height;
+      if (first) {
+        mapContext.moveTo(px, py);
+        first = false;
+      } else mapContext.lineTo(px, py);
+    }
+    mapContext.closePath();
+    mapContext.lineWidth = 3;
+    mapContext.strokeStyle = '#173c4599';
+    mapContext.stroke();
+    mapContext.lineWidth = 1;
+    mapContext.strokeStyle = '#ffffff';
+    mapContext.stroke();
+    element('#minimap-player-key').style.color = populationShirtColor(populationColor);
+    element('#minimap-enemy-key').style.color = populationShirtColor(enemyColor);
+  }
   const groundMaterial = new THREE.MeshStandardMaterial({
     vertexColors: true,
     roughness: 1,
@@ -1542,6 +1640,8 @@ function startGame(): void {
     cornerLevels.set(generateWorldHeights(SIZE, seed));
     surface = new TerrainSurface(SIZE, cornerLevels, STEP);
     initialSurface = new TerrainSurface(SIZE, cornerLevels.slice(), STEP);
+    minimapTerrain.invalidate();
+    lastMinimapPaint = 0;
     resetPlayerCamera();
     renderedBounds = cameraTerrainBounds();
     rebuild();
@@ -1824,6 +1924,7 @@ function startGame(): void {
     canvas.addEventListener('contextmenu', (event) => event.preventDefault());
   }
   function refreshTerrainAfterEdit(): void {
+    minimapTerrain.invalidate(surface.changedPoints);
     navigationRevision++;
     clearSubmergedSwamps(surface, swampTiles);
     clearSubmergedRock(surface, rockTiles);
@@ -2036,6 +2137,27 @@ function startGame(): void {
     button.title = `${paused ? 'Resume' : 'Pause'} simulation (Space)`;
   }
   function bindSimulationControls(): void {
+    minimapCanvas.addEventListener('pointerdown', (event) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const bounds = minimapCanvas.getBoundingClientRect();
+      const point = minimapWorldPoint(
+        (event.clientX - bounds.left) / bounds.width,
+        (event.clientY - bounds.top) / bounds.height,
+        SIZE,
+      );
+      const target = new THREE.Vector3(
+        point.x - SIZE / 2 + 0.5,
+        controls.target.y,
+        point.z - SIZE / 2 + 0.5,
+      );
+      camera.position.add(target.clone().sub(controls.target));
+      controls.target.copy(target);
+      controls.update();
+      lastMinimapPaint = 0;
+    });
+    minimapCanvas.addEventListener('contextmenu', (event) => event.preventDefault());
     element('#rally').addEventListener('click', toggleRally);
     element('#pause').addEventListener('click', togglePause);
     element('#enemy-view').addEventListener('click', resetEnemyCamera);
@@ -2381,6 +2503,7 @@ function startGame(): void {
     updateEnemyStatus();
     controls.update();
     const viewChanged = updateVisibleTerrain();
+    updateMinimap();
     sun.position.copy(controls.target).add(new THREE.Vector3(-18, 32, 12));
     sun.target.position.copy(controls.target);
     if ((horizontal || vertical || viewChanged) && lastPointer) updateHover(lastPointer);
