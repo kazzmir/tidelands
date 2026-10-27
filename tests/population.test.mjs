@@ -25,6 +25,21 @@ test('populations have uniform red or blue shirts rather than per-character colo
   assert.doesNotMatch(source,/shirtMaterials\[/);
 });
 
+test('every house and castle gets a flag from the same red/blue palette as shirts',async()=>{
+  const source=await readFile(new URL('../src/main.ts',import.meta.url),'utf8');
+  const ast=ts.createSourceFile('main.ts',source,ts.ScriptTarget.Latest,true);
+  const functions=new Map();
+  function visit(node){
+    if(ts.isFunctionDeclaration(node) && node.name)functions.set(node.name.text,node.getText(ast));
+    ts.forEachChild(node,visit);
+  }
+  visit(ast);
+  for(const name of ['addHouse','addCastle'])assert.match(functions.get(name),/createPopulationFlag\(populationColor\)/);
+  assert.match(functions.get('createPopulationFlag'),/populationMaterials\[population\]/);
+  assert.match(source,/const shirtMaterial = populationMaterials\[populationColor\]/);
+  assert.match(source,/const populationColor: PopulationColor = 'red'/);
+});
+
 test('birth intervals scale from 120 seconds at level 1 to 30 seconds for castles',()=>{
   for (const [index,interval] of [120,97.5,75,52.5,30].entries()) {
     const level = index+1;

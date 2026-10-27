@@ -107,7 +107,7 @@ All spells update homes, castles, farming, trees, and settler positions just lik
 
 ## Population colors
 
-All members of the current population wear the same **red shirt**, including leaders and newborns. **Blue** is the reserved shirt color for a future enemy population; no enemies are spawned yet. Shirt color is independent of character count, sickness, and leadership.
+All members of the current population wear the same **red shirt**, including leaders and newborns. **Blue** is the reserved shirt color for a future enemy population; no enemies are spawned yet. Shirt color is independent of character count, sickness, and leadership. Every house (levels 1–4) and castle always displays a flag in its population's matching red/blue color; flags and shirts share the same palette.
 
 ## Leader and gathering
 

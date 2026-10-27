@@ -25,6 +25,7 @@ import {
   growPopulation,
   INITIAL_CHARACTER_POWER,
   populationShirtColor,
+  type PopulationColor,
 } from './population';
 import {
   fertileLand,
@@ -377,6 +378,24 @@ function startGame(): void {
       trees.add(mesh);
     }
   }
+  const populationColor: PopulationColor = 'red';
+  const populationMaterials: Record<PopulationColor, THREE.MeshStandardMaterial> = {
+    red: new THREE.MeshStandardMaterial({ color: populationShirtColor('red'), roughness: 1 }),
+    blue: new THREE.MeshStandardMaterial({ color: populationShirtColor('blue'), roughness: 1 }),
+  };
+  const flagPoleGeometry = new THREE.BoxGeometry(0.035, 0.75, 0.035);
+  const flagClothGeometry = new THREE.BoxGeometry(0.4, 0.23, 0.025);
+  function createPopulationFlag(population: PopulationColor): THREE.Group {
+    const flag = new THREE.Group();
+    const pole = new THREE.Mesh(flagPoleGeometry, darkMaterial);
+    pole.position.y = 0.375;
+    const cloth = new THREE.Mesh(flagClothGeometry, populationMaterials[population]);
+    cloth.position.set(0.2, 0.61, 0);
+    pole.castShadow = true;
+    cloth.castShadow = true;
+    flag.add(pole, cloth);
+    return flag;
+  }
   function addHouse(tile: Tile, power: HousePower): void {
     // Remove incidental rocks/paths when a settler claims this tile.
     for (const decoration of [...scenery.children]) {
@@ -397,7 +416,10 @@ function startGame(): void {
     door.position.set(0.08, 0.125, 0.3);
     const chimney = new THREE.Mesh(chimneyGeometry, wallMaterial);
     chimney.position.set(-0.2, 0.72, -0.15);
-    group.add(walls, roof, door, chimney);
+    const flag = createPopulationFlag(populationColor);
+    flag.position.set(0.12, 0.68, 0.08);
+    flag.scale.setScalar(0.7);
+    group.add(walls, roof, door, chimney, flag);
     group.position.copy(position(tile));
     const footprint = [-0.4, 0.4].flatMap((dx) =>
       [-0.4, 0.4].map((dz) => surface.sample(tile.x + 0.5 + dx, tile.z + 0.5 + dz)),
@@ -427,7 +449,6 @@ function startGame(): void {
   const castleStone = new THREE.MeshStandardMaterial({ color: '#b6b9a4', roughness: 1 });
   const castleTrim = new THREE.MeshStandardMaterial({ color: '#8c9889', roughness: 1 });
   const castleRoof = new THREE.MeshStandardMaterial({ color: '#855443', roughness: 1 });
-  const castleFlag = new THREE.MeshStandardMaterial({ color: '#c34e45', roughness: 1 });
   function addCastle(home: Tile): void {
     for (const decoration of [...scenery.children]) {
       const tile = decoration.userData.tile as Tile | undefined;
@@ -479,8 +500,9 @@ function startGame(): void {
         }
       }
     }
-    block(0, 2.23, 0, 0.035, 0.75, 0.035, darkMaterial);
-    block(0.2, 2.46, 0, 0.4, 0.23, 0.025, castleFlag);
+    const flag = createPopulationFlag(populationColor);
+    flag.position.y = 1.855;
+    castle.add(flag);
     castle.position.copy(position(home));
     buildings.add(castle);
   }
@@ -993,10 +1015,7 @@ function startGame(): void {
   const skinMaterial = new THREE.MeshStandardMaterial({ color: '#e3bb8b', roughness: 1 });
   const hairMaterial = new THREE.MeshStandardMaterial({ color: '#685139', roughness: 1 });
   const trouserMaterial = new THREE.MeshStandardMaterial({ color: '#54665a', roughness: 1 });
-  const shirtMaterial = new THREE.MeshStandardMaterial({
-    color: populationShirtColor('red'),
-    roughness: 1,
-  });
+  const shirtMaterial = populationMaterials[populationColor];
   const bodyGeometry = new THREE.BoxGeometry(0.17, 0.21, 0.12);
   const headGeometry = new THREE.BoxGeometry(0.135, 0.14, 0.13);
   const hairGeometry = new THREE.BoxGeometry(0.145, 0.055, 0.14);
