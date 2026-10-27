@@ -147,6 +147,12 @@ Nearby opposing outdoor characters automatically face one another and fight in s
 
 Fighters animate alternating strikes and a small body lean, with isolated red emissive materials and soft pulsing red auras. Bright **yellow zigzag lightning bolts** arc back and forth between the fighters at head height, with a moving spark marking each direction. Closing motion and lightning use simulation time, so pause freezes them and speed controls accelerate them. Other characters and shared team materials do not glow. The effects clear after combat or a world reset. Defeated characters use normal death and leader-pole succession. When any living outdoor character contacts an enemy house or castle, the building disappears and its existing resident emerges near the contacted edge. The resident retains their exact accumulated character HP/power (not the house's level), team, and leadership; no extra citizen or free power is created. Castle footprints/buffers, farms, sheep, and building income are removed through normal settlement cleanup. The attacker and released resident immediately pair off and fight. Friendly buildings are untouched, and contact conversion freezes while paused. Inspect identifies fighting characters.
 
+## Leader destination anchor
+
+Click the **anchor button in the bottom toolbar**, then click a map tile to place a visible anchor. Your current human leader leaves any home without losing HP/power, follows dry walkable routes toward it, and waits there instead of building. Knights follow the anchor rather than chasing distant enemies; nearby combat still takes priority. Gathering followers can continue following the moving leader.
+
+Click the same button again to **remove the anchor** (or cancel placement). Escape/right-click cancels pending placement without editing terrain or spending power. Water, blocked, or disconnected destinations lead the leader to the nearest reachable point, where they wait until terrain changes provide a route. The anchor persists for a successor after leadership changes. Pause freezes movement; New world/Test scenario clears the anchor.
+
 ## Leader and gathering
 
 Each new population starts with exactly **one leader**, marked by a large white object on a staff. While walking, the leader carries the object; when housed, the object marks the roof. In normal wandering mode a non-knight leader can build and produce children like other residents, so gathering down to one character does not prevent the population from regrowing. Inspect its tile or hover the Gather button to see its character power/HP.
@@ -189,6 +195,9 @@ Rock persists through dry terrain edits. Lowering it into water destroys the roc
 - `tests/water-texture.test.mjs` — edge/derivative continuity, repeating filters, normals, and animation.
 - `src/knight-armor.ts` — 1.3×-scale silver armor attached to animated body parts.
 - `tests/knight-armor.test.mjs` — scale, full armor coverage, material, animation attachment, and cleanup ownership.
+- `src/leader-anchor.ts` — toggle/placement state and cached destination routes, including unreachable shores and successors.
+- `src/leader-anchor-marker.ts` — visible gold destination anchor.
+- `tests/leader-anchor.test.mjs` — placement/removal, routing, arrival, bridges, succession, and marker geometry.
 - `src/building-contact.ts` — enemy house/castle footprint contact and defender emergence positions.
 - `tests/building-contact.test.mjs` — both populations, footprint limits, power-preserving release, and immediate defender pairing.
 - `src/combat.ts` — stable opponent pairing and simultaneous proportional damage.

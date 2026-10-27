@@ -7,7 +7,7 @@ test('bottom playback panel is content-sized and anchored on the right',async()=
  assert.match(css,/\.bottom-bar\{[^}]*left:auto;right:27px;width:max-content;max-width:calc\(100% - 54px\)/);
  assert.match(css,/\.bottom-bar\{left:auto;right:12px;[^}]*flex-direction:column/);
  const html=await readFile(new URL('../index.html',import.meta.url),'utf8');
- for(const id of ['pause','rally','test-scenario','leader-view','reset-view','tool-hint'])assert.ok(html.includes(`id="${id}"`));
+ for(const id of ['pause','rally','test-scenario','leader-anchor','leader-view','reset-view','tool-hint'])assert.ok(html.includes(`id="${id}"`));
  const header=html.slice(html.indexOf('<header'),html.indexOf('</header>'));
  const toolbar=html.slice(html.indexOf('<div class="bottom-bar">'),html.indexOf('<div class="navigation-hint">'));
  assert.ok(header.includes('id="test-scenario"')&&header.includes('id="new-world"'));

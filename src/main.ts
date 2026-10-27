@@ -5,6 +5,8 @@ import { createEncounterScenario, unoccupiedWalkSteps } from './encounter-scenar
 import { CombatSystem, combatClosingOffset } from './combat';
 import { enemyBuildingContacts, buildingDefenderPoint, touchesBuilding } from './building-contact';
 import { createCombatEffects } from './combat-effects';
+import { LeaderAnchor } from './leader-anchor';
+import { createLeaderAnchorMarker } from './leader-anchor-marker';
 import {
   MinimapTerrain,
   layoutMinimapMarkers,
@@ -101,6 +103,8 @@ function element<T extends HTMLElement>(selector: string): T {
 function createIconRenderer(): (name: string) => string {
   const icons: Record<string, string> = {
     test: '<path d="M9 3h6m-5 0v6l-6 10a1 1 0 0 0 1 2h14a1 1 0 0 0 1-2L14 9V3M7 16h10"/><circle cx="10" cy="18" r=".7"/>',
+    anchor:
+      '<circle cx="12" cy="5" r="2"/><path d="M12 7v14M7 11h10M4 14c0 9 16 9 16 0M4 14l-2 3m18-3 2 3"/>',
     pole: '<path d="M9 10v11m-4 0h8M9 2l4 4-4 4-4-4zM16 13h5m-2-2 2 2-2 2"/>',
     rally: '<path d="M12 3v14m0-14h7l-2 3 2 3h-7M3 20h18M3 12l4 3-4 3m18-6-4 3 4 3"/>',
     refresh:
@@ -881,6 +885,9 @@ function startGame(): void {
   const { water, waterTextures } = createWater();
 
   const settlers: Settler[] = [];
+  const leaderAnchor = new LeaderAnchor<Tile>();
+  const anchorMarker = createLeaderAnchorMarker();
+  scene.add(anchorMarker);
   const combat = new CombatSystem<Settler>();
   const combatEffects = createCombatEffects();
   let combatHudElapsed = 0;
@@ -1152,6 +1159,65 @@ function startGame(): void {
         object.visible = true;
       } else object.visible = false;
     }
+  }
+  function updateAnchorButton(): void {
+    const button = element<HTMLButtonElement>('#leader-anchor');
+    button.classList.toggle('active', leaderAnchor.active);
+    button.setAttribute('aria-pressed', String(leaderAnchor.active));
+    button.setAttribute(
+      'aria-label',
+      leaderAnchor.active ? 'Remove leader destination anchor' : 'Place leader destination anchor',
+    );
+    button.title = leaderAnchor.placing
+      ? 'Click the map to place an anchor; click again to cancel'
+      : leaderAnchor.target
+        ? 'Remove leader destination anchor'
+        : 'Place an anchor for your leader to walk toward';
+  }
+  function toggleLeaderAnchor(): void {
+    if (leaderAnchor.active) {
+      leaderAnchor.reset();
+      anchorMarker.visible = false;
+      toast('Leader anchor removed.');
+    } else {
+      cancelSpell();
+      leaderAnchor.toggle();
+      toast('Click a map location to place the leader anchor.');
+    }
+    if (leadership.leader) leadership.leader.wait = 0;
+    updateAnchorButton();
+    selectTool(tool);
+    if (lastPointer) updateHover(lastPointer);
+  }
+  function placeLeaderAnchor(tile: Tile): void {
+    if (!leaderAnchor.place(tile)) return;
+    const owner = leadership.leader;
+    if (owner?.home && owner.survival.phase === 'alive') {
+      evacuateSettlements([owner], tileAt);
+      reconcileWorldSettlements();
+      navigationRevision++;
+      rebuildBuildings();
+      syncResidentMeshes();
+      updateSettlementStats();
+    }
+    if (owner) owner.wait = 0;
+    updateAnchorButton();
+    selectTool(tool);
+    toast('Your leader will walk toward the anchor. Click the anchor button again to remove it.');
+  }
+  function updateAnchorMarker(): void {
+    const target = leaderAnchor.target;
+    anchorMarker.visible = target !== null;
+    if (!target) return;
+    anchorMarker.position.set(
+      target.x - SIZE / 2 + 0.5,
+      Math.max(SEA, surface.sample(target.x + 0.5, target.z + 0.5)) + 0.08,
+      target.z - SIZE / 2 + 0.5,
+    );
+    anchorMarker.rotation.y = Math.atan2(
+      camera.position.x - anchorMarker.position.x,
+      camera.position.z - anchorMarker.position.z,
+    );
   }
   function focusLeaderPole(): void {
     if (!leadership.leader && !leadership.droppedTile) return;
@@ -1435,6 +1501,9 @@ function startGame(): void {
     return settler;
   }
   function clearSettlers(): void {
+    leaderAnchor.reset();
+    anchorMarker.visible = false;
+    updateAnchorButton();
     combatEffects.clear();
     combat.reset();
     leadership.reset();
@@ -1874,7 +1943,7 @@ function startGame(): void {
           : null;
     hoveredCorner =
       hovered && hit ? surface.nearestCorner(hit.point.x + SIZE / 2, hit.point.z + SIZE / 2) : null;
-    const surfaceSelection = shiftHeld || selectedSpell !== null;
+    const surfaceSelection = shiftHeld || selectedSpell !== null || leaderAnchor.placing;
     hoverTarget = !surfaceSelection && hoveredCorner ? 1 : 0;
     surfaceTarget = surfaceSelection && hovered ? 1 : 0;
     if (surfaceSelection) {
@@ -1929,7 +1998,7 @@ function startGame(): void {
       );
     }
     const info = element('#tile-info');
-    info.hidden = selectedSpell !== null || tool !== 'inspect' || !hovered;
+    info.hidden = selectedSpell !== null || leaderAnchor.placing || tool !== 'inspect' || !hovered;
     if (!selectedSpell && hovered && tool === 'inspect') {
       const kind = hovered.swamp
         ? 'Swamp · Infectious ground'
@@ -1985,7 +2054,7 @@ function startGame(): void {
       info.innerHTML = `<strong>${kind}</strong>${cornerInfo}<br>Tile ${hovered.x}, ${hovered.z} · Corners ${surface.level(hovered.x, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z + 1)}, ${surface.level(hovered.x, hovered.z + 1)}<br>${resident ? `${buildingInfo}<br>1 settler lives here.` : drowning ? 'Drowning — raise the land beneath them to rescue!' : visitors ? `${visitors} settler${visitors > 1 ? 's' : ''} here · ${[...new Set(walkers.map((walker) => walker.population))].join('/')} · HP ${walkerPower}${walkers.some((walker) => combat.opponent(walker)) ? ' · Fighting' : ''}${walkers.some((walker) => walker.sick) ? ' · Sick (-1 HP/s)' : ''}` : 'Select a corner to shape the land.'}${sheepHere ? `<br>${sheepHere} sheep grazing here` : ''}${leaderHere ? `<br>Leader · HP/power ${leaderHere?.characterPower.toFixed(1)}${leaderHere?.knight ? ' · Knight' : ''} · ${leaderHere?.population}` : objectHere ? '<br>White leader object · Walk here to pick it up' : ''}`;
     }
     canvas.style.cursor = hovered
-      ? tool === 'inspect' && !selectedSpell
+      ? tool === 'inspect' && !selectedSpell && !leaderAnchor.placing
         ? 'help'
         : 'crosshair'
       : 'grab';
@@ -2020,6 +2089,11 @@ function startGame(): void {
         return;
       setShift(event.shiftKey);
       updateHover(event);
+      if (leaderAnchor.placing) {
+        if (event.button === 2) cancelSpell();
+        else if (hovered) placeLeaderAnchor(hovered);
+        return;
+      }
       if (selectedSpell) {
         if (event.button === 2) cancelSpell();
         else if (hovered) castSpell(selectedSpell, hovered);
@@ -2090,12 +2164,16 @@ function startGame(): void {
   }
   let shakeTimer: ReturnType<typeof setTimeout>;
   function cancelSpell(): void {
+    leaderAnchor.cancelPlacement();
+    updateAnchorButton();
     selectedSpell = null;
     updatePowerDisplay();
     selectTool(tool);
     if (lastPointer) updateHover(lastPointer);
   }
   function selectSpell(spell: Spell): void {
+    leaderAnchor.cancelPlacement();
+    updateAnchorButton();
     if (selectedSpell === spell) {
       cancelSpell();
       return;
@@ -2237,9 +2315,11 @@ function startGame(): void {
       ],
       inspect: ['Explore your world', 'Hover a tile to discover what lives there'],
     };
-    element('#tool-hint').innerHTML = selectedSpell
-      ? `<strong>Cast ${SPELL_NAMES[selectedSpell]}</strong><span class="hint-detail">Click a tile to cast · Esc or right-click to cancel</span>`
-      : `<strong>${hints[next][0]}</strong><span class="hint-detail">${hints[next][1]}</span>`;
+    element('#tool-hint').innerHTML = leaderAnchor.placing
+      ? '<strong>Place leader anchor</strong><span class="hint-detail">Click a location · Esc or right-click to cancel</span>'
+      : selectedSpell
+        ? `<strong>Cast ${SPELL_NAMES[selectedSpell]}</strong><span class="hint-detail">Click a tile to cast · Esc or right-click to cancel</span>`
+        : `<strong>${hints[next][0]}</strong><span class="hint-detail">${hints[next][1]}</span>`;
     element('#tile-info').hidden = true;
   }
   let paused = false;
@@ -2278,6 +2358,7 @@ function startGame(): void {
     minimapCanvas.addEventListener('contextmenu', (event) => event.preventDefault());
     element('#rally').addEventListener('click', toggleRally);
     element('#pause').addEventListener('click', togglePause);
+    element('#leader-anchor').addEventListener('click', toggleLeaderAnchor);
     element('#leader-view').addEventListener('click', focusLeaderPole);
     document.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach((button) => {
       button.addEventListener('click', () => {
@@ -2307,6 +2388,7 @@ function startGame(): void {
       if (paused) togglePause();
     }
     generateWorld();
+    selectTool(tool);
     hovered = null;
     hoveredCorner = null;
     cornerMarker.visible = false;
@@ -2514,20 +2596,24 @@ function startGame(): void {
         settlementsChanged = true;
         continue;
       }
-      const enemy = settler.knight ? nearestEnemy(settler, settlers, characterTile) : null;
+      const anchoredLeader = leaderAnchor.target !== null && settler === leadership.leader;
+      const enemy =
+        settler.knight && !anchoredLeader ? nearestEnemy(settler, settlers, characterTile) : null;
       if (!settler.target) {
         settler.wait -= dt;
-        if (enemy || settler === enemyBuilder) settler.wait = 0;
+        if (enemy || anchoredLeader || settler === enemyBuilder) settler.wait = 0;
         if (settler.wait > 0) continue;
-        let options = enemy
-          ? knightOptions(settler, enemy)
-          : settler === enemyBuilder
-            ? rallySteps(settler.tile, neighbors(settler.tile), enemyBuildDistance)
-            : leadership.rallying &&
-                settler.population === populationColor &&
-                settler !== leadership.leader
-              ? followerOptions(settler)
-              : neighbors(settler.tile);
+        let options = anchoredLeader
+          ? leaderAnchor.steps(settler, settler.tile, neighbors, isWalkable, navigationRevision)
+          : enemy
+            ? knightOptions(settler, enemy)
+            : settler === enemyBuilder
+              ? rallySteps(settler.tile, neighbors(settler.tile), enemyBuildDistance)
+              : leadership.rallying &&
+                  settler.population === populationColor &&
+                  settler !== leadership.leader
+                ? followerOptions(settler)
+                : neighbors(settler.tile);
         if (encounterTest)
           options = unoccupiedWalkSteps(
             settler,
@@ -2573,6 +2659,7 @@ function startGame(): void {
         if (
           !encounterTest &&
           !settler.knight &&
+          !(leaderAnchor.target && settler === leadership.leader) &&
           !hasNearbyOpponent(settler) &&
           (!leadership.rallying || settler.population !== populationColor) &&
           (settler.population !== enemyColor ||
@@ -2651,6 +2738,7 @@ function startGame(): void {
       totalBuildingPower(blueResidents, 'rock'),
     );
     updatePowerDisplay();
+    updateAnchorMarker();
     updateLeadershipVisual();
     updateRallyButton();
     updateEnemyStatus();
