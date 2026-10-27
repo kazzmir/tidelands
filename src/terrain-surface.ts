@@ -5,6 +5,8 @@ export interface TerraformResult { status: 'changed' | 'limit' | 'insufficient';
 
 /** Integer heights belong to shared grid corners, not tile centers. */
 export class TerrainSurface {
+  static readonly MAX_HEIGHT = 14;
+  readonly maxHeight = TerrainSurface.MAX_HEIGHT;
   /** Includes propagated edits, so scenery and inhabitants can update everywhere affected. */
   readonly changedPoints: GridPoint[] = [];
 
@@ -54,7 +56,7 @@ export class TerrainSurface {
     const change = Math.trunc(delta);
     if (!Number.isFinite(change) || !change || points.some(({ x, z }) =>
       !Number.isInteger(x) || !Number.isInteger(z) || x < 0 || z < 0 || x > this.size || z > this.size
-      || this.level(x, z) + change < 0 || this.level(x, z) + change > 8)) return false;
+      || this.level(x, z) + change < 0 || this.level(x, z) + change > this.maxHeight)) return false;
     const changed = new Set<number>();
     // Apply the entire selection before propagating, so Shift edits move it exactly once.
     for (const { x, z } of points) {

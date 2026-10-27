@@ -9,7 +9,7 @@ async function loadModule(path) {
   return import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
 }
 const {TerrainSurface}=await loadModule('../src/terrain-surface.ts');
-const {earthquake,flood,mountain,SPELL_COSTS}=await loadModule('../src/spells.ts');
+const {earthquake,flood,volcano,SPELL_COSTS}=await loadModule('../src/spells.ts');
 function randomGenerator(){
   let seed=42;
   return()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;};
@@ -17,7 +17,7 @@ function randomGenerator(){
 function assertSlopes(surface){
   for(let z=0;z<=surface.size;z++)for(let x=0;x<=surface.size;x++){
     const h=surface.level(x,z);
-    assert.ok(h>=0 && h<=8);
+    assert.ok(h>=0 && h<=surface.maxHeight);
     for(const [dx,dz] of [[1,0],[0,1],[1,1],[-1,1]]){
       if(x+dx>=0 && x+dx<=surface.size && z+dz<=surface.size)assert.ok(Math.abs(h-surface.level(x+dx,z+dz))<=1);
     }
@@ -25,7 +25,7 @@ function assertSlopes(surface){
 }
 
 test('spells have their configured fixed power costs',()=>{
-  assert.deepEqual(SPELL_COSTS,{earthquake:500,mountain:2000,flood:3000,swamp:1500});
+  assert.deepEqual(SPELL_COSTS,{earthquake:500,volcano:2000,flood:3000,swamp:1500});
 });
 
 test('Flood lowers every terrain point globally by one and clamps at water level',()=>{
@@ -97,27 +97,27 @@ test('earthquake subsidence can flood the affected area all the way to water',()
   assert.ok(water.levels.every(height=>height===0));
 });
 
-test('Mountain raises three supplied visible points to maximum height with valid slopes',()=>{
+test('Volcano raises three supplied points to height 14 with valid slopes',()=>{
   const surface=new TerrainSurface(20,new Uint8Array(441),0.65);
   const visible=[{x:4,z:4},{x:10,z:10},{x:16,z:16}];
-  assert.equal(mountain(surface,visible,()=>0),true);
-  for(const point of visible)assert.equal(surface.level(point.x,point.z),8);
+  assert.equal(volcano(surface,visible,()=>0),true);
+  for(const point of visible)assert.equal(surface.level(point.x,point.z),14);
   assertSlopes(surface);
   assert.ok(surface.changedPoints.length>3);
 });
 
-test('targeted Mountain always prioritizes the nearest corner to the clicked tile',()=>{
+test('targeted Volcano prioritizes the clicked tile and reaches six levels above the old maximum',()=>{
   const surface=new TerrainSurface(24,new Uint8Array(625),0.65);
   const candidates=[{x:0,z:0},{x:3,z:0},{x:6,z:0},{x:20,z:20}];
-  assert.equal(mountain(surface,candidates,()=>0,{x:20.5,z:20.5}),true);
-  assert.equal(surface.level(20,20),8);
+  assert.equal(volcano(surface,candidates,()=>0,{x:20.5,z:20.5}),true);
+  assert.equal(surface.level(20,20),8+6);
   assertSlopes(surface);
 });
 
-test('Mountain cannot modify terrain when no eligible points are in view',()=>{
-  const surface=new TerrainSurface(4,new Uint8Array(25).fill(8),0.65);
+test('Volcano cannot modify terrain when no eligible points are in view',()=>{
+  const surface=new TerrainSurface(4,new Uint8Array(25).fill(14),0.65);
   const before=surface.levels.slice();
-  assert.equal(mountain(surface,[],()=>0),false);
-  assert.equal(mountain(surface,[{x:2,z:2}],()=>0),false);
+  assert.equal(volcano(surface,[],()=>0),false);
+  assert.equal(volcano(surface,[{x:2,z:2}],()=>0),false);
   assert.deepEqual(surface.levels,before);
 });

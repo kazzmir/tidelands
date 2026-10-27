@@ -9,7 +9,7 @@ import {
   clearSubmergedSwamps,
   earthquake,
   flood,
-  mountain,
+  volcano,
   swampTargets,
   SPELL_COSTS,
   SPELL_NAMES,
@@ -83,7 +83,7 @@ function createIconRenderer(): (name: string) => string {
       '<path d="M3 18c2-2 4 2 6 0s4 2 6 0 4 2 6 0M6 14V7m-2 3 2 2 2-2M15 15V4m-3 4 3 3 3-3M10 21h6"/>',
     flood:
       '<path d="M12 2v8m-3-3 3 3 3-3M3 14c2-3 4 3 6 0s4 3 6 0 4 3 6 0M3 20c2-3 4 3 6 0s4 3 6 0 4 3 6 0"/>',
-    mountain: '<path d="m2 19 7-13 5 8 3-5 5 10ZM6 12l3 2 3-2"/>',
+    volcano: '<path d="m3 21 5-11h8l5 11ZM8 10l4 3 4-3M9 6 7 3m5 3V1m3 5 3-3"/>',
     raise: '<path d="m3 16 9 5 9-5M3 12l9 5 9-5M12 12V2m-4 4 4-4 4 4"/>',
     lower: '<path d="m3 17 9 5 9-5M3 13l9 5 9-5M12 2v10m-4-4 4 4 4-4"/>',
     inspect: '<circle cx="10" cy="10" r="6"/><path d="m15 15 6 6M10 7v6M7 10h6"/>',
@@ -203,7 +203,13 @@ function startGame(): void {
     '#205e46', // 5: deep forest green
     '#53675a', // 6: rocky highlands
     '#8c9080', // 7: exposed stone
-    '#dce0d0', // 8: pale summit
+    '#9fa99b', // 8: upper rock
+    '#b2bbae', // 9: pale stone
+    '#c4ccc0', // 10: alpine rock
+    '#d5ddd0', // 11: frosted slopes
+    '#e4eade', // 12: snow line
+    '#eff3e8', // 13: snow
+    '#fafbf5', // 14: high summit
   ].map((color) => new THREE.Color(color));
   const groundMaterial = new THREE.MeshStandardMaterial({
     vertexColors: true,
@@ -1090,23 +1096,29 @@ function startGame(): void {
       }
     }
     if (!intersections.length) intersections.push(controls.target.clone());
+    const direction = camera.position.clone().sub(controls.target);
+    const padding =
+      Math.ceil(
+        (TerrainSurface.MAX_HEIGHT * STEP * Math.hypot(direction.x, direction.z)) /
+          Math.max(0.1, Math.abs(direction.y)),
+      ) + 2;
     const x = THREE.MathUtils.clamp(
-      Math.floor((Math.min(...intersections.map((p) => p.x)) + SIZE / 2) / 16) * 16 - 8,
+      Math.floor((Math.min(...intersections.map((p) => p.x)) + SIZE / 2) / 16) * 16 - padding,
       0,
       SIZE - 1,
     );
     const z = THREE.MathUtils.clamp(
-      Math.floor((Math.min(...intersections.map((p) => p.z)) + SIZE / 2) / 16) * 16 - 8,
+      Math.floor((Math.min(...intersections.map((p) => p.z)) + SIZE / 2) / 16) * 16 - padding,
       0,
       SIZE - 1,
     );
     const right = THREE.MathUtils.clamp(
-      Math.ceil((Math.max(...intersections.map((p) => p.x)) + SIZE / 2) / 16) * 16 + 8,
+      Math.ceil((Math.max(...intersections.map((p) => p.x)) + SIZE / 2) / 16) * 16 + padding,
       x + 1,
       SIZE,
     );
     const bottom = THREE.MathUtils.clamp(
-      Math.ceil((Math.max(...intersections.map((p) => p.z)) + SIZE / 2) / 16) * 16 + 8,
+      Math.ceil((Math.max(...intersections.map((p) => p.z)) + SIZE / 2) / 16) * 16 + padding,
       z + 1,
       SIZE,
     );
@@ -1403,7 +1415,7 @@ function startGame(): void {
       if (result.status === 'limit') {
         toast(
           shiftHeld
-            ? 'All four corners must stay between sea level and height 8.'
+            ? `All four corners must stay between sea level and height ${TerrainSurface.MAX_HEIGHT}.`
             : action === 'raise'
               ? 'This corner is as close to the sky as it can go.'
               : 'This corner is already at sea level.',
@@ -1490,7 +1502,7 @@ function startGame(): void {
             if (Math.hypot(x - center.x, z - center.z) <= 3) nearby.push({ x, z });
           }
         }
-        changed = mountain(preview, nearby, random, center);
+        changed = volcano(preview, nearby, random, center);
       }
     }
     if (!changed) {
@@ -1518,7 +1530,7 @@ function startGame(): void {
     refreshTerrainAfterEdit();
     const messages: Record<Spell, string> = {
       earthquake: 'The earth trembles.',
-      mountain: 'Mountains rise from the shore.',
+      volcano: 'A volcano rises above the land.',
       flood: 'The seas rise. All land sinks one level.',
       swamp: 'A sickly marsh spreads across the land.',
     };

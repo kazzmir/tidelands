@@ -1,15 +1,15 @@
 import type { GridPoint, TerrainSurface } from './terrain-surface';
 
-export type Spell = 'earthquake' | 'mountain' | 'flood' | 'swamp';
+export type Spell = 'earthquake' | 'volcano' | 'flood' | 'swamp';
 export const SPELL_COSTS: Record<Spell, number> = {
   earthquake: 500,
-  mountain: 2000,
+  volcano: 2000,
   flood: 3000,
   swamp: 1500,
 };
 export const SPELL_NAMES: Record<Spell, string> = {
   earthquake: 'Earthquake',
-  mountain: 'Mountain',
+  volcano: 'Volcano',
   flood: 'Flood',
   swamp: 'Swamp',
 };
@@ -49,7 +49,11 @@ export function earthquake(
       if (Math.hypot(x - center.x, z - center.z) > radius) continue;
       const current = surface.level(x, z);
       if (random() < 0.1) {
-        rises.push({ x, z, height: Math.min(8, current + 1 + Math.floor(random() * 2)) });
+        rises.push({
+          x,
+          z,
+          height: Math.min(surface.maxHeight, current + 1 + Math.floor(random() * 2)),
+        });
       } else {
         falls.push({ x, z, height: Math.max(0, current - 1 - Math.floor(random() * current)) });
       }
@@ -122,14 +126,14 @@ export function flood(surface: TerrainSurface): boolean {
   return surface.changedPoints.length > 0;
 }
 
-export function mountain(
+export function volcano(
   surface: TerrainSurface,
   visible: readonly GridPoint[],
   random: () => number,
   target?: GridPoint,
 ): boolean {
   const before = surface.levels.slice();
-  const candidates = visible.filter((point) => surface.level(point.x, point.z) < 8);
+  const candidates = visible.filter((point) => surface.level(point.x, point.z) < surface.maxHeight);
   const selected: GridPoint[] = [];
   if (target && candidates.length) {
     candidates.sort(
@@ -146,6 +150,6 @@ export function mountain(
     selected.push(point);
   }
   for (const point of selected)
-    surface.editCorner(point.x, point.z, 8 - surface.level(point.x, point.z));
+    surface.editCorner(point.x, point.z, surface.maxHeight - surface.level(point.x, point.z));
   return recordChanges(surface, before);
 }

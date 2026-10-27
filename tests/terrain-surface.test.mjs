@@ -45,7 +45,7 @@ test('whole-surface edits preserve flatness and reject partial edits at limits',
   assert.equal(surface.editTile(0, 0, 1), true);
   close(surface.sample(0.1, 0.8), 1.26);
   close(surface.sample(0.7, 0.2), 1.26);
-  for (const levels of [new Uint8Array([0, 1, 1, 1]), new Uint8Array([7, 7, 8, 7])]) {
+  for (const levels of [new Uint8Array([0, 1, 1, 1]), new Uint8Array([13, 13, 14, 13])]) {
     const bounded = new TerrainSurface(1, levels, 0.42);
     const before = levels.slice();
     assert.equal(bounded.editTile(0, 0, levels.includes(0) ? -1 : 1), false);
@@ -108,7 +108,7 @@ function assertSlopeLimit(surface) {
   for (let z = 0; z <= surface.size; z++) {
     for (let x = 0; x <= surface.size; x++) {
       const h = surface.level(x, z);
-      assert.ok(h >= 0 && h <= 8);
+      assert.ok(h >= 0 && h <= surface.maxHeight);
       if (x < surface.size) assert.ok(Math.abs(h - surface.level(x + 1, z)) <= 1, `steep x edge at ${x},${z}`);
       if (z < surface.size) assert.ok(Math.abs(h - surface.level(x, z + 1)) <= 1, `steep z edge at ${x},${z}`);
       if (x < surface.size && z < surface.size) assert.ok(Math.abs(h - surface.level(x + 1, z + 1)) <= 1, `steep diagonal at ${x},${z}`);
@@ -170,13 +170,13 @@ test('mixed corner and surface edits maintain the slope limit, including map edg
   }
 });
 
-test('height zero is submerged; corner heights stay within 0–8', () => {
+test('height zero is submerged; corner heights stay within 0–14', () => {
   const surface = new TerrainSurface(1, new Uint8Array(4), 0.42);
   close(surface.sample(0.5, 0.5), 0);
   assert.equal(surface.editCorner(0, 0, -1), false);
-  assert.equal(surface.editCorner(0, 0, 8), true);
+  assert.equal(surface.editCorner(0, 0, 14), true);
   assert.equal(surface.editCorner(0, 0, 1), false);
-  assert.equal(surface.level(0, 0), 8);
+  assert.equal(surface.level(0, 0), 14);
   assert.equal(surface.editCorner(-1, 0, 1), false);
   assert.equal(surface.editCorner(2, 0, 1), false);
 });
