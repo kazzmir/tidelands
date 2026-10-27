@@ -13,7 +13,7 @@ async function moduleUrl(path, dependencies = {}) {
 }
 const terrainUrl = await moduleUrl('../src/terrain-surface.ts');
 const { TerrainSurface } = await import(terrainUrl);
-const { generateWorldHeights, generateWorldLayout, playerStartAnchor } = await import(await moduleUrl('../src/world-generation.ts', { './terrain-surface': terrainUrl }));
+const { generateWorldHeights, generateWorldLayout, playerStartAnchor, enemyStartAnchor } = await import(await moduleUrl('../src/world-generation.ts', { './terrain-surface': terrainUrl }));
 
 const size = 1000, width = size + 1;
 const start = playerStartAnchor(size);
@@ -44,8 +44,17 @@ test('human starting land is near the far western edge, with room for its natura
   assert.ok(Math.abs(home.x-start.x)<=4 && Math.abs(home.z-start.z)<=4);
   assert.ok(home.peaks.every(peak=>peak.x-peak.height+1>=0 && peak.x+peak.height-1<size));
   const source=await readFile(new URL('../src/main.ts',import.meta.url),'utf8');
-  assert.match(source,/Math.hypot\(t.x - playerStart.x, t.z - playerStart.z\)/);
+  assert.match(source,/Math.hypot\(tile.x - anchor.x, tile.z - anchor.z\)/);
   assert.match(source,/element\('#reset-view'\).addEventListener\('click', resetPlayerCamera\)/);
+});
+
+test('enemy start uses the farthest inset corner on the opposite side',()=>{
+  const enemy=enemyStartAnchor(size);
+  assert.deepEqual(enemy,{x:952,z:952});
+  const distance=Math.hypot(enemy.x-start.x,enemy.z-start.z);
+  assert.ok(distance>1000);
+  for(const x of [48,952])for(const z of [48,952])assert.ok(Math.hypot(x-start.x,z-start.z)<=distance);
+  assert.ok(layout.clusters.some(cluster=>Math.abs(cluster.x-952)<=4 && Math.abs(cluster.z-952)<=4));
 });
 
 test('clustered peaks naturally form connected multi-mountain landmasses within 30–100 tiles', () => {

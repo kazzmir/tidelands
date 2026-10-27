@@ -16,6 +16,14 @@ export function playerStartAnchor(size: number): GridPoint {
   return { x: Math.min(48, Math.floor(size / 2)), z: Math.floor(size / 2) };
 }
 
+/** Choose the opposite inset corner for maximum separation while retaining full island margins. */
+export function enemyStartAnchor(size: number): GridPoint {
+  const player = playerStartAnchor(size);
+  const margin = Math.min(48, Math.floor(size / 2));
+  const far = Math.min(size - 1, size - margin);
+  return { x: player.x <= size / 2 ? far : margin, z: player.z <= size / 2 ? far : margin };
+}
+
 /** Cluster high points closely enough that their slope-constrained foothills naturally meet. */
 export function generateWorldLayout(size: number, seed: number): WorldLayout {
   let state = seed >>> 0;

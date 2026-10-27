@@ -80,6 +80,28 @@ export function buildRallyField<T>(
   return distance;
 }
 
+/** Pursue across land, or advance to the nearest reachable shore until a causeway exists. */
+export function buildPursuitField<T extends { x: number; z: number }>(
+  start: T,
+  goals: readonly T[],
+  target: { x: number; z: number },
+  neighbors: (tile: T) => readonly T[],
+): Map<T, number> {
+  const direct = buildRallyField(goals, neighbors);
+  if (direct.has(start)) return direct;
+  const reachable = buildRallyField([start], neighbors);
+  let closest = start,
+    best = Infinity;
+  for (const tile of reachable.keys()) {
+    const distance = (tile.x - target.x) ** 2 + (tile.z - target.z) ** 2;
+    if (distance < best) {
+      closest = tile;
+      best = distance;
+    }
+  }
+  return buildRallyField([closest], neighbors);
+}
+
 export function rallySteps<T>(
   tile: T,
   options: readonly T[],

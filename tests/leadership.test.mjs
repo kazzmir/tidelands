@@ -8,7 +8,7 @@ async function loadModule(path){
   const {code:outputText}=await transformWithOxc(source,'test.ts',{target:'es2022'});
   return import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
 }
-const {Leadership,buildRallyField,rallySteps}=await loadModule('../src/leadership.ts');
+const {Leadership,buildRallyField,buildPursuitField,rallySteps}=await loadModule('../src/leadership.ts');
 const {TerrainSurface}=await loadModule('../src/terrain-surface.ts');
 const {growPopulation}=await loadModule('../src/population.ts');
 const {trySettle,reconcileSettlements,evacuateSettlements}=await loadModule('../src/settlement.ts');
@@ -95,6 +95,17 @@ test('reverse rally routes detour around obstacles and always approach the targe
   assert.equal(steps,12);
   const isolated={x:20,z:20};
   assert.deepEqual(rallySteps(isolated,[],field),[]);
+});
+
+test('pursuit advances to a reachable shore without walking into water, then uses a new causeway',()=>{
+ const tiles=new Map([0,1,2,10,11].map(x=>[x,{x,z:0}]));
+ const neighbors=tile=>[tiles.get(tile.x-1),tiles.get(tile.x+1)].filter(Boolean);
+ const start=tiles.get(0),goal=tiles.get(11);
+ const coast=buildPursuitField(start,[goal],goal,neighbors);
+ assert.equal(coast.get(start),2);assert.deepEqual(rallySteps(tiles.get(2),neighbors(tiles.get(2)),coast),[]);
+ for(let x=3;x<10;x++)tiles.set(x,{x,z:0});
+ const bridge=buildPursuitField(start,[goal],goal,neighbors);
+ assert.equal(bridge.get(start),11);assert.equal(bridge.get(goal),0);
 });
 
 test('rally evacuation preserves character power and clears houses and castle reservations',()=>{

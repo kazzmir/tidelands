@@ -2,7 +2,7 @@ import type { HousePower, Resident, SettlementTile } from './settlement';
 
 export type PopulationColor = 'red' | 'blue';
 
-/** Uniform team colors: the current population is red; future enemies use blue. */
+/** Uniform, opposing team colors: human red and enemy blue. */
 export function populationShirtColor(population: PopulationColor): string {
   return population === 'red' ? '#d33136' : '#2d64d6';
 }
