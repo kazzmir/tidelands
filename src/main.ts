@@ -1360,12 +1360,18 @@ function startGame(): void {
       toast(`${SPELL_NAMES[spell]} needs ${SPELL_COSTS[spell].toLocaleString()} power.`);
       return;
     }
+    if (spell === 'flood') {
+      cancelSpell();
+      castSpell(spell);
+      return;
+    }
     selectedSpell = spell;
     updatePowerDisplay();
     selectTool(tool);
     if (lastPointer) updateHover(lastPointer);
   }
-  function castSpell(spell: Spell, target: Tile): void {
+  function castSpell(spell: Spell, target?: Tile): void {
+    if (spell !== 'flood' && !target) return;
     const cost = SPELL_COSTS[spell];
     if (powerMeter.value < cost) {
       toast(`${SPELL_NAMES[spell]} needs ${cost.toLocaleString()} power.`);
@@ -1375,19 +1381,21 @@ function startGame(): void {
     camera.updateMatrixWorld();
     const preview = new TerrainSurface(SIZE, cornerLevels.slice(), STEP);
     let changed = false;
-    const center = { x: target.x + 0.5, z: target.z + 0.5 };
     if (spell === 'flood') {
       changed = flood(preview);
-    } else if (spell === 'earthquake') {
-      changed = earthquake(preview, center, random);
-    } else {
-      const nearby: GridPoint[] = [];
-      for (let z = Math.max(0, target.z - 2); z <= Math.min(SIZE, target.z + 3); z++) {
-        for (let x = Math.max(0, target.x - 2); x <= Math.min(SIZE, target.x + 3); x++) {
-          if (Math.hypot(x - center.x, z - center.z) <= 3) nearby.push({ x, z });
+    } else if (target) {
+      const center = { x: target.x + 0.5, z: target.z + 0.5 };
+      if (spell === 'earthquake') {
+        changed = earthquake(preview, center, random);
+      } else {
+        const nearby: GridPoint[] = [];
+        for (let z = Math.max(0, target.z - 2); z <= Math.min(SIZE, target.z + 3); z++) {
+          for (let x = Math.max(0, target.x - 2); x <= Math.min(SIZE, target.x + 3); x++) {
+            if (Math.hypot(x - center.x, z - center.z) <= 3) nearby.push({ x, z });
+          }
         }
+        changed = mountain(preview, nearby, random, center);
       }
-      changed = mountain(preview, nearby, random, center);
     }
     if (!changed) {
       toast(
@@ -1448,7 +1456,7 @@ function startGame(): void {
       inspect: ['Explore your world', 'Hover a tile to discover what lives there'],
     };
     element('#tool-hint').innerHTML = selectedSpell
-      ? `<strong>Cast ${SPELL_NAMES[selectedSpell]}</strong><span class="hint-detail">${selectedSpell === 'flood' ? 'Click any tile to flood the world' : 'Click a tile to cast'} · Esc or right-click to cancel</span>`
+      ? `<strong>Cast ${SPELL_NAMES[selectedSpell]}</strong><span class="hint-detail">Click a tile to cast · Esc or right-click to cancel</span>`
       : `<strong>${hints[next][0]}</strong><span class="hint-detail">${hints[next][1]}</span>`;
     element('#tile-info').hidden = true;
   }
