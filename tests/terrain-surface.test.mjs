@@ -1,13 +1,11 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import ts from 'typescript';
+import { transformWithOxc } from 'vite';
 
 // Compile the pure TypeScript surface module in memory; no extra test runner needed.
 const source = await readFile(new URL('../src/terrain-surface.ts', import.meta.url), 'utf8');
-const { outputText } = ts.transpileModule(source, {
-  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
-});
+const { code: outputText } = await transformWithOxc(source, 'test.ts', { target: 'es2022' });
 const { TerrainSurface } = await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
 const close = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-6, `${actual} != ${expected}`);
 const field = () => new TerrainSurface(4, Uint8Array.from({ length: 25 }, (_, i) => i % 5 < 2 ? 1 : 2), 0.42);

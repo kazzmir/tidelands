@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import test from 'node:test';
-import ts from 'typescript';
+import {transformWithOxc} from 'vite';
 
 const source=await readFile(new URL('../src/survival.ts',import.meta.url),'utf8');
-const {outputText}=ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}});
+const {code:outputText}=await transformWithOxc(source,'test.ts',{target:'es2022'});
 const {advanceSurvival,createSurvival,DROWNING_SECONDS,SINKING_SECONDS}=await import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
 
 test('flooding begins drowning immediately, even while paused',()=>{

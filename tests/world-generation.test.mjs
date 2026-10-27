@@ -1,13 +1,11 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import ts from 'typescript';
+import { transformWithOxc } from 'vite';
 
 async function moduleUrl(path, dependencies = {}) {
   const source = await readFile(new URL(path, import.meta.url), 'utf8');
-  let { outputText } = ts.transpileModule(source, {
-    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ES2022 },
-  });
+  let { code: outputText } = await transformWithOxc(source, 'test.ts', { target: 'es2022' });
   for (const [name, url] of Object.entries(dependencies)) {
     outputText = outputText.replaceAll(`'${name}'`, JSON.stringify(url)).replaceAll(`"${name}"`, JSON.stringify(url));
   }

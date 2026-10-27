@@ -1,6 +1,6 @@
 # Tidelands
 
-A small, Populous-inspired isometric sandbox built with **Three.js**, **strict TypeScript**, and **Vite 8.3.4**. All scenery is generated in code; no game assets are required. The optional Google Fonts stylesheet falls back to system fonts offline.
+A small, Populous-inspired isometric sandbox built with **Three.js**, **strict TypeScript 7.0.2**, and **Vite 8.3.4**. All scenery is generated in code; no game assets are required. The optional Google Fonts stylesheet falls back to system fonts offline.
 
 ## Run
 
@@ -12,10 +12,12 @@ npm run dev
 Open the local URL printed by Vite. Requires Node.js 22.12+ (or 20.19+).
 
 ```sh
-npm test         # Check slope continuity and terrain sampling
+npm test         # Run simulation and architecture tests
 npm run build    # Type-check and produce dist/
 npm run preview # Serve the production build
 ```
+
+Tests use Vite's Oxc transformer and parser rather than the legacy TypeScript compiler API removed in TypeScript 7. Type-checking uses the pinned TypeScript 7.0.2 compiler.
 
 ## World size and rendering
 

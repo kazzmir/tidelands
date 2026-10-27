@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import ts from 'typescript';
+import {transformWithOxc,parseSync} from 'vite';
 
 async function loadModule(path) {
   const source = await readFile(new URL(path, import.meta.url),'utf8');
-  const {outputText} = ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}});
+  const {code:outputText} = await transformWithOxc(source,'test.ts',{target:'es2022'});
   return import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
 }
 const {birthInterval,characterGrowthRate,growPopulation,INITIAL_CHARACTER_POWER,populationShirtColor} = await loadModule('../src/population.ts');
@@ -27,13 +27,17 @@ test('populations have uniform red or blue shirts rather than per-character colo
 
 test('every house and castle gets a flag from the same red/blue palette as shirts',async()=>{
   const source=await readFile(new URL('../src/main.ts',import.meta.url),'utf8');
-  const ast=ts.createSourceFile('main.ts',source,ts.ScriptTarget.Latest,true);
+  const {program}=parseSync('main.ts',source);
   const functions=new Map();
   function visit(node){
-    if(ts.isFunctionDeclaration(node) && node.name)functions.set(node.name.text,node.getText(ast));
-    ts.forEachChild(node,visit);
+    if(!node || typeof node!=='object')return;
+    if(node.type==='FunctionDeclaration' && node.id)functions.set(node.id.name,source.slice(node.start,node.end));
+    for(const value of Object.values(node)){
+      if(Array.isArray(value))value.forEach(visit);
+      else if(value && typeof value==='object')visit(value);
+    }
   }
-  visit(ast);
+  visit(program);
   for(const name of ['addHouse','addCastle'])assert.match(functions.get(name),/createPopulationFlag\(population\)/);
   assert.match(functions.get('createPopulationFlag'),/populationMaterials\[population\]/);
   assert.match(source,/const shirtMaterial = populationMaterials\[population\]/);
