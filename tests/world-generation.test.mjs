@@ -32,7 +32,7 @@ test('a 1000×1000 world grows varied-height land from summit seeds while preser
       if (x + dx >= 0 && x + dx <= size && z + dz <= size && Math.abs(h - levels[(z + dz) * width + x + dx]) > 1) assert.fail(`steep terrain at ${x},${z}`);
     }
   }
-  assert.ok(land > 4000 && land < 85000, `${land} dry points`);
+  assert.ok(land > 40000 && land < 300000, `${land} dry points`);
   assert.ok(startingLand > 1000, `${startingLand} dry points near the start`);
   assert.ok(heights.size >= 6);
 });
@@ -49,7 +49,7 @@ test('human starting land is near the far western edge, with room for its natura
 });
 
 test('clustered peaks naturally form connected multi-mountain landmasses within 30–100 tiles', () => {
-  assert.equal(layout.clusters.length, 9);
+  assert.equal(layout.clusters.length, 81);
   for (const cluster of layout.clusters) {
     assert.ok(cluster.peaks.length >= 3);
     const left = Math.min(...cluster.peaks.map(p => p.x - p.height + 1));
@@ -72,6 +72,14 @@ test('clustered peaks naturally form connected multi-mountain landmasses within 
       assert.equal(levels[peak.z * width + peak.x], peak.height);
       assert.ok(visited.has(peak.z * width + peak.x), 'peaks should be joined by naturally raised foothills');
     }
+  }
+});
+
+test('islands cover every region of the map, not only the player start and central area',()=>{
+  const regions=new Set(layout.clusters.map(cluster=>`${Math.min(4,Math.floor(cluster.x/200))},${Math.min(4,Math.floor(cluster.z/200))}`));
+  assert.equal(regions.size,25,'all 25 broad map regions should have islands');
+  for(const [x,z] of [[48,48],[952,48],[48,952],[952,952],[952,500],[500,500]]){
+    assert.ok(layout.clusters.some(cluster=>Math.abs(cluster.x-x)<=4 && Math.abs(cluster.z-z)<=4),`missing island near ${x},${z}`);
   }
 });
 
