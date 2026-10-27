@@ -27,6 +27,8 @@ Only a padded camera region is converted into render geometry; that region strea
 
 ## Controls
 
+Playback, speed, and camera controls sit in a compact, right-aligned bottom panel, stacking on mobile rather than spanning the full game width.
+
 - **Left-click:** raise the nearest grid corner one level, regardless of the selected tool.
 - **Right-click:** lower the nearest grid corner one level. Level 0 is water.
 - A red point with a softly fading halo highlights the selected corner. Its height is shared by up to four neighboring tiles. Surrounding points automatically adjust as needed so neighboring heights never differ by more than one level, including diagonally.
