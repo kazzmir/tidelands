@@ -13,9 +13,10 @@ async function moduleUrl(path, dependencies = {}) {
 }
 const terrainUrl = await moduleUrl('../src/terrain-surface.ts');
 const { TerrainSurface } = await import(terrainUrl);
-const { generateWorldHeights, generateWorldLayout } = await import(await moduleUrl('../src/world-generation.ts', { './terrain-surface': terrainUrl }));
+const { generateWorldHeights, generateWorldLayout, playerStartAnchor } = await import(await moduleUrl('../src/world-generation.ts', { './terrain-surface': terrainUrl }));
 
 const size = 1000, width = size + 1;
+const start = playerStartAnchor(size);
 const layout = generateWorldLayout(size, 34);
 const levels = generateWorldHeights(size, 34);
 
@@ -26,7 +27,7 @@ test('a 1000×1000 world grows varied-height land from summit seeds while preser
   for (let z = 0; z <= size; z++) for (let x = 0; x <= size; x++) {
     const h = levels[z * width + x];
     assert.ok(h <= 8);
-    if (h > 0) { land++; heights.add(h); if (Math.abs(x - 500) <= 50 && Math.abs(z - 500) <= 50) startingLand++; }
+    if (h > 0) { land++; heights.add(h); if (Math.abs(x - start.x) <= 50 && Math.abs(z - start.z) <= 50) startingLand++; }
     for (const [dx, dz] of [[1, 0], [0, 1], [1, 1], [-1, 1]]) {
       if (x + dx >= 0 && x + dx <= size && z + dz <= size && Math.abs(h - levels[(z + dz) * width + x + dx]) > 1) assert.fail(`steep terrain at ${x},${z}`);
     }
@@ -34,6 +35,17 @@ test('a 1000×1000 world grows varied-height land from summit seeds while preser
   assert.ok(land > 4000 && land < 85000, `${land} dry points`);
   assert.ok(startingLand > 1000, `${startingLand} dry points near the start`);
   assert.ok(heights.size >= 6);
+});
+
+test('human starting land is near the far western edge, with room for its natural foothills',async()=>{
+  assert.deepEqual(start,{x:48,z:500});
+  assert.ok(size/2-start.x>=450);
+  const home=layout.clusters[4];
+  assert.ok(Math.abs(home.x-start.x)<=4 && Math.abs(home.z-start.z)<=4);
+  assert.ok(home.peaks.every(peak=>peak.x-peak.height+1>=0 && peak.x+peak.height-1<size));
+  const source=await readFile(new URL('../src/main.ts',import.meta.url),'utf8');
+  assert.match(source,/Math.hypot\(t.x - playerStart.x, t.z - playerStart.z\)/);
+  assert.match(source,/element\('#reset-view'\).addEventListener\('click', resetPlayerCamera\)/);
 });
 
 test('clustered peaks naturally form connected multi-mountain landmasses within 30–100 tiles', () => {

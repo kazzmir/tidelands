@@ -1,5 +1,5 @@
 import './style.css';
-import { generateWorldHeights } from './world-generation';
+import { generateWorldHeights, playerStartAnchor } from './world-generation';
 import { TerrainSurface, type GridPoint, type TerrainBounds } from './terrain-surface';
 import { PowerMeter } from './power';
 import { Leadership, buildRallyField, rallySteps } from './leadership';
@@ -148,9 +148,9 @@ function createWorldView() {
   controls.maxZoom = 8;
   controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.ROTATE, RIGHT: null };
   controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
-  function resetCamera(): void {
-    camera.position.set(34, 34, 34);
-    controls.target.set(0, 0, 0);
+  function resetCamera(target = new THREE.Vector3()): void {
+    camera.position.copy(target).add(new THREE.Vector3(34, 34, 34));
+    controls.target.copy(target);
     camera.zoom = 1;
     camera.updateProjectionMatrix();
     controls.update();
@@ -181,6 +181,12 @@ function startGame(): void {
   initializeIcons(icon);
   const { canvas, world, renderer, scene, camera, controls, sun, resetCamera } = createWorldView();
   const SIZE = 1000;
+  const playerStart = playerStartAnchor(SIZE);
+  function resetPlayerCamera(): void {
+    resetCamera(
+      new THREE.Vector3(playerStart.x - SIZE / 2 + 0.5, 0, playerStart.z - SIZE / 2 + 0.5),
+    );
+  }
   const STEP = 0.65;
   const SEA = 0.08;
   const powerMeter = new PowerMeter(5, 10_000);
@@ -1192,7 +1198,7 @@ function startGame(): void {
     clearSettlers();
     const walkable = visibleTiles.filter(
       (t) =>
-        Math.hypot(t.x - SIZE / 2, t.z - SIZE / 2) < 14 &&
+        Math.hypot(t.x - playerStart.x, t.z - playerStart.z) < 14 &&
         t.height > 1 &&
         isWalkable(t) &&
         neighbors(t).length > 0,
@@ -1447,6 +1453,7 @@ function startGame(): void {
     cornerLevels.set(generateWorldHeights(SIZE, seed));
     surface = new TerrainSurface(SIZE, cornerLevels, STEP);
     initialSurface = new TerrainSurface(SIZE, cornerLevels.slice(), STEP);
+    resetPlayerCamera();
     renderedBounds = cameraTerrainBounds();
     rebuild();
     spawnSettlers();
@@ -1935,7 +1942,7 @@ function startGame(): void {
           .forEach((node) => node.classList.toggle('selected', node === button));
       });
     });
-    element('#reset-view').addEventListener('click', resetCamera);
+    element('#reset-view').addEventListener('click', resetPlayerCamera);
     element('#new-world').addEventListener('click', () => {
       clearTimeout(shakeTimer);
       document.body.classList.remove('earthquake-shake');
@@ -1943,7 +1950,6 @@ function startGame(): void {
       selectTool(tool);
       seed += 17;
       simulationTime = 0;
-      resetCamera();
       generateWorld();
       hovered = null;
       hoveredCorner = null;

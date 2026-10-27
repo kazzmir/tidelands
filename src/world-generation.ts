@@ -11,6 +11,11 @@ export interface WorldLayout {
   peaks: TerrainPeak[];
 }
 
+/** Leave only enough western margin for the full 35-tile cluster, slopes, and seed jitter. */
+export function playerStartAnchor(size: number): GridPoint {
+  return { x: Math.min(48, Math.floor(size / 2)), z: Math.floor(size / 2) };
+}
+
 /** Cluster high points closely enough that their slope-constrained foothills naturally meet. */
 export function generateWorldLayout(size: number, seed: number): WorldLayout {
   let state = seed >>> 0;
@@ -18,12 +23,16 @@ export function generateWorldLayout(size: number, seed: number): WorldLayout {
     state = (state * 1664525 + 1013904223) >>> 0;
     return state / 4294967296;
   };
+  const start = playerStartAnchor(size);
   const clusters: PeakCluster[] = [];
   const peaks: TerrainPeak[] = [];
   for (let row = -1; row <= 1; row++) {
     for (let column = -1; column <= 1; column++) {
       const cluster: PeakCluster = {
-        x: Math.round(size / 2) + column * 110 + Math.floor(random() * 9) - 4,
+        x:
+          (row === 0 && column === 0 ? start.x : Math.round(size / 2) + column * 110) +
+          Math.floor(random() * 9) -
+          4,
         z: Math.round(size / 2) + row * 110 + Math.floor(random() * 9) - 4,
         peaks: [],
       };
