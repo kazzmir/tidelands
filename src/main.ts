@@ -24,6 +24,7 @@ import {
   characterGrowthRate,
   growPopulation,
   INITIAL_CHARACTER_POWER,
+  populationShirtColor,
 } from './population';
 import {
   fertileLand,
@@ -992,19 +993,17 @@ function startGame(): void {
   const skinMaterial = new THREE.MeshStandardMaterial({ color: '#e3bb8b', roughness: 1 });
   const hairMaterial = new THREE.MeshStandardMaterial({ color: '#685139', roughness: 1 });
   const trouserMaterial = new THREE.MeshStandardMaterial({ color: '#54665a', roughness: 1 });
-  const shirtMaterials = ['#e8dfb5', '#c56c4b', '#d3a958', '#608a92', '#e2d7b8'].map(
-    (color) => new THREE.MeshStandardMaterial({ color, roughness: 1 }),
-  );
+  const shirtMaterial = new THREE.MeshStandardMaterial({
+    color: populationShirtColor('red'),
+    roughness: 1,
+  });
   const bodyGeometry = new THREE.BoxGeometry(0.17, 0.21, 0.12);
   const headGeometry = new THREE.BoxGeometry(0.135, 0.14, 0.13);
   const hairGeometry = new THREE.BoxGeometry(0.145, 0.055, 0.14);
   const limbGeometry = new THREE.BoxGeometry(0.055, 0.16, 0.065);
   function createSettler(tile: Tile, characterPower = INITIAL_CHARACTER_POWER): Settler {
     const mesh = new THREE.Group();
-    const body = new THREE.Mesh(
-      bodyGeometry,
-      shirtMaterials[settlers.length % shirtMaterials.length],
-    );
+    const body = new THREE.Mesh(bodyGeometry, shirtMaterial);
     body.position.y = 0.25;
     const head = new THREE.Mesh(headGeometry, skinMaterial.clone());
     head.position.y = 0.425;

@@ -8,13 +8,22 @@ async function loadModule(path) {
   const {outputText} = ts.transpileModule(source,{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}});
   return import(`data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`);
 }
-const {birthInterval,characterGrowthRate,growPopulation,INITIAL_CHARACTER_POWER} = await loadModule('../src/population.ts');
+const {birthInterval,characterGrowthRate,growPopulation,INITIAL_CHARACTER_POWER,populationShirtColor} = await loadModule('../src/population.ts');
 const {TerrainSurface} = await loadModule('../src/terrain-surface.ts');
 const {trySettle,releaseInvalidHomes} = await loadModule('../src/settlement.ts');
 const tile = {x:1,z:1,tree:false,house:false};
 const resident = (level=1,power=INITIAL_CHARACTER_POWER) => ({tile,home:tile,power:level,homeLevel:2,characterPower:power});
 const spawn = {x:2,z:1,tree:false,house:false};
 const close = (a,b) => assert.ok(Math.abs(a-b)<1e-8,`${a} != ${b}`);
+
+test('populations have uniform red or blue shirts rather than per-character colors',async()=>{
+  assert.equal(populationShirtColor('red'),'#d33136');
+  assert.equal(populationShirtColor('blue'),'#2d64d6');
+  const source=await readFile(new URL('../src/main.ts',import.meta.url),'utf8');
+  assert.match(source,/color: populationShirtColor\('red'\)/);
+  assert.match(source,/new THREE\.Mesh\(bodyGeometry, shirtMaterial\)/);
+  assert.doesNotMatch(source,/shirtMaterials\[/);
+});
 
 test('birth intervals scale from 120 seconds at level 1 to 30 seconds for castles',()=>{
   for (const [index,interval] of [120,97.5,75,52.5,30].entries()) {

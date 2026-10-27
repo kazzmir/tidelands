@@ -105,6 +105,10 @@ Walking onto swamp or standing on newly swamped ground causes **persistent sickn
 
 All spells update homes, castles, farming, trees, and settler positions just like ordinary terrain edits. Spells can be cast while the simulation is paused.
 
+## Population colors
+
+All members of the current population wear the same **red shirt**, including leaders and newborns. **Blue** is the reserved shirt color for a future enemy population; no enemies are spawned yet. Shirt color is independent of character count, sickness, and leadership.
+
 ## Leader and gathering
 
 Each new population starts with exactly **one leader**, marked by a large white object on a staff. While walking, the leader carries the object; when housed, the object marks the roof. In normal wandering mode the leader can build and produce children like other residents, so gathering down to one character does not prevent the population from regrowing. Inspect its tile or hover the Gather button to see its character power/HP.

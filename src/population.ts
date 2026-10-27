@@ -1,5 +1,12 @@
 import type { HousePower, Resident, SettlementTile } from './settlement';
 
+export type PopulationColor = 'red' | 'blue';
+
+/** Uniform team colors: the current population is red; future enemies use blue. */
+export function populationShirtColor(population: PopulationColor): string {
+  return population === 'red' ? '#d33136' : '#2d64d6';
+}
+
 export const INITIAL_CHARACTER_POWER = 10;
 export const BIRTH_THRESHOLD = 20;
 /** Nominal cycle from half the threshold: 2 minutes at level 1, 30 seconds at level 5. */
