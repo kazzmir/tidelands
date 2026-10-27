@@ -144,6 +144,24 @@ test('world generation is seeded and reproducible', () => {
   assert.notDeepEqual(generateWorldHeights(100, 34), generateWorldHeights(100, 51));
 });
 
+test('the playable world is 500×500 with scaled island count and full-sized starting islands',async()=>{
+  const dimension=500,small=generateWorldLayout(dimension,34),heights=generateWorldHeights(dimension,34);
+  assert.equal(heights.length,501*501);
+  assert.deepEqual(playerStartAnchor(dimension),{x:48,z:250});
+  assert.deepEqual(enemyStartAnchor(dimension),{x:452,z:452});
+  assert.ok(small.clusters.length>=20 && small.clusters.length<=26);
+  for(const side of ['player','enemy']){
+    const home=small.clusters.find(cluster=>cluster.starting===side);
+    const occupied=new Set();
+    for(const peak of home.peaks)for(let z=peak.z-peak.height+1;z<peak.z+peak.height;z++)for(let x=peak.x-peak.height+1;x<peak.x+peak.height;x++){
+      assert.ok(x>=0&&z>=0&&x<=dimension&&z<=dimension);occupied.add(z*501+x);
+    }
+    assert.ok(occupied.size>=1800);
+  }
+  const source=await readFile(new URL('../src/main.ts',import.meta.url),'utf8');
+  assert.match(source,/const SIZE = 500;/);
+});
+
 test('streamed geometry contains only requested tiles, retaining global positions and heights', () => {
   const surface = new TerrainSurface(1000, new Uint8Array(1001 * 1001).fill(3), 0.65);
   const positions = surface.positions({ x: 500, z: 480, width: 32, depth: 32 });

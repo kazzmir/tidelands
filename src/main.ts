@@ -188,7 +188,7 @@ function startGame(): void {
   const icon = createIconRenderer();
   initializeIcons(icon);
   const { canvas, world, renderer, scene, camera, controls, sun, resetCamera } = createWorldView();
-  const SIZE = 1000;
+  const SIZE = 500;
   const playerStart = playerStartAnchor(SIZE);
   const enemyStart = enemyStartAnchor(SIZE);
   function resetEnemyCamera(): void {
