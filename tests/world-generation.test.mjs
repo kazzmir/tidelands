@@ -40,7 +40,7 @@ test('a 1000×1000 world grows varied-height land from summit seeds while preser
 test('human starting land is near the far western edge, with room for its natural foothills',async()=>{
   assert.deepEqual(start,{x:48,z:500});
   assert.ok(size/2-start.x>=450);
-  const home=layout.clusters[4];
+  const home=layout.clusters.find(cluster=>cluster.starting==='player');
   assert.ok(Math.abs(home.x-start.x)<=4 && Math.abs(home.z-start.z)<=4);
   assert.ok(home.peaks.every(peak=>peak.x-peak.height+1>=0 && peak.x+peak.height-1<size));
   const source=await readFile(new URL('../src/main.ts',import.meta.url),'utf8');
@@ -57,16 +57,16 @@ test('enemy start uses the farthest inset corner on the opposite side',()=>{
   assert.ok(layout.clusters.some(cluster=>Math.abs(cluster.x-952)<=4 && Math.abs(cluster.z-952)<=4));
 });
 
-test('clustered peaks naturally form connected multi-mountain landmasses within 30–100 tiles', () => {
-  assert.equal(layout.clusters.length, 81);
+test('variable-size summit clusters naturally form connected islands without sculpted land', () => {
+  assert.ok(layout.clusters.length>=75 && layout.clusters.length<=105);
   for (const cluster of layout.clusters) {
-    assert.ok(cluster.peaks.length >= 3);
+    assert.ok(cluster.peaks.length >= 1);
     const left = Math.min(...cluster.peaks.map(p => p.x - p.height + 1));
     const right = Math.max(...cluster.peaks.map(p => p.x + p.height - 1));
     const top = Math.min(...cluster.peaks.map(p => p.z - p.height + 1));
     const bottom = Math.max(...cluster.peaks.map(p => p.z + p.height - 1));
-    assert.ok(right - left + 2 >= 30 && right - left + 2 <= 100);
-    assert.ok(bottom - top + 2 >= 30 && bottom - top + 2 <= 100);
+    assert.ok(right - left + 2 >= 10 && right - left + 2 <= 100);
+    assert.ok(bottom - top + 2 >= 10 && bottom - top + 2 <= 100);
     const first = cluster.peaks[0];
     const queue = [first.z * width + first.x], visited = new Set(queue);
     for (let i = 0; i < queue.length; i++) {
@@ -86,9 +86,41 @@ test('clustered peaks naturally form connected multi-mountain landmasses within 
 
 test('islands cover every region of the map, not only the player start and central area',()=>{
   const regions=new Set(layout.clusters.map(cluster=>`${Math.min(4,Math.floor(cluster.x/200))},${Math.min(4,Math.floor(cluster.z/200))}`));
-  assert.equal(regions.size,25,'all 25 broad map regions should have islands');
-  for(const [x,z] of [[48,48],[952,48],[48,952],[952,952],[952,500],[500,500]]){
-    assert.ok(layout.clusters.some(cluster=>Math.abs(cluster.x-x)<=4 && Math.abs(cluster.z-z)<=4),`missing island near ${x},${z}`);
+  assert.ok(regions.size>=20,'islands should cover the map without requiring one in every grid cell');
+  for(const [left,top] of [[true,true],[false,true],[true,false],[false,false]]){
+    assert.ok(layout.clusters.filter(cluster=>(cluster.x<500)===left && (cluster.z<500)===top).length>=8);
+  }
+  const nearOldGrid=value=>Math.abs((value-48)/113-Math.round((value-48)/113))*113<6;
+  const aligned=layout.clusters.filter(cluster=>nearOldGrid(cluster.x)&&nearOldGrid(cluster.z)).length;
+  assert.ok(aligned<layout.clusters.length/4,'centers must not follow the old jittered lattice');
+});
+
+function islandFootprint(cluster){
+  const cells=new Set();
+  for(const peak of cluster.peaks)for(let z=peak.z-peak.height+1;z<peak.z+peak.height;z++)for(let x=peak.x-peak.height+1;x<peak.x+peak.height;x++)cells.add(z*width+x);
+  return cells;
+}
+
+test('archipelago mixes tiny islets, medium islands, and substantially larger landmasses',()=>{
+  const areas=layout.clusters.map(cluster=>islandFootprint(cluster).size);
+  assert.ok(Math.min(...areas)<200);assert.ok(Math.max(...areas)>2500);
+  assert.ok(Math.max(...areas)/Math.min(...areas)>12);
+  assert.ok(layout.clusters.filter(cluster=>cluster.kind==='small').length>=15);
+  assert.ok(layout.clusters.filter(cluster=>cluster.kind==='medium').length>=10);
+  assert.ok(layout.clusters.filter(cluster=>cluster.kind==='large'&&!cluster.starting).length>=5);
+});
+
+test('both populations receive broad medium-to-large home islands across new-world seeds',()=>{
+  for(const seed of [34,51,68,85,102]){
+    const generated=generateWorldLayout(size,seed);
+    for(const side of ['player','enemy']){
+      const home=generated.clusters.find(cluster=>cluster.starting===side);
+      assert.ok(home);assert.equal(home.kind,'large');
+      assert.ok(islandFootprint(home).size>=1800,`${side} has too little land for seed ${seed}`);
+      assert.ok(Math.max(...home.peaks.map(peak=>peak.x+peak.height-1))-Math.min(...home.peaks.map(peak=>peak.x-peak.height+1))+1>=50);
+      assert.ok(Math.max(...home.peaks.map(peak=>peak.z+peak.height-1))-Math.min(...home.peaks.map(peak=>peak.z-peak.height+1))+1>=50);
+      assert.ok(home.peaks.every(peak=>peak.x-peak.height+1>=0 && peak.z-peak.height+1>=0 && peak.x+peak.height-1<=size && peak.z+peak.height-1<=size));
+    }
   }
 });
 
@@ -103,8 +135,8 @@ test('only invariant-required terrain is raised; there are no artificial bridges
     const expected = Math.max(0, ...layout.peaks.map(peak => peak.height - Math.max(Math.abs(peak.x - x), Math.abs(peak.z - z))));
     assert.equal(levels[z * width + x], expected);
   }
-  const a = layout.clusters[0], b = layout.clusters[1];
-  assert.equal(levels[Math.round((a.z + b.z) / 2) * width + Math.round((a.x + b.x) / 2)], 0);
+  const a = layout.clusters.find(cluster=>cluster.starting==='player');
+  assert.ok(levels[Math.round(a.z)*width+Math.round(a.x+55)]===0,'starting island should retain an ocean gap');
 });
 
 test('world generation is seeded and reproducible', () => {
