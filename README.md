@@ -145,6 +145,14 @@ Spells share the enemy's normal power budget with terrain editing and use exactl
 
 Enemy spells freeze while paused, stop if either population is eliminated, and are disabled during the encounter test and Armageddon. The AI does not cast Armageddon, global Flood, or move the player's pole.
 
+### Enemy knight musters and raids
+
+After **120 simulation seconds**, the enemy can assemble a knight muster. It prefers nearby healthy roaming citizens, drafting housed citizens only as needed: the leader and at most **three donors** leave their homes, then the donors actually walk to the leader and merge their existing HP/power. No strength or characters are created for free. The leader must accumulate **at least 40 character power** before the normal **1,000-power Knight spell** applies its permanent **1.5×** multiplier. The cost is reserved against other enemy spending while gathering.
+
+A separate, unabsorbed successor comes to the strengthened knight and receives the white pole **in person**. Both keep their own HP, position, and equipment; the successor does not become a knight. The former leader retains silver armor, sword, blue flag/shield, and enlarged scale, then pursues the player using the normal knight combat and land-routing rules. Disconnected islands mean approaching the reachable shore, not teleporting or crossing water for free.
+
+Further musters wait **150 simulation seconds after dispatch**, maintain at least **six ordinary citizens**, and stop at **three active enemy knights**. Lost knights can eventually be replaced. Interrupted or stalled gatherings cancel safely; the AI pays only for actual conversions. Only selected blue military recruits are mobilized—other homes keep their residents, income, farms, and growth. Normal player Gather/Attack still never evacuate buildings. Knight AI freezes while paused, is disabled in the encounter test and Armageddon, and resets with New world. Hover the enemy population count for active/trained knight counts and muster phase.
+
 ## Water waves
 
 The ocean uses animated, seamless **wave color and ripple-normal textures** on one continuous world-aligned surface. Patterns repeat smoothly every eight world tiles, including matching slopes at the texture edges, so neighboring water tiles have no visible seams. Mipmapping, linear filtering, and anisotropic filtering keep transitions smooth when zooming or viewing at an angle. Color and normals scroll together in simulation time; pausing freezes the waves. Camera movement never repositions or snaps the pattern. The water level, shore geometry, and drowning mechanics are unchanged.
@@ -223,6 +231,8 @@ Rock persists through dry terrain edits. Lowering it into water destroys the roc
 - `tests/encounter-scenario.test.mjs` — connected camps, movement reservations, and combat-enabled scenario guards.
 - `src/minimap.ts` — incremental elevation raster, team markers, crowd suppression, and map navigation coordinates.
 - `tests/minimap.test.mjs` — terrain cache correctness, team glyphs, crowded characters, and coordinate bounds.
+- `src/enemy-knights.ts` — limited real-citizen musters, strength thresholds, paid conversions, succession, and knight caps.
+- `tests/enemy-knights.test.mjs` — HP conservation, costs, successive raids, reserves, caps, failed musters, succession, and reset.
 - `src/enemy-spells.ts` — cooldown-limited, paid attacks against player settlements/groups with friendly-fire avoidance.
 - `tests/enemy-spells.test.mjs` — grace periods, pause, budgets, targets, cooldowns, elimination, and reset.
 - `src/enemy-ai.ts` — slow, paid terrace planning, friendly-home protection, and castle-site preparation.

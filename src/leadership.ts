@@ -39,6 +39,21 @@ export class Leadership<T, C extends LeaderCharacter<T>> {
     return true;
   }
 
+  /** The caller must bring both characters together before a physical handoff. */
+  transfer(current: C, successor: C): boolean {
+    if (
+      this.leader !== current ||
+      current === successor ||
+      current.characterPower <= 0 ||
+      successor.characterPower <= 0
+    )
+      return false;
+    this.leader = successor;
+    this.droppedTile = null;
+    this.formerHolder = null;
+    return true;
+  }
+
   drop(character: C, tile: T): boolean {
     if (this.leader !== character) return false;
     this.leader = null;
@@ -51,6 +66,7 @@ export class Leadership<T, C extends LeaderCharacter<T>> {
     character: C,
     tile: T,
     leaderTile: T | null = this.leader?.tile ?? null,
+    gathering = this.rallying,
   ): LeaderEncounter {
     if (character.characterPower <= 0) return 'none';
     if (this.formerHolder === character) {
@@ -65,7 +81,7 @@ export class Leadership<T, C extends LeaderCharacter<T>> {
       return 'picked-up';
     }
     if (
-      this.rallying &&
+      gathering &&
       this.leader &&
       this.leader.characterPower > 0 &&
       character !== this.leader &&

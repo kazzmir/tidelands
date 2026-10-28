@@ -14,6 +14,15 @@ const {growPopulation}=await loadModule('../src/population.ts');
 const {trySettle,reconcileSettlements,evacuateSettlements}=await loadModule('../src/settlement.ts');
 const character=(tile,power=10)=>({tile,characterPower:power});
 
+test('a physical handoff preserves both characters and their permanent knighthood and HP',()=>{
+ const state=new Leadership(),tile={x:1,z:1},knight={...character(tile,60),knight:true},heir={...character(tile),knight:false};state.appoint(knight);
+ assert.equal(state.transfer(heir,knight),false);assert.ok(state.transfer(knight,heir));assert.equal(state.leader,heir);assert.equal(state.droppedTile,null);assert.equal(knight.characterPower,60);assert.equal(knight.knight,true);assert.equal(heir.characterPower,10);assert.equal(heir.knight,false);
+ assert.equal(state.transfer(heir,heir),false);knight.characterPower=0;assert.equal(state.transfer(heir,knight),false);
+});
+test('selective gathering absorbs only the commanded donor without turning on a population-wide rally',()=>{
+ const state=new Leadership(),tile={},owner=character(tile),donor=character(tile),other=character(tile);state.appoint(owner);
+ assert.equal(state.encounter(other,tile), 'none');assert.equal(state.encounter(donor,tile,tile,true),'absorbed');assert.equal(owner.characterPower,20);assert.equal(donor.characterPower,0);assert.equal(other.characterPower,10);assert.equal(state.rallying,false);
+});
 test('moving a held pole charges once and preserves the former holder position, home, power, and knighthood',()=>{
  const state=new Leadership(),tile={x:1,z:1},target={x:7,z:8},position={x:1.5,y:2.6,z:1.5},home={x:1,z:1};
  const owner={...character(tile,37.5),position,home,knight:true};state.appoint(owner);state.rallying=true;let balance=500;

@@ -2,6 +2,7 @@ import './style.css';
 import { generateWorldHeights, playerStartAnchor, enemyStartAnchor } from './world-generation';
 import { EnemyTerraformer } from './enemy-ai';
 import { EnemySpellcaster } from './enemy-spells';
+import { EnemyKnightStrategy } from './enemy-knights';
 import { createEncounterScenario, unoccupiedWalkSteps } from './encounter-scenario';
 import { CombatSystem, combatClosingOffset } from './combat';
 import { enemyBuildingContacts, buildingDefenderPoint, touchesBuilding } from './building-contact';
@@ -230,6 +231,7 @@ function startGame(): void {
   const enemyPowerMeter = new PowerMeter(5, 10_000);
   const enemyAI = new EnemyTerraformer(enemyStart);
   const enemySpellcaster = new EnemySpellcaster();
+  const enemyKnights = new EnemyKnightStrategy<Settler>();
   let selectedSpell: Spell | null = null;
   let seed = 34;
   let randomState = seed;
@@ -1007,6 +1009,9 @@ function startGame(): void {
     }
     if (
       enemyBuilder &&
+      !enemyBuilder.knight &&
+      !enemyKnights.holds(enemyBuilder) &&
+      !enemyKnights.follows(enemyBuilder) &&
       !enemyBuilder.home &&
       enemyBuilder.survival.phase === 'alive' &&
       enemyBuildDistance.has(characterTile(enemyBuilder))
@@ -1017,6 +1022,9 @@ function startGame(): void {
         .filter(
           (settler) =>
             settler.population === enemyColor &&
+            !settler.knight &&
+            !enemyKnights.holds(settler) &&
+            !enemyKnights.follows(settler) &&
             !settler.home &&
             settler.survival.phase === 'alive' &&
             enemyBuildDistance.has(characterTile(settler)),
@@ -1358,14 +1366,39 @@ function startGame(): void {
     const owner = state.leader;
     if (armageddon.active && (!owner || owner.characterPower <= 0)) return false;
     if (owner && owner.survival.phase !== 'alive') return false;
+    if (
+      !armageddon.active &&
+      owner &&
+      owner === enemyKnights.commander &&
+      enemyKnights.isSuccessor(settler)
+    ) {
+      const from = combatPosition(settler),
+        to = combatPosition(owner);
+      if (
+        (!settler.target || settler.progress >= 1) &&
+        Math.hypot(from.x - to.x, from.z - to.z) <= 0.8 &&
+        state.transfer(owner, settler)
+      ) {
+        enemyKnights.complete(settler);
+        owner.tile = characterTile(owner);
+        owner.target = null;
+        owner.progress = 0;
+        owner.wait = 0;
+        settler.tile = characterTile(settler);
+        settler.target = null;
+        settler.progress = 0;
+        settler.wait = 0;
+        return true;
+      }
+    }
+    const gathering = state.rallying || (!armageddon.active && enemyKnights.donates(settler));
     const atLeaderBuilding =
-      state.rallying &&
-      owner?.home &&
-      touchesBuilding(combatPosition(settler), owner.home, owner.power);
+      gathering && owner?.home && touchesBuilding(combatPosition(settler), owner.home, owner.power);
     const result = state.encounter(
       settler,
       atLeaderBuilding && owner?.home ? owner.home : characterTile(settler),
       owner ? characterTile(owner) : null,
+      gathering,
     );
     if (result === 'none') return false;
     if (result === 'absorbed') {
@@ -1732,7 +1765,7 @@ function startGame(): void {
         settler.population === enemyColor &&
         (settler.survival.phase === 'alive' || settler.survival.phase === 'drowning'),
     );
-    badge.title = `${enemyColor} enemy: ${living.length} settlers · ${living.filter((settler) => settler.home).length} housed · ${living.filter((settler) => settler.power === 5).length} castles · ${enemyPowerMeter.value.toLocaleString()} power · ${enemyAI.edits} paid terrain edits (one / ${enemyAI.interval}s) · ${enemyAI.spent} spent · ${enemySpellcaster.casts} spell${enemySpellcaster.casts === 1 ? '' : 's'} cast (${enemySpellcaster.spent.toLocaleString()} power) · E to view${encounterTest ? ' · Encounter test: combat enabled; terraforming AI disabled' : ''}`;
+    badge.title = `${enemyColor} enemy: ${living.length} settlers · ${living.filter((settler) => settler.home).length} housed · ${living.filter((settler) => settler.power === 5).length} castles · ${enemyPowerMeter.value.toLocaleString()} power · ${enemyAI.edits} paid terrain edits (one / ${enemyAI.interval}s) · ${enemyAI.spent} spent · ${enemySpellcaster.casts} spell${enemySpellcaster.casts === 1 ? '' : 's'} cast (${enemySpellcaster.spent.toLocaleString()} power) · ${living.filter((actor) => actor.knight).length} knights (${enemyKnights.created} trained; ${enemyKnights.phase}) · E to view${encounterTest ? ' · Encounter test: combat enabled; terraforming AI disabled' : ''}`;
   }
   function updateSettlementStats(): void {
     const living = settlers.filter(
@@ -1940,6 +1973,7 @@ function startGame(): void {
     enemyPowerMeter.reset();
     enemyAI.reset();
     enemySpellcaster.reset();
+    enemyKnights.reset();
     updatePowerDisplay();
     randomState = seed;
     clearSettlers();
@@ -2366,6 +2400,7 @@ function startGame(): void {
       state.appoint(armageddon.leaders.get(color)!);
       state.rallying = true;
     }
+    enemyKnights.cancel();
     evacuateSettlements(settlers, tileAt);
     reconcileWorldSettlements();
     navigationRevision++;
@@ -2562,6 +2597,69 @@ function startGame(): void {
       shakeTimer = setTimeout(() => document.body.classList.remove('earthquake-shake'), 1000);
     }
   }
+  function enemyKnightCamp(tile: Tile): boolean {
+    const commander = enemyKnights.commander;
+    if (!commander) return false;
+    const center = characterTile(commander);
+    return Math.abs(tile.x - center.x) <= 2 && Math.abs(tile.z - center.z) <= 2;
+  }
+  function mobilizeEnemyCharacters(characters: readonly Settler[]): void {
+    evacuateSettlements(characters, tileAt);
+    reconcileWorldSettlements();
+    navigationRevision++;
+    rebuildBuildings();
+    syncResidentMeshes();
+    for (const actor of characters) {
+      actor.tile = characterTile(actor);
+      actor.target = null;
+      actor.progress = 0;
+      actor.wait = 0;
+      resetWalkingPose(actor);
+    }
+    enemyBuilder = null;
+    updateSettlementStats();
+    updateLeadershipVisual();
+  }
+  function advanceEnemyKnights(seconds: number): void {
+    if (seconds <= 0) return;
+    if (
+      !settlers.some(
+        (actor) =>
+          actor.population === populationColor &&
+          actor.characterPower > 0 &&
+          (actor.survival.phase === 'alive' || actor.survival.phase === 'drowning'),
+      )
+    ) {
+      enemyKnights.cancel();
+      return;
+    }
+    const action = enemyKnights.advance(
+      seconds,
+      settlers,
+      enemyLeadership.leader,
+      enemyColor,
+      enemyPowerMeter,
+      combatPosition,
+      (actor) =>
+        !actor.sick &&
+        !combat.opponent(actor) &&
+        (!!actor.home || isWalkable(characterTile(actor))),
+    );
+    if (!action) return;
+    if (action.kind === 'gather') {
+      mobilizeEnemyCharacters([action.leader, ...action.recruits]);
+    } else if (action.kind === 'handoff') {
+      mobilizeEnemyCharacters([action.successor]);
+    } else if (
+      convertLeaderToKnight(action.leader, () => enemyPowerMeter.spend(SPELL_COSTS.knight)) ===
+      'converted'
+    ) {
+      equipKnight(action.leader);
+      enemyKnights.converted();
+      mobilizeEnemyCharacters([action.successor]);
+      toast('The enemy has trained a strengthened knight. A raid is preparing.');
+    }
+  }
   function advanceEnemySpells(seconds: number): void {
     if (seconds <= 0) return;
     const living = settlers.filter(
@@ -2579,7 +2677,7 @@ function startGame(): void {
     const allies = living.filter((actor) => actor.population === enemyColor).map(combatPosition);
     enemySpellcaster.advance(
       seconds,
-      enemyPowerMeter,
+      { value: Math.max(0, enemyPowerMeter.value - enemyKnights.reservedPower) },
       players,
       allies,
       (spell, point) => {
@@ -2833,11 +2931,21 @@ function startGame(): void {
     if (armageddon.active && !armageddon.finished && dt > 0) updateArmageddonLand();
     if (!encounterTest && !armageddon.active) {
       if (
-        enemyAI.advance(dt, surface, enemyPowerMeter, enemyResidents, tileAt, (point) =>
-          withinTerrainReach(point, false, enemyResidents, enemyColor, combatPosition),
+        enemyAI.advance(
+          dt,
+          surface,
+          {
+            spend: (amount) =>
+              enemyPowerMeter.value - amount >= enemyKnights.reservedPower &&
+              enemyPowerMeter.spend(amount),
+          },
+          enemyResidents,
+          tileAt,
+          (point) => withinTerrainReach(point, false, enemyResidents, enemyColor, combatPosition),
         )?.status === 'changed'
       )
         refreshTerrainAfterEdit();
+      advanceEnemyKnights(dt);
       updateEnemyBuilder();
       advanceEnemySpells(dt);
     }
@@ -2909,6 +3017,9 @@ function startGame(): void {
         !encounterTest &&
         !armageddon.active &&
         !recovering &&
+        !enemyKnights.holds(settler) &&
+        !enemyKnights.follows(settler) &&
+        !enemyKnightCamp(settler.tile) &&
         settler === enemyBuilder &&
         !settler.target &&
         settler.tile === enemyBuildingSite &&
@@ -2922,11 +3033,14 @@ function startGame(): void {
       const finalLeader = armageddon.active && armageddon.isLeader(settler);
       const rallyLeader =
         armageddon.active && !finalLeader ? armageddon.leaders.get(settler.population) : null;
+      const enemyMusterFollower = !armageddon.active && enemyKnights.follows(settler);
+      const enemyMusterLeader = !armageddon.active && enemyKnights.holds(settler);
       const gatheringFollower =
-        !armageddon.active &&
-        leadership.rallying &&
-        settler.population === populationColor &&
-        settler !== leadership.leader;
+        enemyMusterFollower ||
+        (!armageddon.active &&
+          leadership.rallying &&
+          settler.population === populationColor &&
+          settler !== leadership.leader);
       const attacking = attackOrder.commands(settler, populationColor);
       const anchoredLeader =
         !attacking && leaderAnchor.target !== null && settler === leadership.leader;
@@ -2934,7 +3048,8 @@ function startGame(): void {
         ? finalLeader
           ? (armageddon.leaders.get(settler.population === 'red' ? 'blue' : 'red') ?? null)
           : null
-        : attacking || (settler.knight && !anchoredLeader && !gatheringFollower)
+        : attacking ||
+            (settler.knight && !anchoredLeader && !gatheringFollower && !enemyMusterLeader)
           ? nearestEnemy(settler, settlers, characterTile)
           : null;
       if (!settler.target) {
@@ -2942,6 +3057,7 @@ function startGame(): void {
         if (
           recovering ||
           gatheringFollower ||
+          enemyMusterLeader ||
           armageddon.active ||
           enemy ||
           attacking ||
@@ -2959,23 +3075,27 @@ function startGame(): void {
                 : enemy
                   ? pursuitOptions(settler, enemy)
                   : []
-              : gatheringFollower
-                ? followerOptions(settler)
-                : anchoredLeader
-                  ? leaderAnchor.steps(
-                      settler,
-                      settler.tile,
-                      neighbors,
-                      isWalkable,
-                      navigationRevision,
-                    )
-                  : enemy
-                    ? pursuitOptions(settler, enemy)
-                    : attacking
-                      ? []
-                      : settler === enemyBuilder
-                        ? rallySteps(settler.tile, neighbors(settler.tile), enemyBuildDistance)
-                        : neighbors(settler.tile);
+              : enemyMusterLeader
+                ? []
+                : gatheringFollower
+                  ? enemyMusterFollower && enemyLeadership.leader
+                    ? pursuitOptions(settler, enemyLeadership.leader)
+                    : followerOptions(settler)
+                  : anchoredLeader
+                    ? leaderAnchor.steps(
+                        settler,
+                        settler.tile,
+                        neighbors,
+                        isWalkable,
+                        navigationRevision,
+                      )
+                    : enemy
+                      ? pursuitOptions(settler, enemy)
+                      : attacking
+                        ? []
+                        : settler === enemyBuilder
+                          ? rallySteps(settler.tile, neighbors(settler.tile), enemyBuildDistance)
+                          : neighbors(settler.tile);
         if (encounterTest && !armageddon.active) {
           const free = unoccupiedWalkSteps(
             settler,
@@ -3030,6 +3150,9 @@ function startGame(): void {
           !armageddon.active &&
           !settler.knight &&
           !recovering &&
+          !enemyKnights.holds(settler) &&
+          !enemyKnights.follows(settler) &&
+          !(settler.population === enemyColor && enemyKnightCamp(settler.tile)) &&
           !attackOrder.commands(settler, populationColor) &&
           !(leaderAnchor.target && settler === leadership.leader) &&
           !hasNearbyOpponent(settler) &&
