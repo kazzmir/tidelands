@@ -15,7 +15,8 @@ import {
 } from './minimap';
 import { TerrainSurface, type GridPoint, type TerrainBounds } from './terrain-surface';
 import { PowerMeter } from './power';
-import { Leadership, buildRallyField, buildPursuitField, rallySteps } from './leadership';
+import { Leadership, buildRallyField, rallySteps } from './leadership';
+import { AttackOrder, SharedPursuit } from './attack-order';
 import { createSilverArmorMaterial, equipKnightArmor } from './knight-armor';
 import { createWaterTextures, animateWaterTextures } from './water-texture';
 import {
@@ -103,6 +104,8 @@ function element<T extends HTMLElement>(selector: string): T {
 function createIconRenderer(): (name: string) => string {
   const icons: Record<string, string> = {
     test: '<path d="M9 3h6m-5 0v6l-6 10a1 1 0 0 0 1 2h14a1 1 0 0 0 1-2L14 9V3M7 16h10"/><circle cx="10" cy="18" r=".7"/>',
+    attack:
+      '<path d="m3 3 5 1 12 13-3 3L4 8 3 3Zm18 0-5 1-5 6M9 14l-6 3 3 3 5-6M4 15l5 5m6-16 5 5"/>',
     anchor:
       '<circle cx="12" cy="5" r="2"/><path d="M12 7v14M7 11h10M4 14c0 9 16 9 16 0M4 14l-2 3m18-3 2 3"/>',
     pole: '<path d="M9 10v11m-4 0h8M9 2l4 4-4 4-4-4zM16 13h5m-2-2 2 2-2 2"/>',
@@ -885,6 +888,8 @@ function startGame(): void {
   const { water, waterTextures } = createWater();
 
   const settlers: Settler[] = [];
+  const attackOrder = new AttackOrder();
+  const sharedPursuit = new SharedPursuit<Tile>();
   const leaderAnchor = new LeaderAnchor<Tile>();
   const anchorMarker = createLeaderAnchorMarker();
   scene.add(anchorMarker);
@@ -1007,7 +1012,7 @@ function startGame(): void {
             (enemyBuildDistance.get(characterTile(b)) ?? Infinity),
         )[0] ?? null;
   }
-  const knightRoutes = new Map<
+  const pursuitRoutes = new Map<
     Settler,
     { goal: Tile; revision: number; distance: Map<Tile, number> }
   >();
@@ -1067,9 +1072,9 @@ function startGame(): void {
       if (object instanceof THREE.Mesh && object.userData.ownedGeometry) object.geometry.dispose();
     });
   }
-  function knightOptions(knight: Settler, enemy: Settler): Tile[] {
+  function pursuitOptions(character: Settler, enemy: Settler): Tile[] {
     const goal = characterTile(enemy);
-    let route = knightRoutes.get(knight);
+    let route = pursuitRoutes.get(character);
     if (!route || route.goal !== goal || route.revision !== navigationRevision) {
       const starts: Tile[] = [];
       const range = enemy.home && enemy.power === 5 ? 2 : 1;
@@ -1090,11 +1095,11 @@ function startGame(): void {
       route = {
         goal,
         revision: navigationRevision,
-        distance: buildPursuitField(knight.tile, starts, goal, neighbors),
+        distance: sharedPursuit.field(character.tile, goal, starts, neighbors, navigationRevision),
       };
-      knightRoutes.set(knight, route);
+      pursuitRoutes.set(character, route);
     }
-    return rallySteps(knight.tile, neighbors(knight.tile), route.distance);
+    return rallySteps(character.tile, neighbors(character.tile), route.distance);
   }
   let navigationRevision = 0;
   let rallyRevision = -1;
@@ -1171,7 +1176,9 @@ function startGame(): void {
     button.title = leaderAnchor.placing
       ? 'Click the map to place an anchor; click again to cancel'
       : leaderAnchor.target
-        ? 'Remove leader destination anchor'
+        ? attackOrder.active
+          ? 'Leader anchor paused while attacking; click to remove it'
+          : 'Remove leader destination anchor'
         : 'Place an anchor for your leader to walk toward';
   }
   function toggleLeaderAnchor(): void {
@@ -1203,7 +1210,11 @@ function startGame(): void {
     if (owner) owner.wait = 0;
     updateAnchorButton();
     selectTool(tool);
-    toast('Your leader will walk toward the anchor. Click the anchor button again to remove it.');
+    toast(
+      attackOrder.active
+        ? 'Anchor placed. Your leader will follow it when Attack enemy is off.'
+        : 'Your leader will walk toward the anchor. Click the anchor button again to remove it.',
+    );
   }
   function updateAnchorMarker(): void {
     const target = leaderAnchor.target;
@@ -1227,6 +1238,53 @@ function startGame(): void {
     controls.target.copy(target);
     controls.update();
     lastMinimapPaint = 0;
+  }
+  function updateAttackButton(): void {
+    const button = element<HTMLButtonElement>('#attack-enemy');
+    button.classList.toggle('active', attackOrder.active);
+    button.setAttribute('aria-pressed', String(attackOrder.active));
+    button.setAttribute(
+      'aria-label',
+      attackOrder.active ? 'Stop attacking enemy' : 'Attack enemy with all human characters',
+    );
+    button.title = attackOrder.active
+      ? 'Stop attacking; resume normal wandering, building, and leader anchor orders'
+      : 'Attack enemy: all human characters leave buildings and pursue enemies';
+  }
+  function toggleAttackOrder(): void {
+    cancelSpell();
+    attackOrder.toggle();
+    if (attackOrder.active) {
+      leadership.rallying = false;
+      rallyDestination = null;
+      evacuateSettlements(
+        settlers.filter((actor) => attackOrder.commands(actor, populationColor)),
+        tileAt,
+      );
+      reconcileWorldSettlements();
+      rebuildBuildings();
+      syncResidentMeshes();
+    }
+    navigationRevision++;
+    for (const actor of settlers) {
+      if (actor.population !== populationColor || actor.home || actor.survival.phase !== 'alive')
+        continue;
+      actor.tile = characterTile(actor);
+      actor.target = null;
+      actor.progress = 0;
+      actor.wait = 0;
+      resetWalkingPose(actor);
+    }
+    updateAttackButton();
+    updateAnchorButton();
+    updateSettlementStats();
+    updateLeadershipVisual();
+    if (lastPointer) updateHover(lastPointer);
+    toast(
+      attackOrder.active
+        ? 'Attack enemy: all your characters are advancing. Unreachable enemies are approached from the nearest shore.'
+        : 'Attack order cancelled. Normal orders resumed.',
+    );
   }
   function updateRallyButton(): void {
     const poleButton = element<HTMLButtonElement>('#leader-view');
@@ -1290,6 +1348,11 @@ function startGame(): void {
       return;
     }
     leadership.rallying = !leadership.rallying;
+    if (leadership.rallying) {
+      attackOrder.reset();
+      updateAttackButton();
+      updateAnchorButton();
+    }
     navigationRevision++;
     rallyDestination = null;
     if (leadership.rallying) {
@@ -1501,6 +1564,9 @@ function startGame(): void {
     return settler;
   }
   function clearSettlers(): void {
+    attackOrder.reset();
+    sharedPursuit.reset();
+    updateAttackButton();
     leaderAnchor.reset();
     anchorMarker.visible = false;
     updateAnchorButton();
@@ -1518,7 +1584,7 @@ function startGame(): void {
     rallyDestination = null;
     rallyRevision = -1;
     navigationRevision = 0;
-    knightRoutes.clear();
+    pursuitRoutes.clear();
     for (const settler of settlers) disposeSettlerVisual(settler);
     people.clear();
     settlers.length = 0;
@@ -2358,6 +2424,7 @@ function startGame(): void {
     minimapCanvas.addEventListener('contextmenu', (event) => event.preventDefault());
     element('#rally').addEventListener('click', toggleRally);
     element('#pause').addEventListener('click', togglePause);
+    element('#attack-enemy').addEventListener('click', toggleAttackOrder);
     element('#leader-anchor').addEventListener('click', toggleLeaderAnchor);
     element('#leader-view').addEventListener('click', focusLeaderPole);
     document.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach((button) => {
@@ -2596,24 +2663,30 @@ function startGame(): void {
         settlementsChanged = true;
         continue;
       }
-      const anchoredLeader = leaderAnchor.target !== null && settler === leadership.leader;
+      const attacking = attackOrder.commands(settler, populationColor);
+      const anchoredLeader =
+        !attacking && leaderAnchor.target !== null && settler === leadership.leader;
       const enemy =
-        settler.knight && !anchoredLeader ? nearestEnemy(settler, settlers, characterTile) : null;
+        attacking || (settler.knight && !anchoredLeader)
+          ? nearestEnemy(settler, settlers, characterTile)
+          : null;
       if (!settler.target) {
         settler.wait -= dt;
-        if (enemy || anchoredLeader || settler === enemyBuilder) settler.wait = 0;
+        if (enemy || attacking || anchoredLeader || settler === enemyBuilder) settler.wait = 0;
         if (settler.wait > 0) continue;
         let options = anchoredLeader
           ? leaderAnchor.steps(settler, settler.tile, neighbors, isWalkable, navigationRevision)
           : enemy
-            ? knightOptions(settler, enemy)
-            : settler === enemyBuilder
-              ? rallySteps(settler.tile, neighbors(settler.tile), enemyBuildDistance)
-              : leadership.rallying &&
-                  settler.population === populationColor &&
-                  settler !== leadership.leader
-                ? followerOptions(settler)
-                : neighbors(settler.tile);
+            ? pursuitOptions(settler, enemy)
+            : attacking
+              ? []
+              : settler === enemyBuilder
+                ? rallySteps(settler.tile, neighbors(settler.tile), enemyBuildDistance)
+                : leadership.rallying &&
+                    settler.population === populationColor &&
+                    settler !== leadership.leader
+                  ? followerOptions(settler)
+                  : neighbors(settler.tile);
         if (encounterTest)
           options = unoccupiedWalkSteps(
             settler,
@@ -2659,6 +2732,7 @@ function startGame(): void {
         if (
           !encounterTest &&
           !settler.knight &&
+          !attackOrder.commands(settler, populationColor) &&
           !(leaderAnchor.target && settler === leadership.leader) &&
           !hasNearbyOpponent(settler) &&
           (!leadership.rallying || settler.population !== populationColor) &&
@@ -2697,7 +2771,7 @@ function startGame(): void {
     for (let i = settlers.length - 1; i >= 0; i--) {
       if (settlers[i].survival.phase !== 'dead') continue;
       people.remove(settlers[i].mesh);
-      knightRoutes.delete(settlers[i]);
+      pursuitRoutes.delete(settlers[i]);
       disposeSettlerVisual(settlers[i]);
       settlers.splice(i, 1);
       survivalChanged = true;
