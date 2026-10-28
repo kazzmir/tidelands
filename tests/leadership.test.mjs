@@ -14,6 +14,25 @@ const {growPopulation}=await loadModule('../src/population.ts');
 const {trySettle,reconcileSettlements,evacuateSettlements}=await loadModule('../src/settlement.ts');
 const character=(tile,power=10)=>({tile,characterPower:power});
 
+test('moving a held pole charges once and preserves the former holder position, home, power, and knighthood',()=>{
+ const state=new Leadership(),tile={x:1,z:1},target={x:7,z:8},position={x:1.5,y:2.6,z:1.5},home={x:1,z:1};
+ const owner={...character(tile,37.5),position,home,knight:true};state.appoint(owner);state.rallying=true;let balance=500;
+ assert.equal(state.relocate(target,()=>{balance-=100;return true;}),'moved');assert.equal(balance,400);assert.equal(state.leader,null);assert.equal(state.droppedTile,target);
+ assert.equal(owner.tile,tile);assert.equal(owner.position,position);assert.deepEqual(position,{x:1.5,y:2.6,z:1.5});assert.equal(owner.home,home);assert.equal(owner.characterPower,37.5);assert.equal(owner.knight,true);assert.equal(state.rallying,true);
+});
+test('an already dropped pole can move to water; invalid and unchanged casts do not charge',()=>{
+ const state=new Leadership(),tile={x:1,z:1},water={x:9,z:9,water:true};let calls=0;const spend=()=>{calls++;return true;};
+ assert.equal(state.relocate(tile,spend),'missing');assert.equal(calls,0);const owner=character(tile);state.appoint(owner);
+ assert.equal(state.relocate(water,()=>false),'insufficient');assert.equal(state.leader,owner);assert.equal(state.droppedTile,null);
+ state.drop(owner,tile);assert.equal(state.relocate(tile,spend),'unchanged');assert.equal(calls,0);assert.equal(state.relocate(water,spend),'moved');assert.equal(calls,1);assert.equal(state.droppedTile,water);
+});
+test('same-tile relocation releases the owner until they leave, and another walker may claim the pole',()=>{
+ const tile={x:1,z:1},away={x:2,z:1},state=new Leadership(),owner=character(tile),other=character(tile);
+ state.appoint(owner);state.relocate(tile,()=>true);assert.equal(state.encounter(owner,tile),'none');assert.equal(state.leader,null);
+ assert.equal(state.encounter(owner,away),'none');assert.equal(state.encounter(owner,tile),'picked-up');
+ state.relocate(tile,()=>true);assert.equal(state.encounter(other,tile),'picked-up');assert.equal(state.leader,other);assert.equal(owner.characterPower,10);
+ state.reset();assert.equal(state.droppedTile,null);assert.equal(state.appoint(owner),true);
+});
 test('a population can appoint only one leader at a time',()=>{
   const state=new Leadership(),tile={x:1,z:1};
   const a=character(tile),b=character(tile);

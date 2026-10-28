@@ -3,16 +3,30 @@ export interface LeaderCharacter<T> {
   characterPower: number;
 }
 export type LeaderEncounter = 'none' | 'picked-up' | 'absorbed';
+export type PoleRelocation = 'moved' | 'missing' | 'unchanged' | 'insufficient';
 
 /** One population owns exactly one leader object, either carried or dropped on a tile. */
 export class Leadership<T, C extends LeaderCharacter<T>> {
   leader: C | null = null;
   droppedTile: T | null = null;
   rallying = false;
+  private formerHolder: C | null = null;
+
+  /** Move only the artifact: its former owner's position, home, and power are untouched. */
+  relocate(tile: T, spend: () => boolean): PoleRelocation {
+    if (!this.leader && this.droppedTile === null) return 'missing';
+    if (!this.leader && this.droppedTile === tile) return 'unchanged';
+    if (!spend()) return 'insufficient';
+    this.formerHolder = this.leader;
+    this.leader = null;
+    this.droppedTile = tile;
+    return 'moved';
+  }
 
   appoint(character: C): boolean {
     if (this.leader || this.droppedTile !== null || character.characterPower <= 0) return false;
     this.leader = character;
+    this.formerHolder = null;
     return true;
   }
 
@@ -20,6 +34,7 @@ export class Leadership<T, C extends LeaderCharacter<T>> {
     if (this.leader !== character) return false;
     this.leader = null;
     this.droppedTile = tile;
+    this.formerHolder = null;
     return true;
   }
 
@@ -29,9 +44,15 @@ export class Leadership<T, C extends LeaderCharacter<T>> {
     leaderTile: T | null = this.leader?.tile ?? null,
   ): LeaderEncounter {
     if (character.characterPower <= 0) return 'none';
+    if (this.formerHolder === character) {
+      // A same-tile cast still releases the pole; the former holder must leave before reclaiming it.
+      if (tile === this.droppedTile) return 'none';
+      this.formerHolder = null;
+    }
     if (!this.leader && this.droppedTile !== null && this.droppedTile === tile) {
       this.leader = character;
       this.droppedTile = null;
+      this.formerHolder = null;
       return 'picked-up';
     }
     if (
@@ -52,6 +73,7 @@ export class Leadership<T, C extends LeaderCharacter<T>> {
     this.leader = null;
     this.droppedTile = null;
     this.rallying = false;
+    this.formerHolder = null;
   }
 }
 

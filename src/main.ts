@@ -1164,6 +1164,17 @@ function startGame(): void {
       } else if (state.droppedTile) {
         if (object.parent !== scene) scene.add(object);
         object.position.copy(position(state.droppedTile));
+        const tile = state.droppedTile;
+        const building = settlers.find(
+          (resident) =>
+            resident.home &&
+            (resident.home === tile ||
+              (resident.power === 5 &&
+                Math.abs(resident.home.x - tile.x) <= 1 &&
+                Math.abs(resident.home.z - tile.z) <= 1)),
+        );
+        if (building)
+          object.position.y += building.power === 5 ? 2.15 : 0.55 + building.power * 0.05;
         object.position.y = Math.max(SEA, object.position.y) + 0.02;
         object.visible = true;
       } else object.visible = false;
@@ -2348,6 +2359,27 @@ function startGame(): void {
       startArmageddon();
       return;
     }
+    if (spell === 'pole') {
+      if (!target) return;
+      const result = leadership.relocate(target, () => powerMeter.spend(SPELL_COSTS.pole));
+      if (result === 'moved') {
+        // Restore shared pole materials before detaching it from a glowing combatant.
+        combatEffects.clear();
+        rallyDestination = null;
+        cancelSpell();
+        updateSettlementStats();
+        updateLeadershipVisual();
+        if (lastPointer) updateHover(lastPointer);
+      }
+      const messages = {
+        moved: 'The leader pole moves. Its former holder stays in place.',
+        missing: 'There is no leader pole to move.',
+        unchanged: 'The pole is already at this location.',
+        insufficient: 'Move leader pole needs 100 power.',
+      };
+      toast(messages[result]);
+      return;
+    }
     if (spell === 'knight') {
       const owner = leadership.leader;
       const result = convertLeaderToKnight(owner, () => powerMeter.spend(SPELL_COSTS.knight));
@@ -2428,6 +2460,7 @@ function startGame(): void {
     if (spell === 'volcano') markVolcanicRock(surface, tileAt, rockTiles, swampTiles);
     refreshTerrainAfterEdit();
     const messages: Record<Spell, string> = {
+      pole: 'The leader pole moves.',
       armageddon: 'Armageddon begins. Both populations rally for the final battle.',
       knight: 'The leader becomes a knight.',
       earthquake: 'The earth trembles.',
