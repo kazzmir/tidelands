@@ -20,6 +20,7 @@ import { AttackOrder, SharedPursuit } from './attack-order';
 import { Armageddon, armageddonLand } from './armageddon';
 import { nearestPoleCollector } from './pole-recovery';
 import { leaderVitals, createLeaderVitalsView } from './leader-vitals';
+import { withinTerrainReach } from './terrain-reach';
 import { createSilverArmorMaterial, equipKnightArmor } from './knight-armor';
 import { createWaterTextures, animateWaterTextures } from './water-texture';
 import {
@@ -1763,7 +1764,7 @@ function startGame(): void {
     updateEnemyStatus();
     updateRallyButton();
     element('#power').title =
-      `+${totalBuildingPower(playerResidents, 'normal')} power / ${powerMeter.interval}s${totalBuildingPower(playerResidents, 'rock') ? ` · +${totalBuildingPower(playerResidents, 'rock')} rock power / ${powerMeter.interval * 2}s` : ''} · Terrain costs 1 power per affected point`;
+      `+${totalBuildingPower(playerResidents, 'normal')} power / ${powerMeter.interval}s${totalBuildingPower(playerResidents, 'rock') ? ` · +${totalBuildingPower(playerResidents, 'rock')} rock power / ${powerMeter.interval * 2}s` : ''} · Terrain costs 1 power per affected point and requires an owned character within 10 tiles`;
   }
   function resetWalkingPose(settler: Settler): void {
     settler.legs.forEach((limb, i) => {
@@ -2172,10 +2173,19 @@ function startGame(): void {
           : '';
       info.innerHTML = `<strong>${kind}</strong>${cornerInfo}<br>Tile ${hovered.x}, ${hovered.z} · Corners ${surface.level(hovered.x, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z)}, ${surface.level(hovered.x + 1, hovered.z + 1)}, ${surface.level(hovered.x, hovered.z + 1)}<br>${resident ? `${buildingInfo}<br>1 settler lives here.` : drowning ? 'Drowning — raise the land beneath them to rescue!' : visitors ? `${visitors} settler${visitors > 1 ? 's' : ''} here · ${[...new Set(walkers.map((walker) => walker.population))].join('/')} · HP ${walkerPower}${walkers.some((walker) => combat.opponent(walker)) ? ' · Fighting' : ''}${walkers.some((walker) => walker.sick) ? ' · Sick (-1 HP/s)' : ''}` : 'Select a corner to shape the land.'}${sheepHere ? `<br>${sheepHere} sheep grazing here` : ''}${leaderHere ? `<br>Leader · HP/power ${leaderHere?.characterPower.toFixed(1)}${leaderHere?.knight ? ' · Knight' : ''} · ${leaderHere?.population}` : objectHere ? '<br>White leader object · Walk here to pick it up' : ''}`;
     }
+    const editSelection = shiftHeld ? hovered : hoveredCorner;
+    const outOfReach =
+      !selectedSpell &&
+      !leaderAnchor.placing &&
+      !armageddon.active &&
+      editSelection &&
+      !withinTerrainReach(editSelection, shiftHeld, settlers, populationColor, combatPosition);
     canvas.style.cursor = hovered
-      ? tool === 'inspect' && !selectedSpell && !leaderAnchor.placing
-        ? 'help'
-        : 'crosshair'
+      ? outOfReach
+        ? 'not-allowed'
+        : tool === 'inspect' && !selectedSpell && !leaderAnchor.placing
+          ? 'help'
+          : 'crosshair'
       : 'grab';
   }
   function setShift(held: boolean): void {
@@ -2226,6 +2236,10 @@ function startGame(): void {
       selectTool(action);
       const delta = action === 'raise' ? 1 : -1;
       const selection = shiftHeld ? hovered : hoveredCorner;
+      if (!withinTerrainReach(selection, shiftHeld, settlers, populationColor, combatPosition)) {
+        toast('Out of reach. Select land within 10 tiles of one of your living characters.');
+        return;
+      }
       const result = surface.terraform(selection.x, selection.z, delta, shiftHeld, powerMeter);
       if (result.status === 'insufficient') {
         toast(
@@ -2752,7 +2766,9 @@ function startGame(): void {
     if (armageddon.active && !armageddon.finished && dt > 0) updateArmageddonLand();
     if (!encounterTest && !armageddon.active) {
       if (
-        enemyAI.advance(dt, surface, enemyPowerMeter, enemyResidents, tileAt)?.status === 'changed'
+        enemyAI.advance(dt, surface, enemyPowerMeter, enemyResidents, tileAt, (point) =>
+          withinTerrainReach(point, false, enemyResidents, enemyColor, combatPosition),
+        )?.status === 'changed'
       )
         refreshTerrainAfterEdit();
       updateEnemyBuilder();

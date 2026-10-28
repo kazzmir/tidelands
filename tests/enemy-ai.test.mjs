@@ -15,6 +15,16 @@ function world(height=7){
  return{surface,tiles,lookup,resident,ai:new EnemyTerraformer({x:32,z:32}),budget:new PowerMeter(5,10000)};
 }
 
+test('enemy terrain edits respect the same supplied character-reach gate without spending on denied plans',()=>{
+ const far=world(),farBefore=far.surface.levels.slice();far.resident.tile=far.lookup(0,0);
+ assert.equal(far.ai.advance(4,far.surface,far.budget,[far.resident],far.lookup),null);assert.deepEqual(far.surface.levels,farBefore);assert.equal(far.budget.value,10000);
+ const w=world(),before=w.surface.levels.slice(),balance=w.budget.value;
+ assert.equal(w.ai.advance(4,w.surface,w.budget,[w.resident],w.lookup,()=>false),null);
+ assert.deepEqual(w.surface.levels,before);assert.equal(w.budget.value,balance);assert.equal(w.ai.edits,0);
+ const within=point=>(point.x-32.5)**2+(point.z-32.5)**2<=100;
+ assert.equal(w.ai.advance(4,w.surface,w.budget,[w.resident],w.lookup,within).status,'changed');
+ const changed=w.surface.levels.slice();w.ai.advance(4,w.surface,w.budget,[w.resident],w.lookup,()=>false);assert.deepEqual(w.surface.levels,changed);
+});
 test('enemy edits slowly in simulation time, with no paused work or catch-up bursts',()=>{
  const w=world(),before=w.surface.levels.slice();
  assert.equal(w.ai.advance(0,w.surface,w.budget,[w.resident],w.lookup),null);

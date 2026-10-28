@@ -106,6 +106,7 @@ export class EnemyTerraformer {
     surface: TerrainSurface,
     residents: readonly Resident<T>[],
     lookup: (x: number, z: number) => T | undefined,
+    canEdit: (point: GridPoint) => boolean,
   ): TerracePlan | null {
     let best: TerracePlan | null = null,
       bestScore = Infinity;
@@ -158,6 +159,10 @@ export class EnemyTerraformer {
         center: { x: center.x, z: center.z },
         height: candidate.height ?? Math.max(4, Math.min(7, Math.round(average))),
       };
+      if (
+        corners.some((point) => surface.level(point.x, point.z) !== plan.height && !canEdit(point))
+      )
+        continue;
       if (!this.preservesHomes(surface, plan, residents)) continue;
       const work = corners.reduce(
         (sum, p) => sum + Math.abs(surface.level(p.x, p.z) - plan.height),
@@ -185,6 +190,14 @@ export class EnemyTerraformer {
     budget: PowerBudget,
     residents: readonly Resident<T>[],
     lookup: (x: number, z: number) => T | undefined,
+    canEdit: (point: GridPoint) => boolean = (point) =>
+      residents.some((resident) => {
+        const location = resident.home ?? resident.tile;
+        return (
+          resident.characterPower > 0 &&
+          (location.x + 0.5 - point.x) ** 2 + (location.z + 0.5 - point.z) ** 2 <= 100 + 1e-9
+        );
+      }),
   ): TerraformResult | null {
     if (!Number.isFinite(seconds) || seconds <= 0) return null;
     const living = residents.filter((resident) => resident.characterPower > 0);
@@ -205,8 +218,15 @@ export class EnemyTerraformer {
         site.height = height;
       else this.sites.splice(i, 1);
     }
-    if (this.plan && !this.preservesHomes(surface, this.plan, living)) this.plan = null;
-    this.plan ??= this.choosePlan(surface, living, lookup);
+    if (
+      this.plan &&
+      (!this.preservesHomes(surface, this.plan, living) ||
+        this.corners(this.plan.center).some(
+          (point) => surface.level(point.x, point.z) !== this.plan!.height && !canEdit(point),
+        ))
+    )
+      this.plan = null;
+    this.plan ??= this.choosePlan(surface, living, lookup, canEdit);
     if (!this.plan) return null;
     const plan = this.plan;
     const point = this.corners(plan.center).find((p) => surface.level(p.x, p.z) !== plan.height);
