@@ -13,6 +13,8 @@ test('bottom playback panel is content-sized and anchored on the right',async()=
  assert.ok(header.includes('id="test-scenario"')&&header.includes('id="new-world"'));
  assert.ok(!header.includes('id="rally"'));
  assert.ok(toolbar.includes('id="rally"')&&!toolbar.includes('id="test-scenario"'));
+ assert.match(toolbar,/<button id="rally" class="icon-button rally-button"[^>]*><span data-icon="rally"><\/span><\/button>/);
+ assert.doesNotMatch(html,/rally-label/);
  assert.doesNotMatch(html,/id="enemy-view"/);
  for(const speed of [1,2,4])assert.ok(html.includes(`data-speed="${speed}"`));
  const main=await readFile(new URL('../src/main.ts',import.meta.url),'utf8');

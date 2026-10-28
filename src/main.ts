@@ -1296,10 +1296,10 @@ function startGame(): void {
     const button = element<HTMLButtonElement>('#rally');
     button.disabled = encounterTest || armageddon.active;
     const label = leadership.rallying ? 'Stop gathering' : 'Gather followers';
-    if (element('#rally-label').textContent !== label) element('#rally-label').textContent = label;
+    button.setAttribute('aria-label', label);
     button.classList.toggle('active', leadership.rallying);
     button.setAttribute('aria-pressed', String(leadership.rallying));
-    button.title = `${leadership.leader ? `Leader HP ${leadership.leader.characterPower.toFixed(1)}${leadership.leader.knight ? ' · Knight' : ''}` : 'Leader object awaiting pickup'} · ${armageddon.active ? 'Armageddon: both populations merge into their leaders' : encounterTest ? 'Gathering disabled in encounter test' : leadership.rallying ? 'Click to resume wandering and building' : 'Residents leave homes and merge their HP/power into the leader'}`;
+    button.title = `${label} · ${leadership.leader ? `Leader HP ${leadership.leader.characterPower.toFixed(1)}${leadership.leader.knight ? ' · Knight' : ''}` : 'Leader object awaiting pickup'} · ${armageddon.active ? 'Armageddon: both populations merge into their leaders' : encounterTest ? 'Gathering disabled in encounter test' : leadership.rallying ? 'Click to resume wandering and building' : 'Residents leave homes and merge their HP/power into the leader'}`;
   }
   function encounterLeader(settler: Settler): boolean {
     if (armageddon.finished || (armageddon.active && paused)) return false;
