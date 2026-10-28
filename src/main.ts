@@ -18,6 +18,7 @@ import { PowerMeter } from './power';
 import { Leadership, buildRallyField, rallySteps } from './leadership';
 import { AttackOrder, SharedPursuit } from './attack-order';
 import { Armageddon, armageddonLand } from './armageddon';
+import { nearestPoleCollector } from './pole-recovery';
 import { createSilverArmorMaterial, equipKnightArmor } from './knight-armor';
 import { createWaterTextures, animateWaterTextures } from './water-texture';
 import {
@@ -891,6 +892,7 @@ function startGame(): void {
   const { water, waterTextures } = createWater();
 
   const settlers: Settler[] = [];
+  const poleCollectors = new Map<PopulationColor, Settler>();
   const armageddon = new Armageddon<Settler>();
   const attackOrder = new AttackOrder();
   const sharedPursuit = new SharedPursuit<Tile>();
@@ -1312,6 +1314,33 @@ function startGame(): void {
     button.setAttribute('aria-pressed', String(leadership.rallying));
     button.title = `${label} · ${leadership.leader ? `Leader HP ${leadership.leader.characterPower.toFixed(1)}${leadership.leader.knight ? ' · Knight' : ''}` : 'Leader object awaiting pickup'} · ${armageddon.active ? 'Armageddon: both populations merge into their leaders' : encounterTest ? 'Gathering disabled in encounter test' : leadership.rallying ? 'Click to resume wandering and building' : 'Residents leave homes and merge their HP/power into the leader'}`;
   }
+  function updatePoleCollectors(): void {
+    poleCollectors.clear();
+    if (armageddon.active) return;
+    for (const [color, state] of [
+      [populationColor, leadership],
+      [enemyColor, enemyLeadership],
+    ] as const) {
+      const goal = state.droppedTile;
+      if (state.leader || !goal) continue;
+      const collector = nearestPoleCollector(
+        tileCenter(goal),
+        color,
+        settlers,
+        combatPosition,
+        (actor) => !combat.opponent(actor) && state.canRecover(actor, characterTile(actor)),
+      );
+      if (collector) poleCollectors.set(color, collector);
+    }
+  }
+  function tileCenter(tile: Tile): GridPoint {
+    return { x: tile.x + 0.5, z: tile.z + 0.5 };
+  }
+  function poleRecoveryOptions(settler: Settler, goal: Tile): Tile[] {
+    const starts = isWalkable(goal) ? [goal] : neighbors(goal);
+    const field = sharedPursuit.field(settler.tile, goal, starts, neighbors, navigationRevision);
+    return rallySteps(settler.tile, neighbors(settler.tile), field);
+  }
   function encounterLeader(settler: Settler): boolean {
     if (armageddon.finished || (armageddon.active && paused)) return false;
     if (settler.home || settler.survival.phase !== 'alive') return false;
@@ -1578,6 +1607,7 @@ function startGame(): void {
     return settler;
   }
   function clearSettlers(): void {
+    poleCollectors.clear();
     armageddon.reset();
     element('#game-result').hidden = true;
     element<HTMLButtonElement>('#pause').disabled = false;
@@ -2726,6 +2756,7 @@ function startGame(): void {
     let settlementsChanged = false;
     let survivalChanged = !armageddon.active && triggerBuildingContacts(dt);
     combat.match(armageddon.active ? [...armageddon.leaders.values()] : settlers, combatPosition);
+    updatePoleCollectors();
     for (const settler of settlers) {
       if (settler.survival.phase === 'alive' || settler.survival.phase === 'drowning') {
         const wasSick = settler.sick;
@@ -2780,9 +2811,16 @@ function startGame(): void {
         settler.progress = 0;
         continue;
       }
+      const state = settler.population === populationColor ? leadership : enemyLeadership;
+      const recoveryGoal = state.droppedTile;
+      const recovering =
+        !armageddon.active &&
+        recoveryGoal !== null &&
+        poleCollectors.get(settler.population) === settler;
       if (
         !encounterTest &&
         !armageddon.active &&
+        !recovering &&
         settler === enemyBuilder &&
         !settler.target &&
         settler.tile === enemyBuildingSite &&
@@ -2808,36 +2846,56 @@ function startGame(): void {
           : null;
       if (!settler.target) {
         settler.wait -= dt;
-        if (armageddon.active || enemy || attacking || anchoredLeader || settler === enemyBuilder)
+        if (
+          recovering ||
+          armageddon.active ||
+          enemy ||
+          attacking ||
+          anchoredLeader ||
+          settler === enemyBuilder
+        )
           settler.wait = 0;
         if (settler.wait > 0) continue;
-        let options = armageddon.active
-          ? rallyLeader
-            ? pursuitOptions(settler, rallyLeader)
-            : enemy
-              ? pursuitOptions(settler, enemy)
-              : []
-          : anchoredLeader
-            ? leaderAnchor.steps(settler, settler.tile, neighbors, isWalkable, navigationRevision)
-            : enemy
-              ? pursuitOptions(settler, enemy)
-              : attacking
-                ? []
-                : settler === enemyBuilder
-                  ? rallySteps(settler.tile, neighbors(settler.tile), enemyBuildDistance)
-                  : leadership.rallying &&
-                      settler.population === populationColor &&
-                      settler !== leadership.leader
-                    ? followerOptions(settler)
-                    : neighbors(settler.tile);
-        if (encounterTest && !armageddon.active)
-          options = unoccupiedWalkSteps(
+        let options =
+          recovering && recoveryGoal
+            ? poleRecoveryOptions(settler, recoveryGoal)
+            : armageddon.active
+              ? rallyLeader
+                ? pursuitOptions(settler, rallyLeader)
+                : enemy
+                  ? pursuitOptions(settler, enemy)
+                  : []
+              : anchoredLeader
+                ? leaderAnchor.steps(
+                    settler,
+                    settler.tile,
+                    neighbors,
+                    isWalkable,
+                    navigationRevision,
+                  )
+                : enemy
+                  ? pursuitOptions(settler, enemy)
+                  : attacking
+                    ? []
+                    : settler === enemyBuilder
+                      ? rallySteps(settler.tile, neighbors(settler.tile), enemyBuildDistance)
+                      : leadership.rallying &&
+                          settler.population === populationColor &&
+                          settler !== leadership.leader
+                        ? followerOptions(settler)
+                        : neighbors(settler.tile);
+        if (encounterTest && !armageddon.active) {
+          const free = unoccupiedWalkSteps(
             settler,
             options,
             settlers.filter(
               (other) => other.survival.phase === 'alive' || other.survival.phase === 'drowning',
             ),
           );
+          options = options.filter(
+            (tile) => free.includes(tile) || (recovering && tile === recoveryGoal),
+          );
+        }
         if (!options.length) {
           settler.wait = 1;
           continue;
@@ -2879,6 +2937,7 @@ function startGame(): void {
           !encounterTest &&
           !armageddon.active &&
           !settler.knight &&
+          !recovering &&
           !attackOrder.commands(settler, populationColor) &&
           !(leaderAnchor.target && settler === leadership.leader) &&
           !hasNearbyOpponent(settler) &&

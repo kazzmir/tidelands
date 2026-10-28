@@ -23,6 +23,15 @@ export class Leadership<T, C extends LeaderCharacter<T>> {
     return 'moved';
   }
 
+  canRecover(character: C, tile: T): boolean {
+    return (
+      this.leader === null &&
+      this.droppedTile !== null &&
+      character.characterPower > 0 &&
+      !(this.formerHolder === character && tile === this.droppedTile)
+    );
+  }
+
   appoint(character: C): boolean {
     if (this.leader || this.droppedTile !== null || character.characterPower <= 0) return false;
     this.leader = character;
