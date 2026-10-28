@@ -137,6 +137,14 @@ The enemy pays the **same full cascade costs and obeys the same slope limits** a
 
 AI plans local **3×3 flat building platforms** (16 shared corners), favoring existing high ground and modest elevation **4–7**, rather than flattening the island to one universal level. Existing homes at elevation 4 or above can be expanded at their current height without changing their foundations. Higher platforms help withstand floods; they are not immune to terrain spells. Plans protect friendly home corners, leave castle spacing, and wait for actual walkers to reach completed sites. Ordinary construction/support rules produce houses and castles—no buildings or new citizens are spawned for free. Normal births, illness, drowning, rock penalties, and combat apply to both populations. Broad flat platforms remain available for rebuilding after a uniform flood if still above water.
 
+### Enemy spell attacks
+
+After a **75-simulation-second opening grace period**, the enemy occasionally casts **Earthquake (500)**, **Swamp (1,500)**, or **Volcano (2,000)** against player settlements or groups of characters. Further attempts are spaced **75–120 simulation seconds** apart, with at most one attack per update and no catch-up bursts. Affordable spells are chosen with a preference for Earthquake; valuable, crowded targets receive higher priority.
+
+Spells share the enemy's normal power budget with terrain editing and use exactly the same effects/costs as player spells—no free currency, resource bonuses, or extra per-point fees. Targets near the enemy's own population are avoided, and a final preview protects friendly homes and characters. Invalid/no-effect casts cost nothing. Enemy casting does not cancel the player's selected spell or change player currency, and successful attacks announce **Enemy casts …**. Hover the enemy population count to see spell count and power spent.
+
+Enemy spells freeze while paused, stop if either population is eliminated, and are disabled during the encounter test and Armageddon. The AI does not cast Armageddon, global Flood, or move the player's pole.
+
 ## Water waves
 
 The ocean uses animated, seamless **wave color and ripple-normal textures** on one continuous world-aligned surface. Patterns repeat smoothly every eight world tiles, including matching slopes at the texture edges, so neighboring water tiles have no visible seams. Mipmapping, linear filtering, and anisotropic filtering keep transitions smooth when zooming or viewing at an angle. Color and normals scroll together in simulation time; pausing freezes the waves. Camera movement never repositions or snaps the pattern. The water level, shore geometry, and drowning mechanics are unchanged.
@@ -215,6 +223,8 @@ Rock persists through dry terrain edits. Lowering it into water destroys the roc
 - `tests/encounter-scenario.test.mjs` — connected camps, movement reservations, and combat-enabled scenario guards.
 - `src/minimap.ts` — incremental elevation raster, team markers, crowd suppression, and map navigation coordinates.
 - `tests/minimap.test.mjs` — terrain cache correctness, team glyphs, crowded characters, and coordinate bounds.
+- `src/enemy-spells.ts` — cooldown-limited, paid attacks against player settlements/groups with friendly-fire avoidance.
+- `tests/enemy-spells.test.mjs` — grace periods, pause, budgets, targets, cooldowns, elimination, and reset.
 - `src/enemy-ai.ts` — slow, paid terrace planning, friendly-home protection, and castle-site preparation.
 - `tests/enemy-ai.test.mjs` — edit pacing, budgets/cascade costs, castle support, varied heights, and elimination.
 - `src/water-texture.ts` — seamless periodic wave textures, ripple normals, and lightweight simulation-time animation.

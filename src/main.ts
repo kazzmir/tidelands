@@ -1,6 +1,7 @@
 import './style.css';
 import { generateWorldHeights, playerStartAnchor, enemyStartAnchor } from './world-generation';
 import { EnemyTerraformer } from './enemy-ai';
+import { EnemySpellcaster } from './enemy-spells';
 import { createEncounterScenario, unoccupiedWalkSteps } from './encounter-scenario';
 import { CombatSystem, combatClosingOffset } from './combat';
 import { enemyBuildingContacts, buildingDefenderPoint, touchesBuilding } from './building-contact';
@@ -228,6 +229,7 @@ function startGame(): void {
   const powerMeter = new PowerMeter(5, 10_000);
   const enemyPowerMeter = new PowerMeter(5, 10_000);
   const enemyAI = new EnemyTerraformer(enemyStart);
+  const enemySpellcaster = new EnemySpellcaster();
   let selectedSpell: Spell | null = null;
   let seed = 34;
   let randomState = seed;
@@ -1730,7 +1732,7 @@ function startGame(): void {
         settler.population === enemyColor &&
         (settler.survival.phase === 'alive' || settler.survival.phase === 'drowning'),
     );
-    badge.title = `${enemyColor} enemy: ${living.length} settlers · ${living.filter((settler) => settler.home).length} housed · ${living.filter((settler) => settler.power === 5).length} castles · ${enemyPowerMeter.value.toLocaleString()} power · ${enemyAI.edits} paid terrain edits (one / ${enemyAI.interval}s) · ${enemyAI.spent} spent · E to view${encounterTest ? ' · Encounter test: combat enabled; terraforming AI disabled' : ''}`;
+    badge.title = `${enemyColor} enemy: ${living.length} settlers · ${living.filter((settler) => settler.home).length} housed · ${living.filter((settler) => settler.power === 5).length} castles · ${enemyPowerMeter.value.toLocaleString()} power · ${enemyAI.edits} paid terrain edits (one / ${enemyAI.interval}s) · ${enemyAI.spent} spent · ${enemySpellcaster.casts} spell${enemySpellcaster.casts === 1 ? '' : 's'} cast (${enemySpellcaster.spent.toLocaleString()} power) · E to view${encounterTest ? ' · Encounter test: combat enabled; terraforming AI disabled' : ''}`;
   }
   function updateSettlementStats(): void {
     const living = settlers.filter(
@@ -1937,6 +1939,7 @@ function startGame(): void {
     powerMeter.reset();
     enemyPowerMeter.reset();
     enemyAI.reset();
+    enemySpellcaster.reset();
     updatePowerDisplay();
     randomState = seed;
     clearSettlers();
@@ -2401,8 +2404,11 @@ function startGame(): void {
     element('#pause-overlay').hidden = true;
     selectTool(tool);
   }
-  function castSpell(spell: Spell, target?: Tile): void {
+  function castSpell(spell: Spell, target?: Tile, caster: PopulationColor = populationColor): void {
     if (armageddon.active) return;
+    const playerCast = caster === populationColor;
+    if (!playerCast && spell !== 'earthquake' && spell !== 'swamp' && spell !== 'volcano') return;
+    const budget = playerCast ? powerMeter : enemyPowerMeter;
     if (spell === 'armageddon') {
       startArmageddon();
       return;
@@ -2455,8 +2461,8 @@ function startGame(): void {
     }
     if (spell !== 'flood' && !target) return;
     const cost = SPELL_COSTS[spell];
-    if (powerMeter.value < cost) {
-      toast(`${SPELL_NAMES[spell]} needs ${cost.toLocaleString()} power.`);
+    if (budget.value < cost) {
+      if (playerCast) toast(`${SPELL_NAMES[spell]} needs ${cost.toLocaleString()} power.`);
       return;
     }
     controls.update();
@@ -2484,6 +2490,7 @@ function startGame(): void {
       }
     }
     if (!changed) {
+      if (!playerCast) return;
       toast(
         spell === 'swamp'
           ? 'No dry tiles remain to turn into swamp.'
@@ -2495,9 +2502,37 @@ function startGame(): void {
       );
       return;
     }
-    if (!powerMeter.spend(cost)) return;
-    selectedSpell = null;
-    selectTool(tool);
+    if (!playerCast) {
+      const friends = settlers.filter(
+        (actor) =>
+          actor.population === caster &&
+          actor.characterPower > 0 &&
+          (actor.survival.phase === 'alive' || actor.survival.phase === 'drowning'),
+      );
+      const unsafe = friends.some((actor) => {
+        if (actor.home) {
+          const radius = actor.power === 5 ? 1 : 0;
+          for (let z = actor.home.z - radius; z <= actor.home.z + radius + 1; z++)
+            for (let x = actor.home.x - radius; x <= actor.home.x + radius + 1; x++)
+              if (surface.level(x, z) !== preview.level(x, z)) return true;
+        } else {
+          const point = combatPosition(actor);
+          if (Math.abs(surface.sample(point.x, point.z) - preview.sample(point.x, point.z)) > 1e-6)
+            return true;
+        }
+        const point = characterTile(actor);
+        const radius = actor.home && actor.power === 5 ? 1 : 0;
+        return marsh.some(
+          (tile) => Math.abs(tile.x - point.x) <= radius && Math.abs(tile.z - point.z) <= radius,
+        );
+      });
+      if (unsafe) return;
+    }
+    if (!budget.spend(cost)) return;
+    if (playerCast) {
+      selectedSpell = null;
+      selectTool(tool);
+    }
     for (const tile of marsh) {
       tile.swamp = true;
       swampTiles.add(tile);
@@ -2516,7 +2551,9 @@ function startGame(): void {
       flood: 'The seas rise. All land sinks one level.',
       swamp: 'A sickly marsh spreads across the land.',
     };
-    toast(messages[spell]);
+    toast(
+      playerCast ? messages[spell] : `Enemy casts ${SPELL_NAMES[spell]} against your population!`,
+    );
     if (spell === 'earthquake') {
       clearTimeout(shakeTimer);
       document.body.classList.remove('earthquake-shake');
@@ -2524,6 +2561,36 @@ function startGame(): void {
       document.body.classList.add('earthquake-shake');
       shakeTimer = setTimeout(() => document.body.classList.remove('earthquake-shake'), 1000);
     }
+  }
+  function advanceEnemySpells(seconds: number): void {
+    if (seconds <= 0) return;
+    const living = settlers.filter(
+      (actor) =>
+        actor.characterPower > 0 &&
+        (actor.survival.phase === 'alive' || actor.survival.phase === 'drowning'),
+    );
+    const players = living
+      .filter((actor) => actor.population === populationColor)
+      .map((actor) => ({
+        ...combatPosition(actor),
+        weight:
+          (actor.home ? (actor.power === 5 ? 6 : 3) : 1) + (actor === leadership.leader ? 2 : 0),
+      }));
+    const allies = living.filter((actor) => actor.population === enemyColor).map(combatPosition);
+    enemySpellcaster.advance(
+      seconds,
+      enemyPowerMeter,
+      players,
+      allies,
+      (spell, point) => {
+        const target = tileAt(Math.floor(point.x), Math.floor(point.z));
+        if (!target) return false;
+        const before = enemyPowerMeter.value;
+        castSpell(spell, target, enemyColor);
+        return enemyPowerMeter.value < before;
+      },
+      random,
+    );
   }
   function bindSpellControls(): void {
     const buttons = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-spell]'));
@@ -2772,6 +2839,7 @@ function startGame(): void {
       )
         refreshTerrainAfterEdit();
       updateEnemyBuilder();
+      advanceEnemySpells(dt);
     }
     let settlementsChanged = false;
     let survivalChanged = !armageddon.active && triggerBuildingContacts(dt);
