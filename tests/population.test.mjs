@@ -16,6 +16,12 @@ const resident = (level=1,power=INITIAL_CHARACTER_POWER) => ({tile,home:tile,pow
 const spawn = {x:2,z:1,tree:false,house:false};
 const close = (a,b) => assert.ok(Math.abs(a-b)<1e-8,`${a} != ${b}`);
 
+test('a gathering housed leader preserves pooled HP and growth without repeatedly splitting into births',()=>{
+ const leader=resident(5,100),other=resident(1,21);
+ const births=growPopulation([leader,other],1,()=>spawn,20,owner=>owner!==leader);
+ close(leader.characterPower,100+characterGrowthRate(5));assert.equal(leader.home,tile);assert.equal(leader.power,5);assert.equal(births.length,1);
+ assert.ok(growPopulation([leader],.01,()=>spawn).length>0,'normal birth splitting resumes when gathering ends');
+});
 test('populations have uniform red or blue shirts rather than per-character colors',async()=>{
   assert.equal(populationShirtColor('red'),'#d33136');
   assert.equal(populationShirtColor('blue'),'#2d64d6');

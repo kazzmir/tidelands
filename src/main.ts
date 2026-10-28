@@ -1319,7 +1319,7 @@ function startGame(): void {
     button.setAttribute('aria-label', label);
     button.classList.toggle('active', leadership.rallying);
     button.setAttribute('aria-pressed', String(leadership.rallying));
-    button.title = `${label} · ${leadership.leader ? `Leader HP ${leadership.leader.characterPower.toFixed(1)}${leadership.leader.knight ? ' · Knight' : ''}` : 'Leader object awaiting pickup'} · ${armageddon.active ? 'Armageddon: both populations merge into their leaders' : encounterTest ? 'Gathering disabled in encounter test' : leadership.rallying ? 'Click to resume wandering and building' : 'Residents leave homes and merge their HP/power into the leader'}`;
+    button.title = `${label} · ${leadership.leader ? `Leader HP ${leadership.leader.characterPower.toFixed(1)}${leadership.leader.knight ? ' · Knight' : ''}` : 'Leader object awaiting pickup'} · ${armageddon.active ? 'Armageddon: both populations merge into their leaders' : encounterTest ? 'Gathering disabled in encounter test' : leadership.rallying ? 'Click to resume wandering and building' : 'Roaming followers merge their HP/power into the leader; buildings stay occupied'}`;
   }
   function updatePoleCollectors(): void {
     poleCollectors.clear();
@@ -1355,9 +1355,13 @@ function startGame(): void {
     const owner = state.leader;
     if (armageddon.active && (!owner || owner.characterPower <= 0)) return false;
     if (owner && owner.survival.phase !== 'alive') return false;
+    const atLeaderBuilding =
+      state.rallying &&
+      owner?.home &&
+      touchesBuilding(combatPosition(settler), owner.home, owner.power);
     const result = state.encounter(
       settler,
-      characterTile(settler),
+      atLeaderBuilding && owner?.home ? owner.home : characterTile(settler),
       owner ? characterTile(owner) : null,
     );
     if (result === 'none') return false;
@@ -1382,6 +1386,7 @@ function startGame(): void {
     return changed;
   }
   function followerOptions(settler: Settler): Tile[] {
+    if (leadership.leader?.home) return pursuitOptions(settler, leadership.leader);
     const goal = leadership.leader ? characterTile(leadership.leader) : leadership.droppedTile;
     if (!goal) return [];
     if (goal !== rallyDestination || rallyRevision !== navigationRevision) {
@@ -1405,15 +1410,6 @@ function startGame(): void {
     }
     navigationRevision++;
     rallyDestination = null;
-    if (leadership.rallying) {
-      evacuateSettlements(
-        settlers.filter((settler) => settler.population === populationColor),
-        tileAt,
-      );
-      reconcileWorldSettlements();
-      rebuildBuildings();
-      syncResidentMeshes();
-    }
     for (const settler of settlers) {
       if (
         settler.population !== populationColor ||
@@ -2842,6 +2838,11 @@ function startGame(): void {
       const finalLeader = armageddon.active && armageddon.isLeader(settler);
       const rallyLeader =
         armageddon.active && !finalLeader ? armageddon.leaders.get(settler.population) : null;
+      const gatheringFollower =
+        !armageddon.active &&
+        leadership.rallying &&
+        settler.population === populationColor &&
+        settler !== leadership.leader;
       const attacking = attackOrder.commands(settler, populationColor);
       const anchoredLeader =
         !attacking && leaderAnchor.target !== null && settler === leadership.leader;
@@ -2849,13 +2850,14 @@ function startGame(): void {
         ? finalLeader
           ? (armageddon.leaders.get(settler.population === 'red' ? 'blue' : 'red') ?? null)
           : null
-        : attacking || (settler.knight && !anchoredLeader)
+        : attacking || (settler.knight && !anchoredLeader && !gatheringFollower)
           ? nearestEnemy(settler, settlers, characterTile)
           : null;
       if (!settler.target) {
         settler.wait -= dt;
         if (
           recovering ||
+          gatheringFollower ||
           armageddon.active ||
           enemy ||
           attacking ||
@@ -2873,24 +2875,22 @@ function startGame(): void {
                 : enemy
                   ? pursuitOptions(settler, enemy)
                   : []
-              : anchoredLeader
-                ? leaderAnchor.steps(
-                    settler,
-                    settler.tile,
-                    neighbors,
-                    isWalkable,
-                    navigationRevision,
-                  )
-                : enemy
-                  ? pursuitOptions(settler, enemy)
-                  : attacking
-                    ? []
-                    : settler === enemyBuilder
-                      ? rallySteps(settler.tile, neighbors(settler.tile), enemyBuildDistance)
-                      : leadership.rallying &&
-                          settler.population === populationColor &&
-                          settler !== leadership.leader
-                        ? followerOptions(settler)
+              : gatheringFollower
+                ? followerOptions(settler)
+                : anchoredLeader
+                  ? leaderAnchor.steps(
+                      settler,
+                      settler.tile,
+                      neighbors,
+                      isWalkable,
+                      navigationRevision,
+                    )
+                  : enemy
+                    ? pursuitOptions(settler, enemy)
+                    : attacking
+                      ? []
+                      : settler === enemyBuilder
+                        ? rallySteps(settler.tile, neighbors(settler.tile), enemyBuildDistance)
                         : neighbors(settler.tile);
         if (encounterTest && !armageddon.active) {
           const free = unoccupiedWalkSteps(
@@ -3004,6 +3004,8 @@ function startGame(): void {
             settlers.filter((settler) => !combat.opponent(settler)),
             dt,
             findBirthTile,
+            BIRTH_THRESHOLD,
+            (resident) => !(leadership.rallying && resident === leadership.leader),
           );
     for (const birth of births)
       createSettler(birth.tile, birth.characterPower, birth.population ?? populationColor).wait = 0;

@@ -29,6 +29,7 @@ export function growPopulation<T extends SettlementTile>(
   seconds: number,
   findSpawnTile: (home: T) => T | null,
   threshold = BIRTH_THRESHOLD,
+  canReproduce: (resident: Resident<T>) => boolean = () => true,
 ): Newborn<T>[] {
   const births: Newborn<T>[] = [];
   if (!Number.isFinite(seconds) || seconds <= 0) return births;
@@ -38,6 +39,7 @@ export function growPopulation<T extends SettlementTile>(
     if (!resident.home) continue;
     resident.characterPower +=
       seconds * characterGrowthRate(resident.power, Boolean(resident.home.rock));
+    if (!canReproduce(resident)) continue;
     while (resident.characterPower > threshold) {
       const tile = findSpawnTile(resident.home);
       if (!tile) break; // Keep the power until there is a safe place for the newborn.

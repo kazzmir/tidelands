@@ -33,6 +33,13 @@ test('same-tile relocation releases the owner until they leave, and another walk
  state.relocate(tile,()=>true);assert.equal(state.encounter(other,tile),'picked-up');assert.equal(state.leader,other);assert.equal(owner.characterPower,10);
  state.reset();assert.equal(state.droppedTile,null);assert.equal(state.appoint(owner),true);
 });
+test('gather toggle leaves occupied buildings intact and routes followers to a housed leader',async()=>{
+ const main=await readFile(new URL('../src/main.ts',import.meta.url),'utf8');
+ const toggle=main.slice(main.indexOf('function toggleRally()'),main.indexOf('const flock:'));
+ assert.doesNotMatch(toggle,/evacuateSettlements|reconcileWorldSettlements|rebuildBuildings|syncResidentMeshes/);
+ assert.match(main,/if \(leadership.leader\?\.home\) return pursuitOptions\(settler, leadership.leader\)/);
+ assert.match(main,/touchesBuilding\(combatPosition\(settler\), owner.home, owner.power\)/);
+});
 test('a population can appoint only one leader at a time',()=>{
   const state=new Leadership(),tile={x:1,z:1};
   const a=character(tile),b=character(tile);
@@ -127,7 +134,7 @@ test('pursuit advances to a reachable shore without walking into water, then use
  assert.equal(bridge.get(start),11);assert.equal(bridge.get(goal),0);
 });
 
-test('rally evacuation preserves character power and clears houses and castle reservations',()=>{
+test('explicit evacuation preserves character power and clears houses and castle reservations',()=>{
   const surface=new TerrainSurface(8,new Uint8Array(81).fill(2),0.65);
   const tiles=Array.from({length:64},(_,i)=>({x:i%8,z:Math.floor(i/8),tree:false,house:false}));
   const lookup=(x,z)=>x>=0 && z>=0 && x<8 && z<8?tiles[z*8+x]:undefined;
