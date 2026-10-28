@@ -25,7 +25,7 @@ function assertSlopes(surface){
 }
 
 test('spells have their configured fixed power costs',()=>{
-  assert.deepEqual(SPELL_COSTS,{earthquake:500,knight:1000,volcano:2000,flood:3000,swamp:1500});
+  assert.deepEqual(SPELL_COSTS,{earthquake:500,knight:1000,volcano:2000,flood:3000,swamp:1500,armageddon:6000});
 });
 
 test('Flood lowers every terrain point globally by one and clamps at water level',()=>{

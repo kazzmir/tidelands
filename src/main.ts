@@ -17,6 +17,7 @@ import { TerrainSurface, type GridPoint, type TerrainBounds } from './terrain-su
 import { PowerMeter } from './power';
 import { Leadership, buildRallyField, rallySteps } from './leadership';
 import { AttackOrder, SharedPursuit } from './attack-order';
+import { Armageddon, armageddonLand } from './armageddon';
 import { createSilverArmorMaterial, equipKnightArmor } from './knight-armor';
 import { createWaterTextures, animateWaterTextures } from './water-texture';
 import {
@@ -104,6 +105,8 @@ function element<T extends HTMLElement>(selector: string): T {
 function createIconRenderer(): (name: string) => string {
   const icons: Record<string, string> = {
     test: '<path d="M9 3h6m-5 0v6l-6 10a1 1 0 0 0 1 2h14a1 1 0 0 0 1-2L14 9V3M7 16h10"/><circle cx="10" cy="18" r=".7"/>',
+    armageddon:
+      '<path d="m4 4 6 5-5 3 5 8m10-16-6 5 5 3-5 8M12 3v6m0 6v6"/><circle cx="12" cy="12" r="3"/>',
     attack:
       '<path d="m3 3 5 1 12 13-3 3L4 8 3 3Zm18 0-5 1-5 6M9 14l-6 3 3 3 5-6M4 15l5 5m6-16 5 5"/>',
     anchor:
@@ -888,6 +891,7 @@ function startGame(): void {
   const { water, waterTextures } = createWater();
 
   const settlers: Settler[] = [];
+  const armageddon = new Armageddon<Settler>();
   const attackOrder = new AttackOrder();
   const sharedPursuit = new SharedPursuit<Tile>();
   const leaderAnchor = new LeaderAnchor<Tile>();
@@ -1167,6 +1171,7 @@ function startGame(): void {
   }
   function updateAnchorButton(): void {
     const button = element<HTMLButtonElement>('#leader-anchor');
+    button.disabled = armageddon.active;
     button.classList.toggle('active', leaderAnchor.active);
     button.setAttribute('aria-pressed', String(leaderAnchor.active));
     button.setAttribute(
@@ -1182,6 +1187,7 @@ function startGame(): void {
         : 'Place an anchor for your leader to walk toward';
   }
   function toggleLeaderAnchor(): void {
+    if (armageddon.active) return;
     if (leaderAnchor.active) {
       leaderAnchor.reset();
       anchorMarker.visible = false;
@@ -1241,6 +1247,7 @@ function startGame(): void {
   }
   function updateAttackButton(): void {
     const button = element<HTMLButtonElement>('#attack-enemy');
+    button.disabled = armageddon.active;
     button.classList.toggle('active', attackOrder.active);
     button.setAttribute('aria-pressed', String(attackOrder.active));
     button.setAttribute(
@@ -1252,6 +1259,7 @@ function startGame(): void {
       : 'Attack enemy: all human characters leave buildings and pursue enemies';
   }
   function toggleAttackOrder(): void {
+    if (armageddon.active) return;
     cancelSpell();
     attackOrder.toggle();
     if (attackOrder.active) {
@@ -1293,17 +1301,19 @@ function startGame(): void {
       ? 'Locate your dropped leader pole, including in water (L)'
       : 'Locate your leader pole (L)';
     const button = element<HTMLButtonElement>('#rally');
-    button.disabled = encounterTest;
+    button.disabled = encounterTest || armageddon.active;
     const label = leadership.rallying ? 'Stop gathering' : 'Gather followers';
     if (element('#rally-label').textContent !== label) element('#rally-label').textContent = label;
     button.classList.toggle('active', leadership.rallying);
     button.setAttribute('aria-pressed', String(leadership.rallying));
-    button.title = `${leadership.leader ? `Leader HP ${leadership.leader.characterPower.toFixed(1)}${leadership.leader.knight ? ' · Knight' : ''}` : 'Leader object awaiting pickup'} · ${encounterTest ? 'Gathering disabled in encounter test' : leadership.rallying ? 'Click to resume wandering and building' : 'Residents leave homes and merge their HP/power into the leader'}`;
+    button.title = `${leadership.leader ? `Leader HP ${leadership.leader.characterPower.toFixed(1)}${leadership.leader.knight ? ' · Knight' : ''}` : 'Leader object awaiting pickup'} · ${armageddon.active ? 'Armageddon: both populations merge into their leaders' : encounterTest ? 'Gathering disabled in encounter test' : leadership.rallying ? 'Click to resume wandering and building' : 'Residents leave homes and merge their HP/power into the leader'}`;
   }
   function encounterLeader(settler: Settler): boolean {
+    if (armageddon.finished || (armageddon.active && paused)) return false;
     if (settler.home || settler.survival.phase !== 'alive') return false;
     const state = settler.population === populationColor ? leadership : enemyLeadership;
     const owner = state.leader;
+    if (armageddon.active && (!owner || owner.characterPower <= 0)) return false;
     if (owner && owner.survival.phase !== 'alive') return false;
     const result = state.encounter(
       settler,
@@ -1342,7 +1352,7 @@ function startGame(): void {
     return rallySteps(settler.tile, neighbors(settler.tile), rallyDistance);
   }
   function toggleRally(): void {
-    if (encounterTest) return;
+    if (encounterTest || armageddon.active) return;
     if (!leadership.leader && !leadership.droppedTile) {
       toast('There is no leader object to gather around.');
       return;
@@ -1564,6 +1574,10 @@ function startGame(): void {
     return settler;
   }
   function clearSettlers(): void {
+    armageddon.reset();
+    element('#game-result').hidden = true;
+    element<HTMLButtonElement>('#pause').disabled = false;
+    element('#pause-overlay').hidden = !paused;
     attackOrder.reset();
     sharedPursuit.reset();
     updateAttackButton();
@@ -1664,7 +1678,7 @@ function startGame(): void {
       button.classList.toggle('affordable', affordable);
       button.classList.toggle('selected', selectedSpell === spell);
       button.setAttribute('aria-pressed', String(selectedSpell === spell));
-      button.disabled = false;
+      button.disabled = armageddon.active;
       button.setAttribute('aria-disabled', String(!affordable || button.disabled));
     });
   }
@@ -1912,6 +1926,7 @@ function startGame(): void {
     renderedBounds = cameraTerrainBounds();
     rebuild();
     spawnSettlers();
+    updatePowerDisplay();
   }
   // Normal selection highlights a corner; Shift highlights the entire tile surface.
   const glowCanvas = document.createElement('canvas');
@@ -2155,6 +2170,7 @@ function startGame(): void {
         return;
       setShift(event.shiftKey);
       updateHover(event);
+      if (armageddon.active) return;
       if (leaderAnchor.placing) {
         if (event.button === 2) cancelSpell();
         else if (hovered) placeLeaderAnchor(hovered);
@@ -2238,6 +2254,7 @@ function startGame(): void {
     if (lastPointer) updateHover(lastPointer);
   }
   function selectSpell(spell: Spell): void {
+    if (armageddon.active) return;
     leaderAnchor.cancelPlacement();
     updateAnchorButton();
     if (selectedSpell === spell) {
@@ -2248,7 +2265,7 @@ function startGame(): void {
       toast(`${SPELL_NAMES[spell]} needs ${SPELL_COSTS[spell].toLocaleString()} power.`);
       return;
     }
-    if (spell === 'flood' || spell === 'knight') {
+    if (spell === 'flood' || spell === 'knight' || spell === 'armageddon') {
       cancelSpell();
       castSpell(spell);
       return;
@@ -2258,7 +2275,86 @@ function startGame(): void {
     selectTool(tool);
     if (lastPointer) updateHover(lastPointer);
   }
+  function updateArmageddonLand(): void {
+    if (armageddonLand(surface, [...armageddon.leaders.values()].map(combatPosition)))
+      refreshTerrainAfterEdit();
+  }
+  function startArmageddon(): void {
+    const current = new Map<PopulationColor, Settler | null>([
+      [populationColor, leadership.leader],
+      [enemyColor, enemyLeadership.leader],
+    ]);
+    const result = armageddon.start(settlers, current, () =>
+      powerMeter.spend(SPELL_COSTS.armageddon),
+    );
+    if (result !== 'started') {
+      toast(
+        result === 'insufficient'
+          ? 'Armageddon needs 6,000 power.'
+          : result === 'missing-population'
+            ? 'Both populations need a living character for Armageddon.'
+            : 'Armageddon is already underway.',
+      );
+      return;
+    }
+    attackOrder.reset();
+    leaderAnchor.reset();
+    anchorMarker.visible = false;
+    cancelSpell();
+    combatEffects.clear();
+    combat.reset();
+    for (const [color, state] of [
+      [populationColor, leadership],
+      [enemyColor, enemyLeadership],
+    ] as const) {
+      state.reset();
+      state.appoint(armageddon.leaders.get(color)!);
+      state.rallying = true;
+    }
+    evacuateSettlements(settlers, tileAt);
+    reconcileWorldSettlements();
+    navigationRevision++;
+    rebuildBuildings();
+    syncResidentMeshes();
+    for (const actor of settlers) {
+      actor.tile = characterTile(actor);
+      actor.target = null;
+      actor.progress = 0;
+      actor.wait = 0;
+      resetWalkingPose(actor);
+    }
+    updateArmageddonLand();
+    updateAttackButton();
+    updateAnchorButton();
+    updateSettlementStats();
+    updateLeadershipVisual();
+    updatePowerDisplay();
+    selectTool(tool);
+    toast('Armageddon! Both populations merge into their leaders for the final battle.');
+  }
+  function finishArmageddon(): void {
+    if (!armageddon.active || armageddon.finished) return;
+    const winner = armageddon.resolve();
+    if (winner === null) return;
+    element('#game-result').hidden = false;
+    element('#game-result-title').textContent =
+      winner === 'draw' ? 'DRAW' : winner === populationColor ? 'VICTORY' : 'DEFEAT';
+    element('#game-result-detail').textContent =
+      winner === 'draw'
+        ? 'Both leaders fell together.'
+        : winner === populationColor
+          ? 'Your leader won Armageddon.'
+          : 'The enemy leader won Armageddon.';
+    element<HTMLButtonElement>('#pause').disabled = true;
+    element('#pause-overlay').hidden = true;
+    selectTool(tool);
+  }
   function castSpell(spell: Spell, target?: Tile): void {
+    if (armageddon.active) return;
+    if (spell === 'armageddon') {
+      startArmageddon();
+      return;
+    }
     if (spell === 'knight') {
       const owner = leadership.leader;
       const result = convertLeaderToKnight(owner, () => powerMeter.spend(SPELL_COSTS.knight));
@@ -2339,6 +2435,7 @@ function startGame(): void {
     if (spell === 'volcano') markVolcanicRock(surface, tileAt, rockTiles, swampTiles);
     refreshTerrainAfterEdit();
     const messages: Record<Spell, string> = {
+      armageddon: 'Armageddon begins. Both populations rally for the final battle.',
       knight: 'The leader becomes a knight.',
       earthquake: 'The earth trembles.',
       volcano: 'A volcano rises above the land.',
@@ -2381,17 +2478,22 @@ function startGame(): void {
       ],
       inspect: ['Explore your world', 'Hover a tile to discover what lives there'],
     };
-    element('#tool-hint').innerHTML = leaderAnchor.placing
-      ? '<strong>Place leader anchor</strong><span class="hint-detail">Click a location · Esc or right-click to cancel</span>'
-      : selectedSpell
-        ? `<strong>Cast ${SPELL_NAMES[selectedSpell]}</strong><span class="hint-detail">Click a tile to cast · Esc or right-click to cancel</span>`
-        : `<strong>${hints[next][0]}</strong><span class="hint-detail">${hints[next][1]}</span>`;
+    element('#tool-hint').innerHTML = armageddon.finished
+      ? '<strong>Armageddon complete</strong><span class="hint-detail">Choose New world to play again</span>'
+      : armageddon.active
+        ? '<strong>Armageddon</strong><span class="hint-detail">Both leaders march for the final battle</span>'
+        : leaderAnchor.placing
+          ? '<strong>Place leader anchor</strong><span class="hint-detail">Click a location · Esc or right-click to cancel</span>'
+          : selectedSpell
+            ? `<strong>Cast ${SPELL_NAMES[selectedSpell]}</strong><span class="hint-detail">Click a tile to cast · Esc or right-click to cancel</span>`
+            : `<strong>${hints[next][0]}</strong><span class="hint-detail">${hints[next][1]}</span>`;
     element('#tile-info').hidden = true;
   }
   let paused = false;
   let speed = 1;
   let simulationTime = 0;
   function togglePause(): void {
+    if (armageddon.finished) return;
     paused = !paused;
     element('#pause-overlay').hidden = !paused;
     const button = element<HTMLButtonElement>('#pause');
@@ -2580,14 +2682,15 @@ function startGame(): void {
       cornerMarker.visible = false;
       glowingCorner = null;
     }
-    const dt = paused ? 0 : Math.min(elapsed, 0.05) * speed;
+    const dt = paused || armageddon.finished ? 0 : Math.min(elapsed, 0.05) * speed;
     simulationTime += dt;
     const enemyResidents = settlers.filter(
       (settler) =>
         settler.population === enemyColor &&
         (settler.survival.phase === 'alive' || settler.survival.phase === 'drowning'),
     );
-    if (!encounterTest) {
+    if (armageddon.active && !armageddon.finished && dt > 0) updateArmageddonLand();
+    if (!encounterTest && !armageddon.active) {
       if (
         enemyAI.advance(dt, surface, enemyPowerMeter, enemyResidents, tileAt)?.status === 'changed'
       )
@@ -2595,8 +2698,8 @@ function startGame(): void {
       updateEnemyBuilder();
     }
     let settlementsChanged = false;
-    let survivalChanged = triggerBuildingContacts(dt);
-    combat.match(settlers, combatPosition);
+    let survivalChanged = !armageddon.active && triggerBuildingContacts(dt);
+    combat.match(armageddon.active ? [...armageddon.leaders.values()] : settlers, combatPosition);
     for (const settler of settlers) {
       if (settler.survival.phase === 'alive' || settler.survival.phase === 'drowning') {
         const wasSick = settler.sick;
@@ -2653,6 +2756,7 @@ function startGame(): void {
       }
       if (
         !encounterTest &&
+        !armageddon.active &&
         settler === enemyBuilder &&
         !settler.target &&
         settler.tile === enemyBuildingSite &&
@@ -2663,31 +2767,44 @@ function startGame(): void {
         settlementsChanged = true;
         continue;
       }
+      const finalLeader = armageddon.active && armageddon.isLeader(settler);
+      const rallyLeader =
+        armageddon.active && !finalLeader ? armageddon.leaders.get(settler.population) : null;
       const attacking = attackOrder.commands(settler, populationColor);
       const anchoredLeader =
         !attacking && leaderAnchor.target !== null && settler === leadership.leader;
-      const enemy =
-        attacking || (settler.knight && !anchoredLeader)
+      const enemy = armageddon.active
+        ? finalLeader
+          ? (armageddon.leaders.get(settler.population === 'red' ? 'blue' : 'red') ?? null)
+          : null
+        : attacking || (settler.knight && !anchoredLeader)
           ? nearestEnemy(settler, settlers, characterTile)
           : null;
       if (!settler.target) {
         settler.wait -= dt;
-        if (enemy || attacking || anchoredLeader || settler === enemyBuilder) settler.wait = 0;
+        if (armageddon.active || enemy || attacking || anchoredLeader || settler === enemyBuilder)
+          settler.wait = 0;
         if (settler.wait > 0) continue;
-        let options = anchoredLeader
-          ? leaderAnchor.steps(settler, settler.tile, neighbors, isWalkable, navigationRevision)
-          : enemy
-            ? pursuitOptions(settler, enemy)
-            : attacking
-              ? []
-              : settler === enemyBuilder
-                ? rallySteps(settler.tile, neighbors(settler.tile), enemyBuildDistance)
-                : leadership.rallying &&
-                    settler.population === populationColor &&
-                    settler !== leadership.leader
-                  ? followerOptions(settler)
-                  : neighbors(settler.tile);
-        if (encounterTest)
+        let options = armageddon.active
+          ? rallyLeader
+            ? pursuitOptions(settler, rallyLeader)
+            : enemy
+              ? pursuitOptions(settler, enemy)
+              : []
+          : anchoredLeader
+            ? leaderAnchor.steps(settler, settler.tile, neighbors, isWalkable, navigationRevision)
+            : enemy
+              ? pursuitOptions(settler, enemy)
+              : attacking
+                ? []
+                : settler === enemyBuilder
+                  ? rallySteps(settler.tile, neighbors(settler.tile), enemyBuildDistance)
+                  : leadership.rallying &&
+                      settler.population === populationColor &&
+                      settler !== leadership.leader
+                    ? followerOptions(settler)
+                    : neighbors(settler.tile);
+        if (encounterTest && !armageddon.active)
           options = unoccupiedWalkSteps(
             settler,
             options,
@@ -2706,7 +2823,10 @@ function startGame(): void {
           settler.target.z - settler.tile.z,
         );
       }
-      settler.progress = Math.min(1, settler.progress + dt * 0.65);
+      settler.progress = Math.min(
+        1,
+        settler.progress + dt * 0.65 * armageddon.movementMultiplier(settler),
+      );
       const from = position(settler.tile);
       const to = position(settler.target);
       settler.mesh.position.lerpVectors(from, to, settler.progress);
@@ -2731,6 +2851,7 @@ function startGame(): void {
         });
         if (
           !encounterTest &&
+          !armageddon.active &&
           !settler.knight &&
           !attackOrder.commands(settler, populationColor) &&
           !(leaderAnchor.target && settler === leadership.leader) &&
@@ -2758,6 +2879,7 @@ function startGame(): void {
       renderSurvival(defeated);
       survivalChanged = true;
     }
+    finishArmageddon();
     if (settlementsChanged) {
       navigationRevision++;
       reconcileWorldSettlements();
@@ -2782,13 +2904,14 @@ function startGame(): void {
       updateSettlementStats();
       if (lastPointer) updateHover(lastPointer);
     }
-    const births = encounterTest
-      ? []
-      : growPopulation(
-          settlers.filter((settler) => !combat.opponent(settler)),
-          dt,
-          findBirthTile,
-        );
+    const births =
+      encounterTest || armageddon.active
+        ? []
+        : growPopulation(
+            settlers.filter((settler) => !combat.opponent(settler)),
+            dt,
+            findBirthTile,
+          );
     for (const birth of births)
       createSettler(birth.tile, birth.characterPower, birth.population ?? populationColor).wait = 0;
     if (births.length) {

@@ -50,6 +50,6 @@ test('scenario button enables combat while keeping automatic births disabled',as
  assert.match(source,/element\('#test-scenario'\).addEventListener\('click', \(\) => startWorld\(true\)\)/);
  assert.match(source,/for \(const defeated of combat.advance\(dt\)\)/);
  assert.doesNotMatch(source,/encounterTest\s*\?\s*\[\]\s*:\s*combat.advance/);
- assert.match(source,/encounterTest\s*\?\s*\[\]\s*:\s*growPopulation/);
+ assert.match(source,/encounterTest\s*\|\|\s*armageddon.active\s*\?\s*\[\]\s*:\s*growPopulation/);
  assert.match(source,/unoccupiedWalkSteps\(/);
 });

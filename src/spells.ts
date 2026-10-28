@@ -1,12 +1,13 @@
 import type { GridPoint, TerrainSurface } from './terrain-surface';
 
-export type Spell = 'earthquake' | 'volcano' | 'flood' | 'swamp' | 'knight';
+export type Spell = 'earthquake' | 'volcano' | 'flood' | 'swamp' | 'knight' | 'armageddon';
 export const SPELL_COSTS: Record<Spell, number> = {
   earthquake: 500,
   knight: 1000,
   volcano: 2000,
   flood: 3000,
   swamp: 1500,
+  armageddon: 6000,
 };
 export const SPELL_NAMES: Record<Spell, string> = {
   earthquake: 'Earthquake',
@@ -14,6 +15,7 @@ export const SPELL_NAMES: Record<Spell, string> = {
   volcano: 'Volcano',
   flood: 'Flood',
   swamp: 'Swamp',
+  armageddon: 'Armageddon',
 };
 
 /** Final changed points include the full cascade, not just the last edited point. */
