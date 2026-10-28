@@ -19,6 +19,7 @@ import { Leadership, buildRallyField, rallySteps } from './leadership';
 import { AttackOrder, SharedPursuit } from './attack-order';
 import { Armageddon, armageddonLand } from './armageddon';
 import { nearestPoleCollector } from './pole-recovery';
+import { leaderVitals, createLeaderVitalsView } from './leader-vitals';
 import { createSilverArmorMaterial, equipKnightArmor } from './knight-armor';
 import { createWaterTextures, animateWaterTextures } from './water-texture';
 import {
@@ -204,6 +205,11 @@ function startGame(): void {
   const icon = createIconRenderer();
   initializeIcons(icon);
   const { canvas, world, renderer, scene, camera, controls, sun, resetCamera } = createWorldView();
+  const leaderVitalsView = createLeaderVitalsView(
+    element('#leader-vitals'),
+    world,
+    element('.spellbox'),
+  );
   const SIZE = 500;
   let encounterTest = false;
   const playerStart = playerStartAnchor(SIZE);
@@ -1181,6 +1187,7 @@ function startGame(): void {
         object.visible = true;
       } else object.visible = false;
     }
+    leaderVitalsView.update(leaderVitals(leadership.leader, combat.pairs));
   }
   function updateAnchorButton(): void {
     const button = element<HTMLButtonElement>('#leader-anchor');
@@ -1607,6 +1614,7 @@ function startGame(): void {
     return settler;
   }
   function clearSettlers(): void {
+    leaderVitalsView.update(null);
     poleCollectors.clear();
     armageddon.reset();
     element('#game-result').hidden = true;

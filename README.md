@@ -164,6 +164,12 @@ The **crossed-swords button in the bottom toolbar** toggles **Attack enemy** for
 
 Click again to cancel and resume normal orders. Attack cancels gathering (so the army does not merge into its leader), and enabling gathering cancels attack. The leader's anchor stays placed but is temporarily overridden by the attack order. With no enemies left, the army waits until attack is cancelled. Pause freezes movement/combat; New world/Test scenario clears the order. Enemy characters are not commanded, and HP, population, and player currency are not granted by the toggle.
 
+## Leader HP and power panel
+
+While your population has a pole holder (including a housed leader), a compact panel above the spells shows **HP in red** and **character combat power in blue**, with current numeric values rounded to one decimal place. Both bars have a fixed **10,000 maximum**; larger real values remain intact and simply fill the bars. This is not the player's god-power currency or a building's level. Outside combat HP and character power share the same value; during a fight the blue bar shows the engagement's attack-power pool while the red bar tracks remaining HP.
+
+The panel refreshes when health/power changes or a new character picks up the pole, and hides while the pole has no owner. The spell stack adapts to short screens, scrolling when necessary to keep all spells accessible.
+
 ## Leader destination anchor
 
 Click the **anchor button in the bottom toolbar**, then click a map tile to place a visible anchor. Your current human leader leaves any home without losing HP/power, follows dry walkable routes toward it, and waits there instead of building. Knights follow the anchor rather than chasing distant enemies; nearby combat still takes priority. Gathering followers can continue following the moving leader.
@@ -216,6 +222,8 @@ Rock persists through dry terrain edits. Lowering it into water destroys the roc
 - `tests/armageddon.test.mjs` — one-time payment, both populations' merging, speed, outcomes, and invariant-preserving land.
 - `src/attack-order.ts` — human-only attack intent and shared, bounded pursuit flow fields.
 - `tests/attack-order.test.mjs` — team/life filtering, cached army routes, disconnected shores, and resets.
+- `src/leader-vitals.ts` — live leader HP/combat-power values and a responsive, fixed-scale two-bar view.
+- `tests/leader-vitals.test.mjs` — combat power versus HP, the 10,000 scale, holder visibility, and bar colors.
 - `src/pole-recovery.ts` — nearest eligible same-population collector selection for unattended leader poles.
 - `tests/pole-recovery.test.mjs` — nearest selection, team/life filters, building preservation, same-tile relocation, and reassignment.
 - `src/leader-anchor.ts` — toggle/placement state and cached destination routes, including unreachable shores and successors.
