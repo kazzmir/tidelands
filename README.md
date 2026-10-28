@@ -159,7 +159,7 @@ Normal orders, terrain editing, other spells, births, and enemy terraforming are
 
 ## Attack enemy order
 
-The **crossed-swords button in the bottom toolbar** toggles **Attack enemy** for every living human character. Residents leave houses/castles with their exact HP/power and pursue the nearest living enemy, including residents in enemy buildings. Building contact releases the defender and starts the normal fight. Human characters do not build while attacking. Disconnected enemies are approached from the nearest reachable shore; a new crossing lets the army resume. Flow fields are shared across troops and cached with a bounded size.
+The **crossed-swords button in the bottom toolbar** toggles **Attack enemy** for roaming human characters. Existing houses/castles remain occupied and keep their residents, HP/power, income, farms, and normal growth. Roaming characters—including newborns once outside—pursue the nearest living enemy, including residents in enemy buildings. Building contact releases the defender and starts the normal fight. Human characters do not build while attacking. Disconnected enemies are approached from the nearest reachable shore; a new crossing lets the army resume. Flow fields are shared across troops and cached with a bounded size.
 
 Click again to cancel and resume normal orders. Attack cancels gathering (so the army does not merge into its leader), and enabling gathering cancels attack. The leader's anchor stays placed but is temporarily overridden by the attack order. With no enemies left, the army waits until attack is cancelled. Pause freezes movement/combat; New world/Test scenario clears the order. Enemy characters are not commanded, and HP, population, and player currency are not granted by the toggle.
 

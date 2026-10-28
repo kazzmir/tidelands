@@ -6,12 +6,13 @@ async function url(path,deps={}){let {code}=await transformWithOxc(await readFil
 const leadership=await url('../src/leadership.ts');
 const {AttackOrder,SharedPursuit}=await import(await url('../src/attack-order.ts',{'./leadership':leadership}));
 const {rallySteps}=await import(leadership);
-function actor(population,phase='alive'){return{population,characterPower:17.5,survival:{phase,elapsed:0},home:{}};}
+function actor(population,phase='alive'){return{population,characterPower:17.5,survival:{phase,elapsed:0},home:null};}
 
-test('attack toggle commands all living human characters, including residents, without changing HP',()=>{
+test('attack toggle commands roaming humans without evacuating residents or changing HP',()=>{
  const order=new AttackOrder(),red=actor('red'),blue=actor('blue');assert.equal(order.commands(red,'red'),false);
  order.toggle();assert.equal(order.commands(red,'red'),true);assert.equal(order.commands(blue,'red'),false);
  assert.equal(order.commands(blue,'blue'),true);assert.equal(order.commands(actor('red','drowning'),'red'),false);assert.equal(order.commands(actor('red','dead'),'red'),false);
+ const resident=actor('red');resident.home={};assert.equal(order.commands(resident,'red'),false);assert.ok(resident.home);assert.equal(resident.characterPower,17.5);
  assert.equal(red.characterPower,17.5);order.toggle();assert.equal(order.commands(red,'red'),false);order.toggle();order.reset();assert.equal(order.active,false);
 });
 test('an army shares a reverse route toward a character or building approach goal',()=>{
@@ -36,5 +37,7 @@ test('route caching is bounded and world resets discard previous fields',()=>{
 test('attack UI is in the bottom toolbar and commanded characters cannot settle',async()=>{
  const html=await readFile(new URL('../index.html',import.meta.url),'utf8'),main=await readFile(new URL('../src/main.ts',import.meta.url),'utf8');
  assert.ok(html.slice(html.indexOf('<div class="bottom-bar">')).includes('id="attack-enemy"'));
+ const toggle=main.slice(main.indexOf('function toggleAttackOrder()'),main.indexOf('function updateRallyButton()'));
+ assert.doesNotMatch(toggle,/evacuateSettlements|reconcileWorldSettlements|rebuildBuildings|syncResidentMeshes/);
  assert.match(main,/!attackOrder.commands\(settler, populationColor\)/);assert.match(main,/leadership.rallying = false/);assert.match(main,/attackOrder.reset\(\)/);
 });

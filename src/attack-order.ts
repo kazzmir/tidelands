@@ -12,11 +12,17 @@ export class AttackOrder {
     this.active = false;
   }
   commands(
-    character: { population: PopulationColor; characterPower: number; survival: Survival },
+    character: {
+      population: PopulationColor;
+      characterPower: number;
+      survival: Survival;
+      home: unknown | null;
+    },
     human: PopulationColor,
   ): boolean {
     return (
       this.active &&
+      !character.home &&
       character.population === human &&
       character.characterPower > 0 &&
       character.survival.phase === 'alive'

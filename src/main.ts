@@ -1252,11 +1252,11 @@ function startGame(): void {
     button.setAttribute('aria-pressed', String(attackOrder.active));
     button.setAttribute(
       'aria-label',
-      attackOrder.active ? 'Stop attacking enemy' : 'Attack enemy with all human characters',
+      attackOrder.active ? 'Stop attacking enemy' : 'Attack enemy with roaming human characters',
     );
     button.title = attackOrder.active
       ? 'Stop attacking; resume normal wandering, building, and leader anchor orders'
-      : 'Attack enemy: all human characters leave buildings and pursue enemies';
+      : 'Attack enemy: roaming human characters pursue enemies; buildings remain occupied';
   }
   function toggleAttackOrder(): void {
     if (armageddon.active) return;
@@ -1265,13 +1265,6 @@ function startGame(): void {
     if (attackOrder.active) {
       leadership.rallying = false;
       rallyDestination = null;
-      evacuateSettlements(
-        settlers.filter((actor) => attackOrder.commands(actor, populationColor)),
-        tileAt,
-      );
-      reconcileWorldSettlements();
-      rebuildBuildings();
-      syncResidentMeshes();
     }
     navigationRevision++;
     for (const actor of settlers) {
@@ -1290,7 +1283,7 @@ function startGame(): void {
     if (lastPointer) updateHover(lastPointer);
     toast(
       attackOrder.active
-        ? 'Attack enemy: all your characters are advancing. Unreachable enemies are approached from the nearest shore.'
+        ? 'Attack enemy: your roaming characters are advancing. Buildings and residents stay in place.'
         : 'Attack order cancelled. Normal orders resumed.',
     );
   }
