@@ -38,6 +38,9 @@ test('switching models frees private geometry; closing frees stage resources and
 test('closing during an orbit releases its captured pointer',()=>{
  const f=fixture();f.canvas.dispatchEvent(Object.assign(new Event('pointerdown'),{pointerId:1,pointerType:'mouse',button:0,clientX:10,clientY:20,ctrlKey:false,metaKey:false,shiftKey:false}));assert.ok(f.captured.has(1));f.view.dispose();assert.equal(f.captured.size,0);
 });
+test('developer toggle sits in the footer immediately after the wave icon, not over the game canvas',async()=>{
+ const html=await readFile(new URL('../index.html',import.meta.url),'utf8');const footer=html.match(/<footer>[\s\S]*?<\/footer>/)?.[0];assert.ok(footer);assert.match(footer,/Inspired by Populous/);assert.match(footer,/class="footer-wave"[^>]*>≈<\/span><button id="developer-toggle"/);assert.doesNotMatch(html.slice(html.indexOf('<main'),html.indexOf('</main>')),/id="developer-toggle"/);
+});
 test('developer mode freezes the live world, blocks editing, preserves pause state, and supports keyboard exit',async()=>{
  const source=await readFile(new URL('../src/main.ts',import.meta.url),'utf8'),html=await readFile(new URL('../index.html',import.meta.url),'utf8');assert.match(source,/if \(developerView\) \{\s*if \(!document.hidden\)\s*developerView.render\(elapsed, world.clientWidth, world.clientHeight\);\s*return;/);assert.match(source,/if \(developerView \|\| !down\) return;/);assert.match(source,/event.key === 'Escape'[\s\S]*?stopDeveloperMode\(\)/);assert.match(source,/controls.enabled = gameStarted && !newGameMenu.open/);assert.match(html,/id="developer-toggle"[^>]*aria-label="Toggle developer mode"/);assert.match(html,/id="developer-panel"[^>]*hidden/);
 });

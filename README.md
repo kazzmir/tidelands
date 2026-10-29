@@ -143,7 +143,7 @@ All spells update homes, castles, farming, trees, and settler positions just lik
 
 ## Developer model viewer
 
-The **code (`</>`) icon at the bottom right** toggles developer mode after starting a game. The left-side picker shows the **walking character**, **houses at levels 1–4**, **level-5 castle**, **walking knight with full equipment**, and **two characters fighting** with the normal strike poses, red glow and yellow lightning.
+The **code (`</>`) icon in the bottom-right footer, beside the wave icon and “Inspired by Populous…” credit,** toggles developer mode after starting a game. The left-side picker shows the **walking character**, **houses at levels 1–4**, **level-5 castle**, **walking knight with full equipment**, and **two characters fighting** with the normal strike poses, red glow and yellow lightning.
 
 These are the real game models, using shared production walking/combat animations. Drag the preview to orbit and scroll/pinch to zoom. **Pause animation / Play animation** controls playback; reduced-motion preferences start it paused. The live world, economies and camera are frozen and untouched while inspecting models. Press **Escape** or the code icon to return with the original pause state and touch controls restored.
 
