@@ -332,6 +332,7 @@ export class SimulationGame {
         this.tileOf(c),
         owner ? this.tileOf(owner) : null,
         side.leader.rallying || side.knights.donates(c),
+        this.finale.active,
       ) === 'absorbed'
     )
       c.survival.phase = 'dead';
@@ -516,7 +517,9 @@ export class SimulationGame {
               this.people,
               this.point,
               (actor) =>
-                !this.combat.opponent(actor) && side.leader.canRecover(actor, this.tileOf(actor)),
+                !actor.knight &&
+                !this.combat.opponent(actor) &&
+                side.leader.canRecover(actor, this.tileOf(actor)),
             )
           : null,
       ]),

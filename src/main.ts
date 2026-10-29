@@ -1193,7 +1193,7 @@ function startGame(): void {
     button.setAttribute('aria-label', label);
     button.classList.toggle('active', leadership.rallying);
     button.setAttribute('aria-pressed', String(leadership.rallying));
-    button.title = `${label} · ${leadership.leader ? `Leader HP ${leadership.leader.characterPower.toFixed(1)}${leadership.leader.knight ? ' · Knight' : ''}` : 'Leader object awaiting pickup'} · ${armageddon.active ? 'Armageddon: both populations merge into their leaders' : encounterTest ? 'Gathering disabled in encounter test' : leadership.rallying ? 'Click to resume wandering and building' : 'Roaming followers merge their HP/power into the leader; buildings stay occupied'}`;
+    button.title = `${label} · ${leadership.leader ? `Leader HP ${leadership.leader.characterPower.toFixed(1)}${leadership.leader.knight ? ' · Knight' : ''}` : 'Leader object awaiting pickup'} · ${armageddon.active ? 'Armageddon: both populations merge into their leaders' : encounterTest ? 'Gathering disabled in encounter test' : leadership.rallying ? 'Click to resume wandering and building' : 'Roaming ordinary followers merge into the leader; knights keep attacking and buildings stay occupied'}`;
   }
   function updatePoleCollectors(): void {
     poleCollectors.clear();
@@ -1209,7 +1209,8 @@ function startGame(): void {
         color,
         settlers,
         combatPosition,
-        (actor) => !combat.opponent(actor) && state.canRecover(actor, characterTile(actor)),
+        (actor) =>
+          !actor.knight && !combat.opponent(actor) && state.canRecover(actor, characterTile(actor)),
       );
       if (collector) poleCollectors.set(color, collector);
     }
@@ -1262,6 +1263,7 @@ function startGame(): void {
       atLeaderBuilding && owner?.home ? owner.home : characterTile(settler),
       owner ? characterTile(owner) : null,
       gathering,
+      armageddon.active,
     );
     if (result === 'none') return false;
     if (result === 'absorbed') {
@@ -1313,6 +1315,7 @@ function startGame(): void {
       if (
         settler.population !== populationColor ||
         settler === leadership.leader ||
+        settler.knight ||
         settler.home ||
         settler.survival.phase !== 'alive'
       )
@@ -3214,11 +3217,15 @@ function startGame(): void {
         enemyMusterFollower ||
         (!armageddon.active &&
           leadership.rallying &&
+          !settler.knight &&
           settler.population === populationColor &&
           settler !== leadership.leader);
       const attacking = attackOrder.commands(settler, populationColor);
       const anchoredLeader =
-        !attacking && leaderAnchor.target !== null && settler === leadership.leader;
+        !settler.knight &&
+        !attacking &&
+        leaderAnchor.target !== null &&
+        settler === leadership.leader;
       const enemy = armageddon.active
         ? finalLeader
           ? (armageddon.leaders.get(settler.population === 'red' ? 'blue' : 'red') ?? null)

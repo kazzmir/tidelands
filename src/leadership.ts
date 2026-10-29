@@ -1,6 +1,7 @@
 export interface LeaderCharacter<T> {
   tile: T;
   characterPower: number;
+  knight?: boolean;
 }
 export type LeaderEncounter = 'none' | 'picked-up' | 'absorbed';
 export type PoleRelocation = 'moved' | 'missing' | 'unchanged' | 'insufficient';
@@ -62,11 +63,13 @@ export class Leadership<T, C extends LeaderCharacter<T>> {
     return true;
   }
 
+  /** Normal gathering preserves knights; includeKnights is reserved for the all-in finale. */
   encounter(
     character: C,
     tile: T,
     leaderTile: T | null = this.leader?.tile ?? null,
     gathering = this.rallying,
+    includeKnights = false,
   ): LeaderEncounter {
     if (character.characterPower <= 0) return 'none';
     if (this.formerHolder === character) {
@@ -82,6 +85,7 @@ export class Leadership<T, C extends LeaderCharacter<T>> {
     }
     if (
       gathering &&
+      (!character.knight || includeKnights) &&
       this.leader &&
       this.leader.characterPower > 0 &&
       character !== this.leader &&

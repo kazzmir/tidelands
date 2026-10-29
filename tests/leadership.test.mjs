@@ -87,6 +87,12 @@ test('gathering absorbs a follower once and transfers all remaining HP/power',()
   assert.equal(leader.characterPower,19.75);
 });
 
+test('normal Gather never absorbs existing knights, but ordinary followers may strengthen a knight leader',()=>{
+ const state=new Leadership(),tile={x:1,z:1},leader={...character(tile,40),knight:true},knight={...character(tile,15),knight:true},ordinary={...character(tile,10),knight:false};state.appoint(leader);state.rallying=true;assert.equal(state.encounter(knight,tile),'none');assert.equal(knight.characterPower,15);assert.equal(leader.characterPower,40);assert.equal(state.encounter(ordinary,tile),'absorbed');assert.equal(leader.characterPower,50);assert.equal(knight.knight,true);
+});
+test('Armageddon explicitly allows knight followers to merge without changing normal Gather defaults',()=>{
+ const state=new Leadership(),tile={},leader=character(tile,20),knight={...character(tile,30),knight:true};state.appoint(leader);state.rallying=true;assert.equal(state.encounter(knight,tile,tile,true),'none');assert.equal(state.encounter(knight,tile,tile,true,true),'absorbed');assert.equal(leader.characterPower,50);assert.equal(knight.characterPower,0);
+});
 test('turning gathering off prevents absorption without losing the leader',()=>{
   const state=new Leadership(),tile={x:1,z:1};
   const leader=character(tile),follower=character(tile);
@@ -98,6 +104,9 @@ test('turning gathering off prevents absorption without losing the leader',()=>{
   assert.equal(state.leader,null);assert.equal(state.droppedTile,null);assert.equal(state.rallying,false);
 });
 
+test('live Gather leaves knight orders untouched, excludes them from follower routing and anchor/recovery errands, and keeps finale merging',async()=>{
+ const main=await readFile(new URL('../src/main.ts',import.meta.url),'utf8'),sim=await readFile(new URL('../src/simulation/game.ts',import.meta.url),'utf8');assert.match(main,/leadership.rallying &&\s*!settler.knight &&/);assert.match(main,/settler === leadership.leader \|\|\s*settler.knight \|\|/);assert.match(main,/!settler.knight &&\s*!attacking &&/);assert.match(main,/!actor.knight && !combat.opponent\(actor\)/);assert.match(main,/gathering,\s*armageddon.active,/);assert.match(sim,/side.leader.rallying \|\| side.knights.donates\(c\),\s*this.finale.active,/);
+});
 test('a lone leader can settle and regrow the population after gathering is disabled',()=>{
   const surface=new TerrainSurface(8,new Uint8Array(81).fill(2),0.65);
   const tile={x:4,z:4,tree:false,house:false};
