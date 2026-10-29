@@ -1193,7 +1193,7 @@ function startGame(): void {
     button.setAttribute('aria-label', label);
     button.classList.toggle('active', leadership.rallying);
     button.setAttribute('aria-pressed', String(leadership.rallying));
-    button.title = `${label} · ${leadership.leader ? `Leader HP ${leadership.leader.characterPower.toFixed(1)}${leadership.leader.knight ? ' · Knight' : ''}` : 'Leader object awaiting pickup'} · ${armageddon.active ? 'Armageddon: both populations merge into their leaders' : encounterTest ? 'Gathering disabled in encounter test' : leadership.rallying ? 'Click to resume wandering and building' : 'Roaming ordinary followers merge into the leader; knights keep attacking and buildings stay occupied'}`;
+    button.title = 'followers move to leader';
   }
   function updatePoleCollectors(): void {
     poleCollectors.clear();
