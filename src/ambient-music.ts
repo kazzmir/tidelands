@@ -1,6 +1,8 @@
-export type MusicTrack = 'ambient' | 'upbeat';
+export type BackgroundTrack = 'ambient' | 'upbeat';
+export type EndingTrack = 'victory' | 'defeat';
+export type MusicTrack = BackgroundTrack | EndingTrack;
 export function musicTracks(): readonly {
-  id: MusicTrack;
+  id: BackgroundTrack;
   name: string;
   bpm: number;
   seconds: number;
@@ -10,12 +12,26 @@ export function musicTracks(): readonly {
     { id: 'upbeat', name: 'Bright Currents', bpm: 120, seconds: 16 },
   ];
 }
+export function endingMusicTracks(): readonly {
+  id: EndingTrack;
+  name: string;
+  bpm: number;
+  seconds: number;
+}[] {
+  return [
+    { id: 'victory', name: 'Victory — A New Dawn', bpm: 108, seconds: 8 },
+    { id: 'defeat', name: 'Defeat — Fading Shores', bpm: 64, seconds: 9 },
+  ];
+}
+export function allMusicTracks() {
+  return [...musicTracks(), ...endingMusicTracks()];
+}
 /** Independent of the seeded terrain/AI random streams. */
-export function chooseMusicTrack(random: () => number = Math.random): MusicTrack {
+export function chooseMusicTrack(random: () => number = Math.random): BackgroundTrack {
   return random() < 0.5 ? 'ambient' : 'upbeat';
 }
 function trackDuration(track: MusicTrack): number {
-  return track === 'upbeat' ? 16 : 24;
+  return track === 'victory' ? 8 : track === 'defeat' ? 9 : track === 'upbeat' ? 16 : 24;
 }
 export interface AmbientNote {
   midi: number;
@@ -142,7 +158,68 @@ export function upbeatScore(): readonly AmbientNote[] {
   });
   return notes;
 }
-/** Render once per track at a modest sample rate; playback uses a single looping source. */
+/** Short resolving themes: bright D-major victory, descending B-minor defeat. */
+export function endingScore(track: EndingTrack): readonly AmbientNote[] {
+  const notes: AmbientNote[] = [];
+  const chord = (pitches: number[], start: number, duration: number) => {
+    pitches.forEach((midi, i) =>
+      notes.push({
+        midi,
+        start,
+        duration,
+        kind: 'pad',
+        gain: 0.08,
+        pan: (i - (pitches.length - 1) / 2) * 0.25,
+      }),
+    );
+  };
+  if (track === 'victory') {
+    chord([62, 66, 69], 0, 2.4);
+    chord([67, 71, 74], 1.8, 2.2);
+    chord([62, 66, 69, 74], 3.6, 4.4);
+    [74, 78, 81, 86, 85, 86].forEach((midi, i) =>
+      notes.push({
+        midi,
+        start: [0, 0.45, 0.9, 1.35, 2.1, 2.55][i],
+        duration: 1.35,
+        kind: 'bell',
+        gain: 0.09,
+        pan: i % 2 ? 0.2 : -0.2,
+      }),
+    );
+    for (const [midi, start, duration] of [
+      [50, 0, 2],
+      [43, 1.8, 1.8],
+      [45, 2.7, 1.2],
+      [50, 3.6, 4.4],
+    ])
+      notes.push({ midi, start, duration, kind: 'bass', gain: 0.1, pan: 0 });
+    notes.push({ midi: 86, start: 4.1, duration: 2.4, kind: 'bell', gain: 0.06, pan: 0.2 });
+  } else {
+    chord([59, 62, 66], 0, 3.8);
+    chord([55, 59, 62], 2.5, 3.4);
+    chord([59, 62, 66], 4.5, 4.5);
+    [74, 73, 71, 66, 62, 59].forEach((midi, i) =>
+      notes.push({
+        midi,
+        start: [0, 0.7, 1.4, 2.2, 3, 4][i],
+        duration: 2.3,
+        kind: 'bell',
+        gain: 0.065,
+        pan: i % 2 ? 0.15 : -0.15,
+      }),
+    );
+    for (const [midi, start, duration] of [
+      [47, 0, 3.8],
+      [43, 2.5, 3.4],
+      [47, 4.5, 4.5],
+    ])
+      notes.push({ midi, start, duration, kind: 'bass', gain: 0.08, pan: 0 });
+  }
+  return notes;
+}
+
+/** Render once per track; background loops wrap tails, ending songs resolve into silence. */
 export function createAmbientBuffer(
   context: BaseAudioContext,
   track: MusicTrack = 'ambient',
@@ -152,7 +229,12 @@ export function createAmbientBuffer(
     buffer = context.createBuffer(2, length, rate);
   const left = buffer.getChannelData(0),
     right = buffer.getChannelData(1);
-  for (const note of track === 'upbeat' ? upbeatScore() : ambientScore()) {
+  const ending = track === 'victory' || track === 'defeat';
+  for (const note of ending
+    ? endingScore(track)
+    : track === 'upbeat'
+      ? upbeatScore()
+      : ambientScore()) {
     const frequency = 440 * 2 ** ((note.midi - 69) / 12),
       start = Math.round(note.start * rate),
       count = Math.round(note.duration * rate);
@@ -170,8 +252,8 @@ export function createAmbientBuffer(
           (Math.sin(phase) + 0.35 * Math.sin(phase * 1.003) + 0.08 * Math.sin(phase * 2)) / 1.43;
         envelope = Math.min(
           1,
-          t / (track === 'upbeat' ? 0.22 : 1.8),
-          remaining / (track === 'upbeat' ? 0.65 : 2.8),
+          t / (track === 'ambient' ? 1.8 : 0.22),
+          remaining / (track === 'ambient' ? 2.8 : 0.65),
         );
         envelope *= envelope;
       } else if (note.kind === 'bell') {
@@ -200,6 +282,7 @@ export function createAmbientBuffer(
           remaining / (track === 'upbeat' ? 0.13 : 1.8),
         );
       }
+      if (ending && start + i >= length) break;
       const value = wave * envelope * note.gain,
         index = (start + i) % length;
       left[index] += value * l;
@@ -217,7 +300,14 @@ export function createAmbientBuffer(
 }
 export function createAmbientMusic(context: AudioContext, initialTrack: MusicTrack = 'ambient') {
   const buffers = new Map<MusicTrack, AudioBuffer>(),
-    positions = new Map<MusicTrack, number>();
+    positions = new Map<MusicTrack, number>(),
+    completed = new Set<MusicTrack>();
+  function positionAt(time: number): number {
+    const value = offset + Math.max(0, time - started);
+    return track === 'victory' || track === 'defeat'
+      ? Math.min(trackDuration(track), value)
+      : value % trackDuration(track);
+  }
   let track = initialTrack,
     voice: { source: AudioBufferSourceNode; gain: GainNode } | null = null,
     offset = 0,
@@ -225,7 +315,7 @@ export function createAmbientMusic(context: AudioContext, initialTrack: MusicTra
     disposed = false;
   const fading = new Set<{ source: AudioBufferSourceNode; gain: GainNode }>();
   function start(): void {
-    if (disposed || voice || context.state !== 'running') return;
+    if (disposed || voice || completed.has(track) || context.state !== 'running') return;
     let buffer = buffers.get(track);
     if (!buffer) {
       buffer = createAmbientBuffer(context, track);
@@ -235,11 +325,14 @@ export function createAmbientMusic(context: AudioContext, initialTrack: MusicTra
       gain = context.createGain(),
       now = context.currentTime;
     source.buffer = buffer;
-    source.loop = true;
+    source.loop = track === 'ambient' || track === 'upbeat';
     source.connect(gain);
     gain.connect(context.destination);
     gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(0.1, now + 2);
+    gain.gain.linearRampToValueAtTime(
+      track === 'victory' ? 0.13 : 0.1,
+      now + (source.loop ? 2 : 0.12),
+    );
     const current = { source, gain };
     voice = current;
     started = now;
@@ -248,7 +341,8 @@ export function createAmbientMusic(context: AudioContext, initialTrack: MusicTra
       gain.disconnect();
       fading.delete(current);
       if (voice === current) {
-        offset = (offset + Math.max(0, context.currentTime - started)) % trackDuration(track);
+        offset = positionAt(context.currentTime);
+        if (!source.loop) completed.add(track);
         voice = null;
       }
     };
@@ -263,13 +357,16 @@ export function createAmbientMusic(context: AudioContext, initialTrack: MusicTra
     param.setValueAtTime(param.value, now);
     param.linearRampToValueAtTime(level, now + 0.04);
     param.setValueAtTime(level, now + Math.max(0.1, Math.min(2, seconds)));
-    param.linearRampToValueAtTime(0.1, now + Math.max(0.1, Math.min(2, seconds)) + 1.2);
+    param.linearRampToValueAtTime(
+      track === 'victory' ? 0.13 : 0.1,
+      now + Math.max(0.1, Math.min(2, seconds)) + 1.2,
+    );
   }
   function stop(): void {
     if (!voice) return;
     const current = voice;
     voice = null;
-    offset = (offset + Math.max(0, context.currentTime - started)) % trackDuration(track);
+    offset = positionAt(context.currentTime);
     const now = context.currentTime,
       fade = context.state === 'running' ? 0.06 : 0;
     current.gain.gain.cancelScheduledValues(now);
@@ -284,11 +381,12 @@ export function createAmbientMusic(context: AudioContext, initialTrack: MusicTra
   }
   function select(next: MusicTrack, restart = false): void {
     if (disposed || (next === track && !restart)) return;
-    if (next !== 'ambient' && next !== 'upbeat') return;
+    if (!allMusicTracks().some((info) => info.id === next)) return;
     stop();
     positions.set(track, offset);
     track = next;
     offset = restart ? 0 : (positions.get(next) ?? 0);
+    if (restart) completed.delete(next);
   }
   function dispose(): void {
     if (disposed) return;
@@ -307,6 +405,7 @@ export function createAmbientMusic(context: AudioContext, initialTrack: MusicTra
     fading.clear();
     buffers.clear();
     positions.clear();
+    completed.clear();
   }
   return {
     start,
@@ -320,10 +419,11 @@ export function createAmbientMusic(context: AudioContext, initialTrack: MusicTra
     get playing() {
       return voice !== null;
     },
+    get finished() {
+      return completed.has(track);
+    },
     get position() {
-      return (
-        (offset + (voice ? Math.max(0, context.currentTime - started) : 0)) % trackDuration(track)
-      );
+      return voice ? positionAt(context.currentTime) : offset;
     },
   };
 }

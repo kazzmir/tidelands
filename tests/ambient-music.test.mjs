@@ -3,7 +3,7 @@ import {readFile} from 'node:fs/promises';
 import test from 'node:test';
 import {transformWithOxc} from 'vite';
 const {code}=await transformWithOxc(await readFile(new URL('../src/ambient-music.ts',import.meta.url),'utf8'),'ambient-music.ts',{target:'es2022'});
-const {ambientScore,upbeatScore,musicTracks,chooseMusicTrack,createAmbientBuffer,createAmbientMusic}=await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
+const {ambientScore,upbeatScore,musicTracks,endingMusicTracks,allMusicTracks,endingScore,chooseMusicTrack,createAmbientBuffer,createAmbientMusic}=await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
 function context(){
  const ctx={state:'running',currentTime:0,destination:{},sources:[],gains:[],allocations:0};
  ctx.createBuffer=(channels,length,rate)=>{ctx.allocations++;const data=Array.from({length:channels},()=>new Float32Array(length));return{length,sampleRate:rate,numberOfChannels:channels,duration:length/rate,getChannelData(channel){return data[channel];}};};
@@ -41,6 +41,15 @@ test('upbeat stereo loop is audible, finite and seamless, with a cached buffer a
 });
 test('each new world chooses music independently of world RNG and both tracks have developer audition controls',async()=>{
  const source=await readFile(new URL('../src/main.ts',import.meta.url),'utf8'),html=await readFile(new URL('../index.html',import.meta.url),'utf8');assert.match(source,/gameAudio.selectMusic\(chooseMusicTrack\(\)\)/);assert.doesNotMatch(source,/chooseMusicTrack\(random\)/);assert.match(html,/id="developer-upbeat"[^>]*>Play upbeat song/);assert.match(source,/gameAudio.previewMusic\(developerMusicPreview \? track.id : null\)/);
+});
+test('victory and defeat are distinct finite songs with silent endpoints, not background loop choices',()=>{
+ assert.deepEqual(endingMusicTracks().map(t=>t.id),['victory','defeat']);assert.equal(allMusicTracks().length,4);assert.notDeepEqual(endingScore('victory'),endingScore('defeat'));for(const [track,duration]of [['victory',8],['defeat',9]]){const b=createAmbientBuffer(context(),track);assert.equal(b.duration,duration);for(let c=0;c<2;c++){const data=b.getChannelData(c);let peak=0;for(const n of data){assert.ok(Number.isFinite(n));peak=Math.max(peak,Math.abs(n));}assert.ok(peak>.2&&peak<.301);assert.equal(data[0],0);assert.ok(Math.abs(data.at(-1))<.0001);}}
+});
+test('ending songs play once, pause/resume correctly, and only restart after an explicit selection',()=>{
+ const ctx=context(),music=createAmbientMusic(ctx,'victory');music.start();assert.equal(ctx.sources[0].loop,false);ctx.currentTime=8;ctx.sources[0].onended();assert.equal(music.finished,true);assert.equal(music.position,8);for(let i=0;i<5;i++)music.start();assert.equal(ctx.sources.length,1);music.select('defeat',true);music.start();ctx.currentTime=11;music.stop();assert.equal(music.position,3);ctx.currentTime=40;music.start();assert.deepEqual(ctx.sources.at(-1).starts,[[40,3]]);ctx.currentTime=46;ctx.sources.at(-1).onended();assert.equal(music.finished,true);music.select('victory',true);music.start();assert.equal(music.finished,false);assert.equal(music.position,0);music.dispose();
+});
+test('result music uses the real winner, has developer auditions, and never chooses an ending song for a new world',async()=>{
+ const source=await readFile(new URL('../src/main.ts',import.meta.url),'utf8'),html=await readFile(new URL('../index.html',import.meta.url),'utf8');assert.match(source,/gameAudio.finishMusic\(\s*winner === 'draw' \? 'draw' : winner === populationColor \? 'victory' : 'defeat',?\s*\)/);for(const id of ['victory','defeat'])assert.match(html,new RegExp(`id="developer-${id}"`));assert.equal(musicTracks().some(t=>t.id==='victory'||t.id==='defeat'),false);
 });
 test('music has its own persisted footer toggle and is silenced for hidden tabs and developer auditions',async()=>{
  const source=await readFile(new URL('../src/main.ts',import.meta.url),'utf8'),html=await readFile(new URL('../index.html',import.meta.url),'utf8');assert.match(html,/id="toggle-music"[^>]*aria-label="Mute ambient music"/);assert.match(source,/isMusicAudible: \(\) => \(!developerView \|\| developerMusicPreview\) && !document.hidden/);assert.match(source,/localStorage.getItem\('tidelands-music-muted'\)/);assert.match(source,/gameAudio.setMusicMuted\(!gameAudio.musicMuted\)/);assert.match(source,/gameAudio.syncMusic\(\);\s*if \(developerView\)/);

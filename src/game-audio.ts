@@ -1,5 +1,12 @@
 import type { Spell } from './spells';
-import { createAmbientMusic, musicTracks, type MusicTrack } from './ambient-music';
+import {
+  createAmbientMusic,
+  musicTracks,
+  allMusicTracks,
+  type MusicTrack,
+  type BackgroundTrack,
+  type EndingTrack,
+} from './ambient-music';
 
 export type GameSound = Spell | 'castle';
 export function gameSoundOptions(): readonly { id: GameSound; label: string }[] {
@@ -110,8 +117,10 @@ export function createGameAudio(
     noise: AudioBuffer | null = null,
     muted = false,
     disposed = false;
-  let musicTrack: MusicTrack = 'ambient',
-    musicPreview: MusicTrack | null = null;
+  let musicTrack: BackgroundTrack = 'ambient',
+    musicPreview: MusicTrack | null = null,
+    endingTrack: EndingTrack | null = null,
+    gameFinished = false;
   let musicMuted = true,
     music: ReturnType<typeof createAmbientMusic> | null = null;
   const active = new Set<{ stop(): void }>(),
@@ -164,14 +173,15 @@ export function createGameAudio(
       musicMuted ||
       !context ||
       context.state !== 'running' ||
-      options.isMusicAudible?.() !== true
+      options.isMusicAudible?.() !== true ||
+      (gameFinished && !endingTrack && !musicPreview)
     ) {
       music?.stop();
       return;
     }
     try {
-      music ??= createAmbientMusic(context, musicPreview ?? musicTrack);
-      music.select(musicPreview ?? musicTrack);
+      music ??= createAmbientMusic(context, musicPreview ?? endingTrack ?? musicTrack);
+      music.select(musicPreview ?? endingTrack ?? musicTrack);
       music.start();
     } catch {
       music?.dispose();
@@ -179,10 +189,12 @@ export function createGameAudio(
       musicMuted = true;
     }
   }
-  function selectMusic(track: MusicTrack): void {
+  function selectMusic(track: BackgroundTrack): void {
     if (!musicTracks().some((info) => info.id === track)) return;
     musicTrack = track;
     musicPreview = null;
+    endingTrack = null;
+    gameFinished = false;
     music?.select(track, true);
     syncMusic();
   }
@@ -191,13 +203,23 @@ export function createGameAudio(
       track !== null &&
       (options.isPreviewAudible?.() !== true ||
         musicMuted ||
-        !musicTracks().some((info) => info.id === track))
+        !allMusicTracks().some((info) => info.id === track))
     )
       return false;
     musicPreview = track;
-    music?.select(track ?? musicTrack);
+    music?.select(track ?? endingTrack ?? musicTrack, track === 'victory' || track === 'defeat');
     syncMusic();
     return true;
+  }
+  function finishMusic(result: EndingTrack | 'draw'): void {
+    if (gameFinished) return;
+    gameFinished = true;
+    endingTrack = result === 'draw' ? null : result;
+    musicPreview = null;
+    stopAll();
+    music?.stop();
+    if (endingTrack) music?.select(endingTrack, true);
+    syncMusic();
   }
   function setMusicMuted(value: boolean): void {
     musicMuted = value;
@@ -322,6 +344,13 @@ export function createGameAudio(
     syncMusic,
     selectMusic,
     previewMusic,
+    finishMusic,
+    get endingTrack() {
+      return endingTrack;
+    },
+    get musicFinished() {
+      return music?.finished ?? false;
+    },
     get musicTrack() {
       return musicTrack;
     },
