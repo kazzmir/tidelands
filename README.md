@@ -141,6 +141,12 @@ Walking onto swamp or standing on newly swamped ground causes **persistent sickn
 
 All spells update homes, castles, farming, trees, and settler positions just like ordinary terrain edits. Spells can be cast while the simulation is paused.
 
+## Sounds
+
+New castles play a short construction fanfare. Each successful spell has its own synthesized cue: pole chimes, a knight flourish, earthquake rumble, swamp bubbles, a volcanic burst, a flood whoosh, and an Armageddon chord. Enemy spell casts use the same cues. The sounds use Web Audio oscillators and filtered noise; there are no audio downloads.
+
+The **speaker icon in the footer** mutes/unmutes effects and remembers the setting. Audio unlocks only after a real click/tap/key gesture. Invalid or unaffordable casts, scene redraws, startup AI previews and developer model previews are silent. Pausing, opening settings, entering the model viewer or hiding the tab stops existing effects; no delayed sound backlog is replayed. Missing or blocked Web Audio never prevents playing.
+
 ## Developer model viewer
 
 The **code (`</>`) icon in the bottom-right footer, beside the wave icon and “Inspired by Populous…” credit,** toggles developer mode after starting a game. The left-side picker shows the **walking character**, **houses at levels 1–4**, **level-5 castle**, **walking knight with full equipment**, and **two characters fighting** with the normal strike poses, red glow and yellow lightning.
@@ -270,6 +276,7 @@ Rock persists through dry terrain edits. Lowering it into water destroys the roc
 - `tests/minimap.test.mjs` — terrain cache correctness, team glyphs, crowded characters, and coordinate bounds.
 - `src/game-models.ts` — shared normal house/castle, settler, knight/equipment, leader models and walking pose, used by normal play and previews.
 - `src/developer-view.ts` — isolated, orbitable developer model gallery with production walking and combat animations.
+- `src/game-audio.ts` — lazy, bounded Web Audio sound synthesis and castle construction transition tracking.
 - `src/attract-simulation.ts`, `src/attract-view.ts` — isolated, bounded AI-vs-AI startup preview using the normal game's shared models.
 - `tests/attract-mode.test.mjs` — preview rules, pause, frame budgets, looping, determinism, rendering cleanup, and live-game isolation.
 - `src/game-settings.ts` — validated new-game choices, size presets, and shared 500-power start.

@@ -38,6 +38,7 @@ import { createGameModels, animateWalkingModel, buildingPoleHeight } from './gam
 import { createDeveloperView, developerModels } from './developer-view';
 import { clampCameraCenter } from './camera-bounds';
 import { bindMinimapNavigation } from './minimap-navigation';
+import { createGameAudio, CastleSoundTracker } from './game-audio';
 import { createWaterTextures, animateWaterTextures } from './water-texture';
 import {
   convertLeaderToKnight,
@@ -114,6 +115,8 @@ function element<T extends HTMLElement>(selector: string): T {
 }
 function createIconRenderer(): (name: string) => string {
   const icons: Record<string, string> = {
+    volume: '<path d="M11 4 6 8H3v8h3l5 4V4Zm4 4a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/>',
+    muted: '<path d="M11 4 6 8H3v8h3l5 4V4Zm5 5 6 6m0-6-6 6"/>',
     developer: '<path d="m8 5-7 7 7 7m8-14 7 7-7 7m-3-17-2 20"/>',
     test: '<path d="M9 3h6m-5 0v6l-6 10a1 1 0 0 0 1 2h14a1 1 0 0 0 1-2L14 9V3M7 16h10"/><circle cx="10" cy="18" r=".7"/>',
     armageddon:
@@ -231,6 +234,10 @@ function startGame(): void {
   let startingGame = false;
   let attractView: AttractView | null = null;
   let developerView: ReturnType<typeof createDeveloperView> | null = null;
+  const gameAudio = createGameAudio({
+    isAudible: () => gameStarted && !newGameMenu.open && !developerView && !document.hidden,
+  });
+  const castleSoundTracker = new CastleSoundTracker();
   let encounterTest = false;
   const playerStart = playerStartAnchor(SIZE);
   const enemyStart = enemyStartAnchor(SIZE);
@@ -679,11 +686,15 @@ function startGame(): void {
       if (object.userData.ownedGeometry && object instanceof THREE.Mesh) object.geometry.dispose();
     });
     buildings.clear();
+    const castles = new Set<string>();
     for (const settler of settlers) {
       if (!settler.home) continue;
-      if (settler.power === 5) addCastle(settler.home, settler.population);
-      else addHouse(settler.home, settler.power, settler.population);
+      if (settler.power === 5) {
+        addCastle(settler.home, settler.population);
+        castles.add(`${settler.population}:${settler.home.x}:${settler.home.z}`);
+      } else addHouse(settler.home, settler.power, settler.population);
     }
+    if (castleSoundTracker.update(castles)) gameAudio.play('castle');
     rebuildFarms();
     rebuildSwamps();
   }
@@ -1757,6 +1768,8 @@ function startGame(): void {
     if (reconcileSettlements(settlers, tiles, surface, tileAt)) navigationRevision++;
   }
   function generateWorld(): void {
+    gameAudio.stopAll();
+    castleSoundTracker.reset();
     powerMeter.reset();
     enemyPowerMeter.reset();
     enemyAI.reset();
@@ -2179,6 +2192,7 @@ function startGame(): void {
       );
       return;
     }
+    gameAudio.play('armageddon');
     attackOrder.reset();
     leaderAnchor.reset();
     anchorMarker.visible = false;
@@ -2245,6 +2259,7 @@ function startGame(): void {
       if (!target) return;
       const result = leadership.relocate(target, () => powerMeter.spend(SPELL_COSTS.pole));
       if (result === 'moved') {
+        gameAudio.play('pole');
         // Restore shared pole materials before detaching it from a glowing combatant.
         combatEffects.clear();
         rallyDestination = null;
@@ -2274,6 +2289,7 @@ function startGame(): void {
         insufficient: 'Knight needs 1,000 power.',
       };
       if (result === 'converted' && owner) {
+        gameAudio.play('knight');
         equipKnight(owner);
         owner.tile = characterTile(owner);
         owner.target = null;
@@ -2331,6 +2347,7 @@ function startGame(): void {
         return;
     }
     if (!budget.spend(cost)) return;
+    gameAudio.play(spell);
     if (playerCast) {
       selectedSpell = null;
       selectTool(tool);
@@ -2422,6 +2439,7 @@ function startGame(): void {
       'converted'
     ) {
       equipKnight(action.leader);
+      gameAudio.play('knight');
       enemyKnights.converted();
       mobilizeEnemyCharacters([action.successor]);
       toast('The enemy has trained a strengthened knight. A raid is preparing.');
@@ -2501,6 +2519,7 @@ function startGame(): void {
   function togglePause(): void {
     if (armageddon.finished) return;
     paused = !paused;
+    if (paused) gameAudio.stopAll();
     element('#pause-overlay').hidden = !paused;
     const button = element<HTMLButtonElement>('#pause');
     button.innerHTML = icon(paused ? 'play' : 'pause');
@@ -2570,6 +2589,41 @@ function startGame(): void {
         ? 'Shared-island combat test active. Choose a scenario to reset the world.'
         : 'Small-map sandbox active: 20,000 starting player power. Choose a scenario to reset the world.';
   }
+  function bindAudioControls(): void {
+    try {
+      gameAudio.setMuted(localStorage.getItem('tidelands-muted') === '1');
+    } catch {
+      /* Storage may be unavailable. */
+    }
+    const button = element<HTMLButtonElement>('#toggle-sound');
+    function update(): void {
+      button.innerHTML = icon(gameAudio.muted ? 'muted' : 'volume');
+      button.setAttribute('aria-pressed', String(gameAudio.muted));
+      button.setAttribute('aria-label', gameAudio.muted ? 'Unmute sounds' : 'Mute sounds');
+      button.title = gameAudio.muted ? 'Sounds muted' : 'Sounds on';
+    }
+    function unlock(event: Event): void {
+      if (event.isTrusted) gameAudio.unlock();
+    }
+    document.addEventListener('pointerdown', unlock, { capture: true });
+    document.addEventListener('click', unlock, { capture: true });
+    document.addEventListener('keydown', unlock, { capture: true });
+    button.addEventListener('click', () => {
+      gameAudio.setMuted(!gameAudio.muted);
+      if (!gameAudio.muted) gameAudio.unlock();
+      try {
+        localStorage.setItem('tidelands-muted', gameAudio.muted ? '1' : '0');
+      } catch {
+        /* Optional preference. */
+      }
+      update();
+    });
+    window.addEventListener('pagehide', (event) => {
+      if (event.persisted) gameAudio.stopAll();
+      else gameAudio.dispose();
+    });
+    update();
+  }
   function updateDeveloperControls(): void {
     if (!developerView) return;
     element('#developer-title').textContent = developerModels().find(
@@ -2622,6 +2676,7 @@ function startGame(): void {
       pointerDown = null;
       lastPointer = null;
       controls.enabled = false;
+      gameAudio.stopAll();
       developerView = createDeveloperView(
         renderer,
         canvas,
@@ -2671,6 +2726,7 @@ function startGame(): void {
   function openNewGameMenu(proposedDifficulty: Difficulty = difficulty): void {
     stopDeveloperMode();
     if (startingGame || newGameMenu.open) return;
+    gameAudio.stopAll();
     element<HTMLSelectElement>('#menu-ai-difficulty').value = proposedDifficulty;
     element<HTMLSelectElement>('#menu-world-size').value = worldSize;
     element<HTMLButtonElement>('#cancel-new-game').hidden = !gameStarted;
@@ -2708,6 +2764,7 @@ function startGame(): void {
   function bindNewGameMenu(): void {
     document.addEventListener('visibilitychange', () => {
       if (attractView) clock.getDelta();
+      if (document.hidden) gameAudio.stopAll();
     });
     newGameMenu.addEventListener('cancel', (event) => {
       event.preventDefault();
@@ -3261,6 +3318,7 @@ function startGame(): void {
   bindKeyboardControls();
   bindNewGameMenu();
   bindDeveloperMode();
+  bindAudioControls();
   startAttractMode();
   openNewGameMenu();
   startRendering();
