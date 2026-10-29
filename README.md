@@ -19,6 +19,10 @@ npm run preview # Serve the production build
 
 Tests use Vite's Oxc transformer and parser rather than the legacy TypeScript compiler API removed in TypeScript 7. Type-checking uses the pinned TypeScript 7.0.2 compiler.
 
+## Deploy to GitHub Pages
+
+In the repository's **Settings → Pages**, set **Source** to **GitHub Actions**. The tracked `.github/workflows/pages.yml` installs dependencies with `npm ci`, runs tests, builds, and deploys `dist/` on pushes to `master`/`main` or a manual workflow run. It uses the Pages-provided base path, supporting both repository subpaths and root/custom-domain sites. To check a repository-path build locally, run `VITE_BASE_PATH=/populous/ npm run build`.
+
 ## Start a game
 
 The page opens with a **New game** menu with labelled, keyboard-accessible icon cards instead of dropdowns. Choose **Play against AI** or **Watch AI vs AI**, then **Easy / Normal / Hard AI** and **Small (150×150)**, **Normal (200×200)**, or **Large (300×300)**, then press **Start new game**. A live **red AI vs blue AI** match plays behind the menu; your own world is not generated until you confirm. Both populations start with **24 settlers and 500 power**.
