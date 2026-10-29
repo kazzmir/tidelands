@@ -11,6 +11,22 @@ async function graph(path,cache=new Map()){
 }
 const cache=new Map(),{AttractSimulation}=await import(await graph('../src/attract-simulation.ts',cache)),{createAttractView}=await import(await graph('../src/attract-view.ts',cache));
 
+const {createGameModels}=await import(await graph('../src/game-models.ts',cache));
+test('normal play and preview use the same shared houses, castles, characters, and knight factory',async()=>{
+ const main=await readFile(new URL('../src/main.ts',import.meta.url),'utf8'),preview=await readFile(new URL('../src/attract-view.ts',import.meta.url),'utf8');
+ for(const source of [main,preview]){assert.match(source,/createGameModels\(\)/);for(const method of ['house','castle','character','equipKnight'])assert.match(source,new RegExp(`(?:gameModels|models)\\.${method}\\(`));}
+ const models=createGameModels(),surface=new AttractSimulation().game.surface,tile={x:16,z:32};
+ const house=models.house(tile,2,'red',surface,0),castle=models.castle(tile,'blue',surface),person=models.character('red');
+ assert.equal(house.name,'normal-house');assert.ok(house.children.some(c=>c.geometry?.type==='ExtrudeGeometry'));assert.equal(castle.name,'normal-castle');assert.ok(castle.children.length>40);
+ assert.equal(person.mesh.scale.x,1.15);assert.equal(person.legs.length,4);assert.equal(person.head.geometry.parameters.width,.135);assert.equal(person.head.position.y,.425);
+ models.equipKnight(person,'red');models.equipKnight(person,'red');assert.ok(Math.abs(person.mesh.scale.x-1.495)<1e-10);assert.ok(person.mesh.getObjectByName('knight-team-flag'));assert.ok(person.mesh.getObjectByName('knight-cuirass'));
+ models.disposeInstance(house);models.disposeInstance(castle);models.disposeInstance(person.mesh);models.dispose();
+});
+test('disposing one shared model releases only its private resources, not another model geometry/material',()=>{
+ const models=createGameModels(),a=models.character('blue'),b=models.character('blue');let shared=0,head=0;
+ b.mesh.children.find(c=>c.geometry?.parameters?.width===.17).geometry.addEventListener('dispose',()=>shared++);a.head.material.addEventListener('dispose',()=>head++);
+ models.disposeInstance(a.mesh);models.disposeInstance(a.mesh);assert.equal(head,1);assert.equal(shared,0);models.disposeInstance(b.mesh);models.dispose();assert.equal(shared,1);
+});
 test('the startup preview is a real two-policy simulation with ordinary populations and 500 power',()=>{
  const preview=new AttractSimulation();assert.equal(preview.game.sides.length,2);assert.notEqual(preview.game.options.red.id,preview.game.options.blue.id);
  for(const side of ['red','blue']){const m=preview.game.metrics(side);assert.equal(m.population,24);assert.equal(m.hp,240);assert.equal(m.currency,500);}
@@ -26,8 +42,11 @@ test('long/invalid frame times cannot run unbounded background work',()=>{
  preview.dispose();
 });
 test('completed preview rounds loop with fresh independent games and reset budgets',()=>{
- const preview=new AttractSimulation(false,.25),old=preview.game;preview.advance(.05);assert.equal(old.elapsed,.25);for(let i=0;i<41;i++)preview.advance(.05);
+ const preview=new AttractSimulation(),old=preview.game;for(let i=0;i<119;i++)preview.advance(1);assert.equal(preview.round,1);assert.equal(preview.ageSeconds,119);preview.paused=true;preview.advance(1000);assert.equal(preview.ageSeconds,119);preview.paused=false;preview.advance(1);
  assert.equal(preview.round,2);assert.notEqual(preview.game,old);assert.notEqual(preview.game.options.seed,old.options.seed);assert.equal(preview.game.metrics('red').currency,500);assert.equal(preview.game.metrics('blue').currency,500);preview.dispose();
+});
+test('an early elimination does not restart the preview before its two-minute duration',()=>{
+ const preview=new AttractSimulation();preview.game.people.filter(c=>c.population==='blue').forEach(c=>c.characterPower=0);preview.advance(.05);for(let i=0;i<119;i++)preview.advance(1);assert.equal(preview.round,1);preview.advance(1);assert.equal(preview.round,2);preview.dispose();
 });
 test('two previews have independent state and deterministic actions',()=>{
  const a=new AttractSimulation(),b=new AttractSimulation();a.advance(.05);assert.equal(b.game.elapsed,0);b.advance(.05);assert.deepEqual(a.game.metrics('red'),b.game.metrics('red'));assert.deepEqual(a.game.people.map(p=>[p.x,p.z]),b.game.people.map(p=>[p.x,p.z]));a.dispose();b.dispose();
@@ -35,7 +54,7 @@ test('two previews have independent state and deterministic actions',()=>{
 test('preview renderer presents both teams, renders paused frames only as needed, and frees its resources without disposing the shared renderer',()=>{
  let scene,draws=0,lists=0,rendererDisposals=0;
  const renderer={capabilities:{getMaxAnisotropy:()=>1},render:(s)=>{scene=s;draws++;},renderLists:{dispose:()=>lists++},dispose:()=>rendererDisposals++};
- const view=createAttractView(renderer,true);view.render(1/60,800,600);assert.equal(draws,1);assert.ok(scene.getObjectByName('attract-red-settlers').count>0);assert.ok(scene.getObjectByName('attract-blue-settlers').count>0);assert.ok(scene.getObjectByName('attract-terrain').geometry.attributes.position.count>0);
+ const view=createAttractView(renderer,true);view.render(1/60,800,600);assert.equal(draws,1);assert.ok(scene.getObjectByName('attract-red-settlers').children.length>0);assert.ok(scene.getObjectByName('attract-blue-settlers').children.length>0);assert.ok(scene.getObjectByName('attract-terrain').geometry.attributes.position.count>0);
  view.render(1/60,800,600);assert.equal(draws,1);view.render(1/60,400,600);assert.equal(draws,2);assert.equal(view.simulation.game.elapsed,0);
  const geometries=new Set(),materials=new Set(),textures=new Set();scene.traverse(object=>{if(object.geometry)geometries.add(object.geometry);if(object.material){for(const material of Array.isArray(object.material)?object.material:[object.material]){materials.add(material);if(material.map)textures.add(material.map);if(material.normalMap)textures.add(material.normalMap);}}});
  const disposed=new Map();for(const resource of [...geometries,...materials,...textures])resource.addEventListener('dispose',()=>disposed.set(resource,(disposed.get(resource)??0)+1));

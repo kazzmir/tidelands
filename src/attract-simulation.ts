@@ -7,7 +7,8 @@ export class AttractSimulation {
   round = 1;
   private match: SimulationGame | null;
   private accumulator = 0;
-  private hold = 0;
+  // Active real time, deliberately independent of the accelerated game clock.
+  private roundElapsed = 0;
   private ended = false;
   readonly stepSeconds = 0.25;
   readonly speed = 6;
@@ -15,9 +16,9 @@ export class AttractSimulation {
 
   constructor(
     paused = false,
-    private readonly roundSeconds = 240,
+    private readonly roundSeconds = 120,
   ) {
-    if (!Number.isFinite(roundSeconds) || roundSeconds <= 0)
+    if (!Number.isFinite(roundSeconds) || roundSeconds <= 0 || roundSeconds > 1200)
       throw new Error('Invalid preview duration');
     this.paused = paused;
     this.match = this.newMatch();
@@ -29,6 +30,9 @@ export class AttractSimulation {
     if (!this.match) throw new Error('Preview has been disposed');
     return this.match;
   }
+  get ageSeconds(): number {
+    return this.roundElapsed;
+  }
   private newMatch(): SimulationGame {
     return new SimulationGame({
       seed: (1099 + this.round * 17) >>> 0,
@@ -36,25 +40,24 @@ export class AttractSimulation {
       blue: profileById('sorcerer'),
       scenario: this.round % 2 ? 'highlands' : 'plains',
       size: 64,
-      seconds: this.roundSeconds,
+      seconds: this.roundSeconds * this.speed,
       step: this.stepSeconds,
       finaleSeconds: 0,
     });
   }
   advance(realSeconds: number): number {
     if (this.disposed || this.paused || !Number.isFinite(realSeconds) || realSeconds <= 0) return 0;
-    const dt = Math.min(realSeconds, 0.05);
-    if (this.ended) {
-      this.hold += dt;
-      if (this.hold >= 2) {
-        this.round++;
-        this.match = this.newMatch();
-        this.accumulator = 0;
-        this.hold = 0;
-        this.ended = false;
-      }
+    this.roundElapsed += realSeconds;
+    if (this.roundElapsed + 1e-9 >= this.roundSeconds) {
+      this.round++;
+      this.match = this.newMatch();
+      this.accumulator = 0;
+      this.roundElapsed = 0;
+      this.ended = false;
       return 0;
     }
+    if (this.ended) return 0;
+    const dt = Math.min(realSeconds, 0.05);
     this.accumulator = Math.min(
       this.stepSeconds * this.maximumStepsPerFrame,
       this.accumulator + dt * this.speed,
@@ -64,11 +67,7 @@ export class AttractSimulation {
       this.game.step(this.stepSeconds);
       this.accumulator = Math.max(0, this.accumulator - this.stepSeconds);
       steps++;
-      if (
-        this.game.elapsed >= this.roundSeconds ||
-        !this.game.metrics('red').population ||
-        !this.game.metrics('blue').population
-      ) {
+      if (!this.game.metrics('red').population || !this.game.metrics('blue').population) {
         this.ended = true;
         this.accumulator = 0;
         break;

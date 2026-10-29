@@ -25,15 +25,16 @@ test('a gathering housed leader preserves pooled HP and growth without repeatedl
 test('populations have uniform red or blue shirts rather than per-character colors',async()=>{
   assert.equal(populationShirtColor('red'),'#d33136');
   assert.equal(populationShirtColor('blue'),'#2d64d6');
-  const source=await readFile(new URL('../src/main.ts',import.meta.url),'utf8');
+  const source=await readFile(new URL('../src/game-models.ts',import.meta.url),'utf8');
   assert.match(source,/color: populationShirtColor\('red'\)/);
   assert.match(source,/new THREE\.Mesh\(bodyGeometry, shirtMaterial\)/);
   assert.doesNotMatch(source,/shirtMaterials\[/);
 });
 
 test('houses, castles, and knights carry flags from the same red/blue palette as shirts',async()=>{
-  const source=await readFile(new URL('../src/main.ts',import.meta.url),'utf8');
-  const {program}=parseSync('main.ts',source);
+  const source=await readFile(new URL('../src/game-models.ts',import.meta.url),'utf8');
+  const main=await readFile(new URL('../src/main.ts',import.meta.url),'utf8');
+  const {program}=parseSync('game-models.ts',source);
   const functions=new Map();
   function visit(node){
     if(!node || typeof node!=='object')return;
@@ -44,13 +45,14 @@ test('houses, castles, and knights carry flags from the same red/blue palette as
     }
   }
   visit(program);
-  for(const name of ['addHouse','addCastle'])assert.match(functions.get(name),/createPopulationFlag\(population\)/);
-  assert.match(functions.get('equipKnight'),/createPopulationFlag\(settler.population\)/);
+  for(const name of ['house','castle'])assert.match(functions.get(name),/createPopulationFlag\(population\)/);
+  assert.match(functions.get('equipKnight'),/createPopulationFlag\(population\)/);
   assert.match(functions.get('equipKnight'),/settler.mesh.add\(teamFlag\)/);
   assert.doesNotMatch(functions.get('equipKnight'),/leaderObject.add\(teamFlag\)/);
   assert.match(functions.get('createPopulationFlag'),/populationMaterials\[population\]/);
   assert.match(source,/const shirtMaterial = populationMaterials\[population\]/);
-  assert.match(source,/const populationColor: PopulationColor = 'red'/);
+  assert.match(main,/const populationColor: PopulationColor = 'red'/);
+  assert.match(main,/gameModels\.character\(population\)/);
 });
 
 test('newborns retain their parent population for future enemy targeting and team colors',()=>{

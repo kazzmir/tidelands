@@ -34,7 +34,7 @@ import { Armageddon, armageddonLand } from './armageddon';
 import { nearestPoleCollector } from './pole-recovery';
 import { leaderVitals, createLeaderVitalsView } from './leader-vitals';
 import { withinTerrainReach } from './terrain-reach';
-import { createSilverArmorMaterial, equipKnightArmor } from './knight-armor';
+import { createGameModels } from './game-models';
 import { createWaterTextures, animateWaterTextures } from './water-texture';
 import {
   convertLeaderToKnight,
@@ -414,23 +414,8 @@ function startGame(): void {
   const leafGeometry = new THREE.ConeGeometry(0.44, 1.2, 5);
   const rockGeometry = new THREE.IcosahedronGeometry(0.24, 0);
   const rockMaterial = new THREE.MeshStandardMaterial({ color: '#a6af94', roughness: 1 });
-  const wallMaterial = new THREE.MeshStandardMaterial({ color: '#f0dfb7', roughness: 1 });
-  const roofMaterials = ['#ad6548', '#bd7950', '#8b6650'].map(
-    (color) => new THREE.MeshStandardMaterial({ color, roughness: 1 }),
-  );
-  const darkMaterial = new THREE.MeshStandardMaterial({ color: '#645c42', roughness: 1 });
+  const gameModels = createGameModels();
   const pathMaterial = new THREE.MeshStandardMaterial({ color: '#b5ac79', roughness: 1 });
-  const houseGeometry = new THREE.BoxGeometry(0.62, 0.48, 0.58);
-  // A triangular prism roof, its ridge runs along the z axis.
-  const roofShape = new THREE.Shape();
-  roofShape.moveTo(-0.4, 0);
-  roofShape.lineTo(0, 0.37);
-  roofShape.lineTo(0.4, 0);
-  roofShape.closePath();
-  const roofGeometry = new THREE.ExtrudeGeometry(roofShape, { depth: 0.78, bevelEnabled: false });
-  roofGeometry.translate(0, 0, -0.39);
-  const doorGeometry = new THREE.BoxGeometry(0.13, 0.25, 0.02);
-  const chimneyGeometry = new THREE.BoxGeometry(0.1, 0.32, 0.12);
   const pathGeometry = new THREE.PlaneGeometry(0.42, 0.92);
   function tileAt(x: number, z: number): Tile | undefined {
     if (x < 0 || z < 0 || x >= SIZE || z >= SIZE) return undefined;
@@ -548,23 +533,6 @@ function startGame(): void {
   }
   const populationColor: PopulationColor = 'red';
   const enemyColor: PopulationColor = populationColor === 'red' ? 'blue' : 'red';
-  const populationMaterials: Record<PopulationColor, THREE.MeshStandardMaterial> = {
-    red: new THREE.MeshStandardMaterial({ color: populationShirtColor('red'), roughness: 1 }),
-    blue: new THREE.MeshStandardMaterial({ color: populationShirtColor('blue'), roughness: 1 }),
-  };
-  const flagPoleGeometry = new THREE.BoxGeometry(0.035, 0.75, 0.035);
-  const flagClothGeometry = new THREE.BoxGeometry(0.4, 0.23, 0.025);
-  function createPopulationFlag(population: PopulationColor): THREE.Group {
-    const flag = new THREE.Group();
-    const pole = new THREE.Mesh(flagPoleGeometry, darkMaterial);
-    pole.position.y = 0.375;
-    const cloth = new THREE.Mesh(flagClothGeometry, populationMaterials[population]);
-    cloth.position.set(0.2, 0.61, 0);
-    pole.castShadow = true;
-    cloth.castShadow = true;
-    flag.add(pole, cloth);
-    return flag;
-  }
   function addHouse(
     tile: Tile,
     power: HousePower,
@@ -577,51 +545,16 @@ function startGame(): void {
       if (decoration instanceof THREE.Mesh && decoration.userData.ownedGeometry)
         decoration.geometry.dispose();
     }
-    const group = new THREE.Group();
-    const walls = new THREE.Mesh(houseGeometry, wallMaterial);
-    walls.position.y = 0.24;
-    const roof = new THREE.Mesh(
-      roofGeometry,
-      roofMaterials[Math.max(0, power - 1) % roofMaterials.length],
+    buildings.add(
+      gameModels.house(
+        tile,
+        power,
+        population,
+        surface,
+        (Math.floor(hash(tile.x, tile.z) * 4) * Math.PI) / 2,
+      ),
     );
-    roof.position.y = 0.46;
-    const door = new THREE.Mesh(doorGeometry, darkMaterial);
-    door.position.set(0.08, 0.125, 0.3);
-    const chimney = new THREE.Mesh(chimneyGeometry, wallMaterial);
-    chimney.position.set(-0.2, 0.72, -0.15);
-    const flag = createPopulationFlag(population);
-    flag.position.set(0.12, 0.68, 0.08);
-    flag.scale.setScalar(0.7);
-    group.add(walls, roof, door, chimney, flag);
-    group.position.copy(position(tile));
-    const footprint = [-0.4, 0.4].flatMap((dx) =>
-      [-0.4, 0.4].map((dz) => surface.sample(tile.x + 0.5 + dx, tile.z + 0.5 + dz)),
-    );
-    const floor = Math.max(tile.height * STEP, ...footprint) + 0.01;
-    const foundationDepth = floor - Math.min(...footprint) + 0.04;
-    const foundation = new THREE.Mesh(
-      new THREE.BoxGeometry(0.64, foundationDepth, 0.6),
-      wallMaterial,
-    );
-    foundation.userData.ownedGeometry = true;
-    foundation.position.y = -foundationDepth / 2;
-    group.add(foundation);
-    group.position.y = floor;
-    group.scale.setScalar(0.8 + power * 0.08);
-    group.rotation.y = (Math.floor(hash(tile.x, tile.z) * 4) * Math.PI) / 2;
-    group.traverse((object) => {
-      if (object instanceof THREE.Mesh) {
-        object.castShadow = true;
-        object.receiveShadow = true;
-      }
-    });
-    buildings.add(group);
   }
-  const castleBlockGeometry = new THREE.BoxGeometry(1, 1, 1);
-  const castleRoofGeometry = new THREE.ConeGeometry(1, 1, 4);
-  const castleStone = new THREE.MeshStandardMaterial({ color: '#b6b9a4', roughness: 1 });
-  const castleTrim = new THREE.MeshStandardMaterial({ color: '#8c9889', roughness: 1 });
-  const castleRoof = new THREE.MeshStandardMaterial({ color: '#855443', roughness: 1 });
   function addCastle(home: Tile, population: PopulationColor = populationColor): void {
     for (const decoration of [...scenery.children]) {
       const tile = decoration.userData.tile as Tile | undefined;
@@ -632,52 +565,7 @@ function startGame(): void {
           object.geometry.dispose();
       });
     }
-    const castle = new THREE.Group();
-    const block = (
-      x: number,
-      y: number,
-      z: number,
-      width: number,
-      height: number,
-      depth: number,
-      material = castleStone,
-    ): void => {
-      const mesh = new THREE.Mesh(castleBlockGeometry, material);
-      mesh.position.set(x, y, z);
-      mesh.scale.set(width, height, depth);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
-      castle.add(mesh);
-    };
-    block(0, 0.04, 0, 2.96, 0.08, 2.96, castleTrim);
-    block(0, 0.75, 0, 1.1, 1.45, 1.1);
-    block(0, 0.3, 0.56, 0.23, 0.52, 0.025, darkMaterial);
-    const roof = new THREE.Mesh(castleRoofGeometry, castleRoof);
-    roof.position.y = 1.78;
-    roof.scale.set(0.88, 0.62, 0.88);
-    roof.rotation.y = Math.PI / 4;
-    roof.castShadow = true;
-    castle.add(roof);
-    for (const side of [-1, 1]) {
-      block(0, 0.37, side * 1.29, 2.6, 0.65, 0.16);
-      block(side * 1.29, 0.37, 0, 0.16, 0.65, 2.6);
-      for (let i = -2; i <= 2; i++) {
-        block(i * 0.42, 0.79, side * 1.29, 0.22, 0.2, 0.2);
-        block(side * 1.29, 0.79, i * 0.42, 0.2, 0.2, 0.22);
-      }
-      for (const other of [-1, 1]) {
-        block(side * 1.24, 0.65, other * 1.24, 0.43, 1.22, 0.43);
-        for (const dx of [-0.14, 0.14]) {
-          for (const dz of [-0.14, 0.14])
-            block(side * 1.24 + dx, 1.34, other * 1.24 + dz, 0.15, 0.2, 0.15);
-        }
-      }
-    }
-    const flag = createPopulationFlag(population);
-    flag.position.y = 1.855;
-    castle.add(flag);
-    castle.position.copy(position(home));
-    buildings.add(castle);
+    buildings.add(gameModels.castle(home, population, surface));
   }
   const farmCanvas = document.createElement('canvas');
   farmCanvas.width = farmCanvas.height = 128;
@@ -1055,61 +943,11 @@ function startGame(): void {
     Settler,
     { goal: Tile; revision: number; distance: Map<Tile, number> }
   >();
-  const armorMaterial = createSilverArmorMaterial();
   function equipKnight(settler: Settler): void {
-    function part(
-      parent: THREE.Object3D,
-      geometry: THREE.BufferGeometry,
-      material: THREE.Material,
-      x: number,
-      y: number,
-      z: number,
-    ): THREE.Mesh {
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.position.set(x, y, z);
-      mesh.castShadow = true;
-      mesh.userData.ownedGeometry = true;
-      parent.add(mesh);
-      return mesh;
-    }
-    equipKnightArmor(settler.mesh, settler.legs, armorMaterial, darkMaterial);
-    const teamFlag = createPopulationFlag(settler.population);
-    teamFlag.name = 'knight-team-flag';
-    teamFlag.position.set(-0.27, 0.23, -0.08);
-    teamFlag.rotation.y = Math.PI; // Fly outward, clear of the white leader object and sword.
-    settler.mesh.add(teamFlag);
-    const sword = new THREE.Group();
-    sword.position.z = 0.09;
-    part(sword, new THREE.BoxGeometry(0.045, 0.4, 0.025), armorMaterial, 0, 0.24, 0);
-    part(sword, new THREE.BoxGeometry(0.15, 0.028, 0.045), darkMaterial, 0, 0.035, 0);
-    part(sword, new THREE.BoxGeometry(0.035, 0.11, 0.035), darkMaterial, 0, -0.03, 0);
-    settler.legs[3].add(sword);
-    const shield = new THREE.Group();
-    shield.position.set(-0.04, 0.02, 0.1);
-    const rim = part(
-      shield,
-      new THREE.CylinderGeometry(0.155, 0.155, 0.06, 6),
-      armorMaterial,
-      0,
-      0,
-      0,
-    );
-    rim.rotation.x = Math.PI / 2;
-    part(
-      shield,
-      new THREE.CircleGeometry(0.125, 6),
-      populationMaterials[settler.population],
-      0,
-      0,
-      0.032,
-    );
-    settler.legs[1].add(shield);
+    gameModels.equipKnight(settler, settler.population);
   }
   function disposeSettlerVisual(settler: Settler): void {
-    settler.head.material.dispose();
-    settler.mesh.traverse((object) => {
-      if (object instanceof THREE.Mesh && object.userData.ownedGeometry) object.geometry.dispose();
-    });
+    gameModels.disposeInstance(settler.mesh);
   }
   function pursuitOptions(character: Settler, enemy: Settler): Tile[] {
     const goal = characterTile(enemy);
@@ -1147,26 +985,7 @@ function startGame(): void {
   const leaderObject = createLeaderObject();
   const enemyLeaderObject = createLeaderObject();
   function createLeaderObject(): THREE.Group {
-    const group = new THREE.Group();
-    const staff = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.015, 0.02, 0.8, 6),
-      new THREE.MeshStandardMaterial({ color: '#776b49', roughness: 1 }),
-    );
-    staff.position.y = 0.42;
-    const whiteObject = new THREE.Mesh(
-      new THREE.OctahedronGeometry(0.24),
-      new THREE.MeshStandardMaterial({
-        color: '#ffffff',
-        emissive: '#ffffff',
-        emissiveIntensity: 0.2,
-        roughness: 0.7,
-      }),
-    );
-    whiteObject.position.y = 0.98;
-    staff.castShadow = true;
-    whiteObject.castShadow = true;
-    group.add(staff, whiteObject);
-    group.visible = false;
+    const group = gameModels.leader();
     scene.add(group);
     return group;
   }
@@ -1604,41 +1423,13 @@ function startGame(): void {
       }
     }
   }
-  const skinMaterial = new THREE.MeshStandardMaterial({ color: '#e3bb8b', roughness: 1 });
-  const hairMaterial = new THREE.MeshStandardMaterial({ color: '#685139', roughness: 1 });
-  const trouserMaterial = new THREE.MeshStandardMaterial({ color: '#54665a', roughness: 1 });
-  const bodyGeometry = new THREE.BoxGeometry(0.17, 0.21, 0.12);
-  const headGeometry = new THREE.BoxGeometry(0.135, 0.14, 0.13);
-  const hairGeometry = new THREE.BoxGeometry(0.145, 0.055, 0.14);
-  const limbGeometry = new THREE.BoxGeometry(0.055, 0.16, 0.065);
   function createSettler(
     tile: Tile,
     characterPower = INITIAL_CHARACTER_POWER,
     population: PopulationColor = populationColor,
   ): Settler {
-    const shirtMaterial = populationMaterials[population];
-    const mesh = new THREE.Group();
-    const body = new THREE.Mesh(bodyGeometry, shirtMaterial);
-    body.position.y = 0.25;
-    const head = new THREE.Mesh(headGeometry, skinMaterial.clone());
-    head.position.y = 0.425;
-    const hair = new THREE.Mesh(hairGeometry, hairMaterial);
-    hair.position.set(0, 0.49, -0.01);
-    const legs: THREE.Mesh[] = [];
-    for (const sign of [-1, 1]) {
-      const leg = new THREE.Mesh(limbGeometry, trouserMaterial);
-      leg.position.set(sign * 0.05, 0.085, 0);
-      const arm = new THREE.Mesh(limbGeometry, skinMaterial);
-      arm.position.set(sign * 0.115, 0.25, 0);
-      legs.push(leg, arm);
-      mesh.add(leg, arm);
-    }
-    mesh.add(body, head, hair);
-    mesh.traverse((object) => {
-      if (object instanceof THREE.Mesh) object.castShadow = true;
-    });
+    const { mesh, head, legs } = gameModels.character(population);
     mesh.position.copy(position(tile));
-    mesh.scale.setScalar(1.15);
     people.add(mesh);
     const settler: Settler = {
       population,
@@ -2814,6 +2605,9 @@ function startGame(): void {
     startWorld(false);
   }
   function bindNewGameMenu(): void {
+    document.addEventListener('visibilitychange', () => {
+      if (attractView) clock.getDelta();
+    });
     newGameMenu.addEventListener('cancel', (event) => {
       event.preventDefault();
       closeNewGameMenu();

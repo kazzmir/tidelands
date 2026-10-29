@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { AttractSimulation } from './attract-simulation';
 import { createWaterTextures, animateWaterTextures } from './water-texture';
+import { createGameModels, type CharacterModel } from './game-models';
 
 export interface AttractView {
   readonly simulation: AttractSimulation;
@@ -8,12 +9,13 @@ export interface AttractView {
   dispose(): void;
 }
 
-/** Lightweight instanced presentation of the real headless game, sharing the existing WebGL renderer. */
+/** The real headless match, presented with exactly the same model factory as normal play. */
 export function createAttractView(
   renderer: THREE.WebGLRenderer,
   reducedMotion = false,
 ): AttractView {
-  const simulation = new AttractSimulation(reducedMotion);
+  const simulation = new AttractSimulation(reducedMotion),
+    models = createGameModels();
   const scene = new THREE.Scene();
   scene.background = new THREE.Color('#8bb9aa');
   scene.fog = new THREE.Fog('#8bb9aa', 100, 230);
@@ -25,16 +27,11 @@ export function createAttractView(
   sun.position.set(-30, 60, 25);
   sun.castShadow = true;
   sun.shadow.mapSize.set(1024, 1024);
-  sun.shadow.camera.left = -55;
-  sun.shadow.camera.right = 55;
-  sun.shadow.camera.top = 55;
-  sun.shadow.camera.bottom = -55;
-  sun.shadow.camera.far = 180;
+  Object.assign(sun.shadow.camera, { left: -55, right: 55, top: 55, bottom: -55, far: 180 });
   sun.shadow.bias = -0.001;
   scene.add(sun);
   const geometries = new Set<THREE.BufferGeometry>(),
-    materials = new Set<THREE.Material>(),
-    instances: THREE.InstancedMesh[] = [];
+    materials = new Set<THREE.Material>();
   function geometry<T extends THREE.BufferGeometry>(value: T): T {
     geometries.add(value);
     return value;
@@ -44,52 +41,35 @@ export function createAttractView(
     return value;
   }
   const box = geometry(new THREE.BoxGeometry(1, 1, 1)),
-    sphere = geometry(new THREE.SphereGeometry(1, 8, 6)),
-    cone = geometry(new THREE.ConeGeometry(1, 1, 4)),
     pine = geometry(new THREE.ConeGeometry(1, 1, 7));
-  const skin = material(new THREE.MeshStandardMaterial({ color: '#e6b98b', roughness: 0.8 }));
-  const dark = material(new THREE.MeshStandardMaterial({ color: '#39483f', roughness: 0.9 }));
-  const red = material(new THREE.MeshStandardMaterial({ color: '#d33136', roughness: 0.8 }));
-  const blue = material(new THREE.MeshStandardMaterial({ color: '#2d64d6', roughness: 0.8 }));
-  const armor = material(
-    new THREE.MeshStandardMaterial({ color: '#dce5e4', roughness: 0.19, metalness: 0.8 }),
-  );
-  const cream = material(new THREE.MeshStandardMaterial({ color: '#f3e5be', roughness: 0.9 }));
-  const white = material(new THREE.MeshStandardMaterial({ color: '#fffdeb', roughness: 0.5 }));
-  const wood = material(new THREE.MeshStandardMaterial({ color: '#826c49', roughness: 0.9 }));
-  const leaves = material(new THREE.MeshStandardMaterial({ color: '#3f7756', roughness: 1 }));
-  function instanced(
-    shape: THREE.BufferGeometry,
-    paint: THREE.Material,
-    count = 512,
-  ): THREE.InstancedMesh {
-    const mesh = new THREE.InstancedMesh(shape, paint, count);
+  const wood = material(new THREE.MeshStandardMaterial({ color: '#826c49', roughness: 0.9 })),
+    leaves = material(new THREE.MeshStandardMaterial({ color: '#3f7756', roughness: 1 }));
+  const trunks = new THREE.InstancedMesh(box, wood, 512),
+    crowns = new THREE.InstancedMesh(pine, leaves, 512);
+  for (const mesh of [trunks, crowns]) {
     mesh.count = 0;
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    mesh.castShadow = true;
-    mesh.receiveShadow = true;
+    mesh.castShadow = mesh.receiveShadow = true;
     mesh.frustumCulled = false;
-    instances.push(mesh);
     scene.add(mesh);
-    return mesh;
   }
-  const shirts = [instanced(box, red), instanced(box, blue)],
-    heads = instanced(sphere, skin),
-    legs = instanced(box, dark, 1024),
-    silver = instanced(box, armor),
-    helmets = instanced(sphere, armor);
-  const flags = [instanced(box, red, 1024), instanced(box, blue, 1024)],
-    posts = instanced(box, wood, 1024),
-    poles = instanced(sphere, white, 8);
-  const walls = instanced(box, cream),
-    roofs = [instanced(cone, red), instanced(cone, blue)],
-    towers = instanced(box, cream, 2048);
-  const trunks = instanced(box, wood, 512),
-    crowns = instanced(pine, leaves, 512);
-  const terrainMaterial = material(
-    new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true }),
+  const teams = [new THREE.Group(), new THREE.Group()],
+    buildings = new THREE.Group();
+  teams[0].name = 'attract-red-settlers';
+  teams[1].name = 'attract-blue-settlers';
+  buildings.name = 'attract-homes';
+  scene.add(...teams, buildings);
+  const characters = new Map<number, CharacterModel>(),
+    homes = new Map<number, { mesh: THREE.Group; key: string }>();
+  const poles = [models.leader(), models.leader()];
+  scene.add(...poles);
+  const terrain = new THREE.Mesh(
+    geometry(new THREE.BufferGeometry()),
+    material(
+      new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, flatShading: true }),
+    ),
   );
-  const terrain = new THREE.Mesh(geometry(new THREE.BufferGeometry()), terrainMaterial);
+  terrain.name = 'attract-terrain';
   terrain.receiveShadow = true;
   scene.add(terrain);
   const textures = createWaterTextures(192, renderer.capabilities.getMaxAnisotropy(), 128);
@@ -105,6 +85,7 @@ export function createAttractView(
       }),
     ),
   );
+  water.name = 'attract-water';
   water.rotation.x = -Math.PI / 2;
   water.position.y = 0.08;
   water.receiveShadow = true;
@@ -129,48 +110,33 @@ export function createAttractView(
   const rock = new THREE.Color('#6b7278'),
     swamp = new THREE.Color('#647d3e'),
     dummy = new THREE.Object3D(),
-    color = new THREE.Color();
-  terrain.name = 'attract-terrain';
-  water.name = 'attract-water';
-  shirts[0].name = 'attract-red-settlers';
-  shirts[1].name = 'attract-blue-settlers';
-  walls.name = 'attract-homes';
-  silver.name = 'attract-knights';
-  const targetPosition = new THREE.Vector3();
-  const positions = new Map<number, THREE.Vector3>();
+    color = new THREE.Color(),
+    targetPosition = new THREE.Vector3();
   let round = 0,
     terrainTag = '',
     treeElapsed = 1,
     visualTime = 0,
-    disposed = false;
-  let previousPaused = false,
+    disposed = false,
+    previousPaused = false,
     previousWidth = 0,
     previousHeight = 0;
-  function put(
-    mesh: THREE.InstancedMesh,
-    index: number,
-    x: number,
-    y: number,
-    z: number,
-    sx: number,
-    sy: number,
-    sz: number,
-    rotation = 0,
-  ): void {
-    dummy.position.set(x, y, z);
-    dummy.rotation.set(0, rotation, 0);
-    dummy.scale.set(sx, sy, sz);
-    dummy.updateMatrix();
-    mesh.setMatrixAt(index, dummy.matrix);
+  function resetModels(): void {
+    for (const pole of poles) {
+      scene.add(pole);
+      pole.visible = false;
+    }
+    for (const actor of characters.values()) models.disposeInstance(actor.mesh);
+    for (const home of homes.values()) models.disposeInstance(home.mesh);
+    characters.clear();
+    homes.clear();
   }
   function rebuildTerrain(): void {
     const game = simulation.game,
-      surface = game.surface,
-      points = surface.positions(),
+      points = game.surface.positions(),
       colors = new Float32Array(points.length);
     for (let i = 0; i < points.length; i += 3) {
       const tile = game.tiles[Math.floor(i / 18)],
-        height = points[i + 1] / surface.step,
+        height = points[i + 1] / game.surface.step,
         low = Math.max(0, Math.min(14, Math.floor(height))),
         high = Math.min(14, low + 1);
       color.copy(palette[low]).lerp(palette[high], height - low);
@@ -202,29 +168,26 @@ export function createAttractView(
         z = tile.z + 0.5 - half,
         y = game.surface.sample(tile.x + 0.5, tile.z + 0.5),
         scale = 0.8 + ((tile.index * 17) % 13) / 20;
-      put(trunks, count, x, y + 0.35 * scale, z, 0.14 * scale, 0.7 * scale, 0.14 * scale);
-      put(crowns, count, x, y + 1.05 * scale, z, 0.57 * scale, 1.5 * scale, 0.57 * scale);
+      dummy.rotation.set(0, 0, 0);
+      dummy.position.set(x, y + 0.35 * scale, z);
+      dummy.scale.set(0.14 * scale, 0.7 * scale, 0.14 * scale);
+      dummy.updateMatrix();
+      trunks.setMatrixAt(count, dummy.matrix);
+      dummy.position.set(x, y + 1.05 * scale, z);
+      dummy.scale.set(0.57 * scale, 1.5 * scale, 0.57 * scale);
+      dummy.updateMatrix();
+      crowns.setMatrixAt(count, dummy.matrix);
       count++;
     }
     trunks.count = crowns.count = count;
-    trunks.instanceMatrix.needsUpdate = true;
-    crowns.instanceMatrix.needsUpdate = true;
+    trunks.instanceMatrix.needsUpdate = crowns.instanceMatrix.needsUpdate = true;
   }
   function updatePeople(dt: number): void {
     const game = simulation.game,
       half = game.options.size / 2,
       seen = new Set<number>(),
-      shirtCount = [0, 0],
-      flagCount = [0, 0],
-      roofCount = [0, 0];
-    let headCount = 0,
-      legCount = 0,
-      armorCount = 0,
-      houseCount = 0,
-      towerCount = 0,
-      postCount = 0,
-      poleCount = 0;
-    const alpha = 1 - Math.exp(-18 * dt);
+      occupied = new Set<number>(),
+      alpha = 1 - Math.exp(-18 * dt);
     for (const person of game.people) {
       if (
         person.characterPower <= 0 ||
@@ -232,153 +195,107 @@ export function createAttractView(
         person.survival.phase === 'sinking'
       )
         continue;
-      const side = person.population === 'red' ? 0 : 1,
-        leader = game.sides[side].leader.leader === person;
-      const worldX = person.home ? person.home.x + 0.5 : person.x,
-        worldZ = person.home ? person.home.z + 0.5 : person.z;
-      const y = game.surface.sample(worldX, worldZ),
-        x = worldX - half,
-        z = worldZ - half;
-      if (person.home) {
-        if (houseCount >= 512) continue;
-        const castle = person.power === 5,
-          width = castle ? 2.7 : 0.8,
-          height = castle ? 0.8 : 0.55;
-        put(walls, houseCount++, x, y + height / 2, z, width, height, width);
-        put(
-          roofs[side],
-          roofCount[side]++,
-          x,
-          y + height + 0.2,
-          z,
-          width * 0.8,
-          0.5,
-          width * 0.8,
-          Math.PI / 4,
-        );
-        if (castle)
-          for (const dx of [-1.05, 1.05])
-            for (const dz of [-1.05, 1.05])
-              put(towers, towerCount++, x + dx, y + 0.58, z + dz, 0.45, 1.16, 0.45);
-        put(posts, postCount++, x + 0.18, y + height + 0.65, z, 0.035, 0.7, 0.035);
-        put(flags[side], flagCount[side]++, x + 0.35, y + height + 0.82, z, 0.32, 0.22, 0.035);
-        if (leader && poleCount < 8)
-          put(poles, poleCount++, x, y + height + 1.05, z, 0.16, 0.16, 0.16);
-        continue;
-      }
-      if (headCount + armorCount >= 512) continue;
       seen.add(person.id);
-      let position = positions.get(person.id);
-      if (!position) {
-        position = new THREE.Vector3(x, y, z);
-        positions.set(person.id, position);
-      } else position.lerp(targetPosition.set(x, y, z), alpha);
-      const scale = person.knight ? 1.7 : 1.3,
-        px = position.x,
-        py = Math.max(0.08, position.y),
-        pz = position.z;
-      const rotation = person.target
-        ? Math.atan2(person.target.x - person.tile.x, person.target.z - person.tile.z)
-        : 0;
-      const swing = person.target ? Math.sin(visualTime * 8 + person.id) * 0.09 : 0;
-      put(
-        legs,
-        legCount++,
-        px - 0.1 * scale,
-        py + 0.15 * scale,
-        pz + swing,
-        0.12 * scale,
-        0.3 * scale,
-        0.13 * scale,
-        rotation,
-      );
-      put(
-        legs,
-        legCount++,
-        px + 0.1 * scale,
-        py + 0.15 * scale,
-        pz - swing,
-        0.12 * scale,
-        0.3 * scale,
-        0.13 * scale,
-        rotation,
-      );
-      if (person.knight) {
-        put(
-          silver,
-          armorCount,
-          px,
-          py + 0.44 * scale,
-          pz,
-          0.38 * scale,
-          0.35 * scale,
-          0.24 * scale,
-          rotation,
-        );
-        put(
-          helmets,
-          armorCount++,
-          px,
-          py + 0.73 * scale,
-          pz,
-          0.18 * scale,
-          0.19 * scale,
-          0.17 * scale,
-        );
-        put(
-          flags[side],
-          flagCount[side]++,
-          px - 0.25,
-          py + 0.65 * scale,
-          pz,
-          0.21,
-          0.25,
-          0.045,
-          rotation,
-        );
-      } else {
-        put(
-          shirts[side],
-          shirtCount[side]++,
-          px,
-          py + 0.44 * scale,
-          pz,
-          0.32 * scale,
-          0.32 * scale,
-          0.22 * scale,
-          rotation,
-        );
-        put(
-          heads,
-          headCount++,
-          px,
-          py + 0.71 * scale,
-          pz,
-          0.15 * scale,
-          0.17 * scale,
-          0.15 * scale,
-        );
+      if (person.home) {
+        occupied.add(person.id);
+        const home = person.home,
+          key = `${home.index}:${person.power}:${game.surface.level(home.x, home.z)}`;
+        let current = homes.get(person.id);
+        if (current?.key !== key) {
+          if (current) models.disposeInstance(current.mesh);
+          const n =
+            Math.sin(home.x * 127.1 + home.z * 311.7 + game.options.seed * 13.3) * 43758.5453;
+          const mesh =
+            person.power === 5
+              ? models.castle(home, person.population, game.surface)
+              : models.house(
+                  home,
+                  person.power,
+                  person.population,
+                  game.surface,
+                  (Math.floor((n - Math.floor(n)) * 4) * Math.PI) / 2,
+                );
+          current = { key, mesh };
+          homes.set(person.id, current);
+          buildings.add(mesh);
+        }
       }
-      if (leader && poleCount < 8) {
-        put(posts, postCount++, px + 0.26, py + 0.65 * scale, pz, 0.035, 1.1 * scale, 0.035);
-        put(poles, poleCount++, px + 0.26, py + 1.22 * scale, pz, 0.16, 0.16, 0.16);
+      let actor = characters.get(person.id);
+      if (!actor && !person.home && characters.size < 512) {
+        actor = models.character(person.population);
+        actor.mesh.position.set(
+          person.x - half,
+          game.surface.sample(person.x, person.z),
+          person.z - half,
+        );
+        characters.set(person.id, actor);
+        teams[person.population === 'red' ? 0 : 1].add(actor.mesh);
       }
+      if (!actor) continue;
+      actor.mesh.visible = !person.home;
+      if (person.home) continue;
+      if (person.knight) models.equipKnight(actor, person.population);
+      targetPosition.set(
+        person.x - half,
+        Math.max(0.08, game.surface.sample(person.x, person.z)),
+        person.z - half,
+      );
+      actor.mesh.position.lerp(targetPosition, alpha);
+      if (person.target)
+        actor.mesh.rotation.y = Math.atan2(
+          person.target.x - person.tile.x,
+          person.target.z - person.tile.z,
+        );
+      for (let i = 0; i < actor.legs.length; i++)
+        actor.legs[i].rotation.x = person.target
+          ? Math.sin(visualTime * 9 + person.id) * (i < 2 ? 0.45 : -0.45)
+          : 0;
+      actor.head.material.color.set(person.sick ? '#a3b86b' : '#e3bb8b');
     }
-    for (const id of positions.keys()) if (!seen.has(id)) positions.delete(id);
+    for (const [id, actor] of characters)
+      if (!seen.has(id)) {
+        models.disposeInstance(actor.mesh);
+        characters.delete(id);
+      }
+    for (const [id, home] of homes)
+      if (!occupied.has(id)) {
+        models.disposeInstance(home.mesh);
+        homes.delete(id);
+      }
     for (let side = 0; side < 2; side++) {
-      shirts[side].count = shirtCount[side];
-      flags[side].count = flagCount[side];
-      roofs[side].count = roofCount[side];
+      const state = game.sides[side].leader,
+        owner = state.leader,
+        pole = poles[side];
+      pole.visible = false;
+      if (owner && owner.characterPower > 0) {
+        if (owner.home) {
+          scene.add(pole);
+          pole.position.set(
+            owner.home.x + 0.5 - half,
+            game.surface.sample(owner.home.x + 0.5, owner.home.z + 0.5) +
+              (owner.power === 5 ? 2.15 : 0.55 + owner.power * 0.05),
+            owner.home.z + 0.5 - half,
+          );
+          pole.visible = true;
+        } else {
+          const actor = characters.get(owner.id);
+          if (actor) {
+            actor.mesh.add(pole);
+            pole.position.set(owner.knight ? 0 : 0.17, 0, owner.knight ? -0.13 : 0.02);
+            pole.visible = true;
+          }
+        }
+      } else if (state.droppedTile) {
+        const tile = state.droppedTile;
+        scene.add(pole);
+        pole.position.set(
+          tile.x + 0.5 - half,
+          Math.max(0.08, game.surface.sample(tile.x + 0.5, tile.z + 0.5)) + 0.02,
+          tile.z + 0.5 - half,
+        );
+        pole.visible = true;
+      }
     }
-    heads.count = headCount;
-    legs.count = legCount;
-    silver.count = helmets.count = armorCount;
-    walls.count = houseCount;
-    towers.count = towerCount;
-    posts.count = postCount;
-    poles.count = poleCount;
-    for (const mesh of instances)
-      if (mesh !== trunks && mesh !== crowns) mesh.instanceMatrix.needsUpdate = true;
   }
   function render(seconds: number, width: number, height: number): void {
     if (disposed) return;
@@ -393,7 +310,7 @@ export function createAttractView(
     if (round !== simulation.round) {
       round = simulation.round;
       terrainTag = '';
-      positions.clear();
+      resetModels();
       treeElapsed = 1;
     }
     const tag = simulation.game.sides
@@ -423,11 +340,13 @@ export function createAttractView(
   function dispose(): void {
     if (disposed) return;
     disposed = true;
+    resetModels();
+    models.dispose();
     simulation.dispose();
-    positions.clear();
-    for (const mesh of instances) mesh.dispose();
-    for (const value of geometries) value.dispose();
-    for (const value of materials) value.dispose();
+    trunks.dispose();
+    crowns.dispose();
+    for (const shape of geometries) shape.dispose();
+    for (const paint of materials) paint.dispose();
     textures.map.dispose();
     textures.normalMap.dispose();
     sun.shadow.dispose();

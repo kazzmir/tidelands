@@ -4,9 +4,9 @@ The game has a rendering-free fixed-step simulator, five parameterized policies,
 
 ## Startup attract mode
 
-The setup menu now shows a separate **AI-vs-AI simulation** in the background. `AttractSimulation` runs the real `SimulationGame` with two policies, 24 characters/500 power per side, a compact 64×64 arena, 0.25-second steps and up to 6× presentation speed. It automatically starts a fresh seed after elimination or 240 simulation seconds, with a short hold between rounds. It neither advances nor initializes the player's world.
+The setup menu now shows a separate **AI-vs-AI simulation** in the background. `AttractSimulation` runs the real `SimulationGame` with two policies, 24 characters/500 power per side, a compact 64×64 arena, 0.25-second steps and up to 6× presentation speed. It starts a fresh seed after **120 seconds of visible, unpaused real time**, independent of the 6× simulation speed. Early elimination holds the result until the two-minute deadline, rather than restarting early. It neither advances nor initializes the player's world.
 
-The Three.js preview uses shared terrain triangles plus instanced trees, team-colored settlers/buildings, leaders and knights, and the game's water textures. It shares the existing renderer, not the player's scene or state. Preview work is bounded to two simulation steps per animation frame; hidden tabs do not advance it or catch up. Pause/Play is available in the menu, and reduced-motion preferences begin paused. Paused scenes are only redrawn when needed (for example, resize).
+The Three.js preview uses `createGameModels()` from `src/game-models.ts`, the **same factory normal play uses** for houses, complete castles, characters, knight armor/equipment and leader objects. Model geometry, materials, colors, scale and articulated limbs are not simplified substitutes. Terrain triangles, instanced trees and the game's water textures complete the scene. It shares the existing renderer, not the player's scene or state. Preview work is bounded to two simulation steps per animation frame; hidden tabs do not advance it or catch up. Pause/Play is available in the menu, and reduced-motion preferences begin paused. Paused scenes are only redrawn when needed (for example, resize).
 
 Starting play disposes preview geometry/materials/textures, releases its simulation and caches, and restores normal canvas layout. Reopening setup during an existing player game still freezes that game rather than launching a demo over it. Preview camera/presentation limits and accelerated timing have no effect on live-game rules or tournament results.
 
@@ -117,6 +117,7 @@ The startup menu lets you choose AI and Small/Medium/Large world size before gen
 
 ## Code map and tests
 
+- `src/game-models.ts`: shared normal-play and preview model factory and resource ownership.
 - `src/attract-simulation.ts`, `src/attract-view.ts`: bounded startup AI match and isolated 3D presentation.
 - `src/simulation/game.ts`: headless game orchestration and optional paid finale.
 - `src/simulation/walk.ts`: continuous tile movement with fractional-distance carry.
