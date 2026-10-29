@@ -238,10 +238,11 @@ function startGame(): void {
   let startingGame = false;
   let attractView: AttractView | null = null;
   let developerView: ReturnType<typeof createDeveloperView> | null = null;
+  let developerMusicPreview = false;
   const gameAudio = createGameAudio({
     isAudible: () => gameStarted && !newGameMenu.open && !developerView && !document.hidden,
     isPreviewAudible: () => gameStarted && !newGameMenu.open && !!developerView && !document.hidden,
-    isMusicAudible: () => !developerView && !document.hidden,
+    isMusicAudible: () => (!developerView || developerMusicPreview) && !document.hidden,
   });
   const castleSoundTracker = new CastleSoundTracker();
   let encounterTest = false;
@@ -2614,6 +2615,12 @@ function startGame(): void {
         gameAudio.musicMuted ? 'Play ambient music' : 'Mute ambient music',
       );
       musicButton.title = gameAudio.musicMuted ? 'Ambient music off' : 'Ambient music on';
+      if (gameAudio.musicMuted && developerMusicPreview) {
+        developerMusicPreview = false;
+        updateDeveloperMusicButton();
+        element('#developer-sound-status').textContent =
+          'Music muted. Unmute with the footer music note.';
+      }
     }
     musicButton.addEventListener('click', () => {
       gameAudio.setMusicMuted(!gameAudio.musicMuted);
@@ -2660,6 +2667,11 @@ function startGame(): void {
     update();
     updateMusic();
   }
+  function updateDeveloperMusicButton(): void {
+    const button = element<HTMLButtonElement>('#developer-music');
+    button.textContent = developerMusicPreview ? 'Stop song' : 'Play ambient song';
+    button.setAttribute('aria-pressed', String(developerMusicPreview));
+  }
   function updateDeveloperControls(): void {
     if (!developerView) return;
     element('#developer-title').textContent = developerModels().find(
@@ -2678,6 +2690,9 @@ function startGame(): void {
   function stopDeveloperMode(): void {
     if (!developerView) return;
     gameAudio.stopAll();
+    developerMusicPreview = false;
+    gameAudio.pauseMusic();
+    updateDeveloperMusicButton();
     developerView.dispose();
     developerView = null;
     document.body.classList.remove('developer-mode');
@@ -2690,6 +2705,22 @@ function startGame(): void {
     lastPointer = null;
   }
   function bindDeveloperMode(): void {
+    element('#developer-music').addEventListener('click', () => {
+      if (!developerView) return;
+      if (gameAudio.musicMuted) {
+        element('#developer-sound-status').textContent =
+          'Music muted. Unmute with the footer music note.';
+        return;
+      }
+      developerMusicPreview = !developerMusicPreview;
+      gameAudio.stopAll();
+      gameAudio.unlock();
+      gameAudio.syncMusic();
+      updateDeveloperMusicButton();
+      element('#developer-sound-status').textContent = developerMusicPreview
+        ? 'Playing ambient song.'
+        : 'Song preview stopped.';
+    });
     const sounds = element('#developer-sounds');
     for (const sound of gameSoundOptions()) {
       const button = document.createElement('button');
@@ -2699,6 +2730,9 @@ function startGame(): void {
       button.setAttribute('aria-label', `Play ${sound.label} sound`);
       button.addEventListener('click', () => {
         if (!developerView) return;
+        developerMusicPreview = false;
+        gameAudio.syncMusic();
+        updateDeveloperMusicButton();
         gameAudio.unlock();
         const played = gameAudio.preview(sound.id);
         element('#developer-sound-status').textContent = played
@@ -2732,6 +2766,8 @@ function startGame(): void {
       pointerDown = null;
       lastPointer = null;
       controls.enabled = false;
+      developerMusicPreview = false;
+      updateDeveloperMusicButton();
       gameAudio.stopAll();
       developerView = createDeveloperView(
         renderer,
