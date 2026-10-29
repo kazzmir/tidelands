@@ -3,7 +3,7 @@ import {readFile} from 'node:fs/promises';
 import test from 'node:test';
 import {transformWithOxc} from 'vite';
 const {code}=await transformWithOxc(await readFile(new URL('../src/ambient-music.ts',import.meta.url),'utf8'),'ambient-music.ts',{target:'es2022'});
-const {ambientScore,createAmbientBuffer,createAmbientMusic}=await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
+const {ambientScore,upbeatScore,musicTracks,chooseMusicTrack,createAmbientBuffer,createAmbientMusic}=await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
 function context(){
  const ctx={state:'running',currentTime:0,destination:{},sources:[],gains:[],allocations:0};
  ctx.createBuffer=(channels,length,rate)=>{ctx.allocations++;const data=Array.from({length:channels},()=>new Float32Array(length));return{length,sampleRate:rate,numberOfChannels:channels,duration:length/rate,getChannelData(channel){return data[channel];}};};
@@ -30,7 +30,17 @@ test('closing frees every playing/fading voice, and suspended contexts allocate 
 });
 test('developer song audition is explicit, toggles play/stop, honors mute, and never changes persistent music settings',async()=>{
  const source=await readFile(new URL('../src/main.ts',import.meta.url),'utf8'),html=await readFile(new URL('../index.html',import.meta.url),'utf8');const binding=source.slice(source.indexOf('function bindDeveloperMode()'),source.indexOf('function updatePreviewControls()'));
- assert.match(html,/id="developer-music"[^>]*aria-pressed="false">Play ambient song/);assert.match(binding,/developerMusicPreview = !developerMusicPreview/);assert.match(binding,/if \(gameAudio.musicMuted\)/);assert.doesNotMatch(binding,/setMusicMuted\(|localStorage.setItem/);assert.match(binding,/developerMusicPreview = false;\s*gameAudio.syncMusic\(\)/);assert.match(source,/developerMusicPreview = false;\s*gameAudio.pauseMusic\(\)/);
+ assert.match(html,/id="developer-music"[^>]*aria-pressed="false">Play ambient song/);assert.match(binding,/developerMusicPreview = !developerMusicPreview \|\| gameAudio.previewTrack !== track.id/);assert.match(binding,/if \(gameAudio.musicMuted\)/);assert.doesNotMatch(binding,/setMusicMuted\(|localStorage.setItem/);assert.match(binding,/developerMusicPreview = false;\s*gameAudio.previewMusic\(null\)/);assert.match(source,/developerMusicPreview = false;\s*gameAudio.pauseMusic\(\)/);
+});
+test('upbeat song is a separate faster composition with rhythmic plucks, bass and percussion',()=>{
+ const tracks=musicTracks();assert.equal(tracks.length,2);assert.ok(tracks[1].bpm>tracks[0].bpm);assert.equal(tracks[1].seconds,16);const score=upbeatScore();assert.notDeepEqual(score,ambientScore());for(const kind of ['pluck','kick','shaker','bass','bell'])assert.ok(score.some(n=>n.kind===kind));assert.ok(score.length/16>ambientScore().length/24*3);assert.equal(chooseMusicTrack(()=>.1),'ambient');assert.equal(chooseMusicTrack(()=>.9),'upbeat');
+});
+test('upbeat stereo loop is audible, finite and seamless, with a cached buffer and per-track pause positions',()=>{
+ const ctx=context(),buffer=createAmbientBuffer(ctx,'upbeat');assert.equal(buffer.duration,16);for(let channel=0;channel<2;channel++){const data=buffer.getChannelData(channel);let peak=0,energy=0;for(const n of data){assert.ok(Number.isFinite(n));peak=Math.max(peak,Math.abs(n));energy+=n*n;}assert.ok(peak>.2&&peak<.301);assert.ok(Math.sqrt(energy/data.length)>.01);assert.ok(Math.abs(data[0]-data.at(-1))<.005);}
+ const music=createAmbientMusic(ctx);music.start();ctx.currentTime=5;music.select('upbeat');music.start();assert.equal(music.track,'upbeat');assert.equal(music.position,0);ctx.currentTime=8;music.select('ambient');music.start();assert.equal(music.position,5);music.select('upbeat');assert.equal(music.position,3);assert.equal(ctx.allocations,3);music.select('upbeat',true);assert.equal(music.position,0);music.start();assert.equal(ctx.allocations,3);music.dispose();
+});
+test('each new world chooses music independently of world RNG and both tracks have developer audition controls',async()=>{
+ const source=await readFile(new URL('../src/main.ts',import.meta.url),'utf8'),html=await readFile(new URL('../index.html',import.meta.url),'utf8');assert.match(source,/gameAudio.selectMusic\(chooseMusicTrack\(\)\)/);assert.doesNotMatch(source,/chooseMusicTrack\(random\)/);assert.match(html,/id="developer-upbeat"[^>]*>Play upbeat song/);assert.match(source,/gameAudio.previewMusic\(developerMusicPreview \? track.id : null\)/);
 });
 test('music has its own persisted footer toggle and is silenced for hidden tabs and developer auditions',async()=>{
  const source=await readFile(new URL('../src/main.ts',import.meta.url),'utf8'),html=await readFile(new URL('../index.html',import.meta.url),'utf8');assert.match(html,/id="toggle-music"[^>]*aria-label="Mute ambient music"/);assert.match(source,/isMusicAudible: \(\) => \(!developerView \|\| developerMusicPreview\) && !document.hidden/);assert.match(source,/localStorage.getItem\('tidelands-music-muted'\)/);assert.match(source,/gameAudio.setMusicMuted\(!gameAudio.musicMuted\)/);assert.match(source,/gameAudio.syncMusic\(\);\s*if \(developerView\)/);

@@ -1,5 +1,5 @@
 import type { Spell } from './spells';
-import { createAmbientMusic } from './ambient-music';
+import { createAmbientMusic, musicTracks, type MusicTrack } from './ambient-music';
 
 export type GameSound = Spell | 'castle';
 export function gameSoundOptions(): readonly { id: GameSound; label: string }[] {
@@ -110,6 +110,8 @@ export function createGameAudio(
     noise: AudioBuffer | null = null,
     muted = false,
     disposed = false;
+  let musicTrack: MusicTrack = 'ambient',
+    musicPreview: MusicTrack | null = null;
   let musicMuted = true,
     music: ReturnType<typeof createAmbientMusic> | null = null;
   const active = new Set<{ stop(): void }>(),
@@ -168,13 +170,34 @@ export function createGameAudio(
       return;
     }
     try {
-      music ??= createAmbientMusic(context);
+      music ??= createAmbientMusic(context, musicPreview ?? musicTrack);
+      music.select(musicPreview ?? musicTrack);
       music.start();
     } catch {
       music?.dispose();
       music = null;
       musicMuted = true;
     }
+  }
+  function selectMusic(track: MusicTrack): void {
+    if (!musicTracks().some((info) => info.id === track)) return;
+    musicTrack = track;
+    musicPreview = null;
+    music?.select(track, true);
+    syncMusic();
+  }
+  function previewMusic(track: MusicTrack | null): boolean {
+    if (
+      track !== null &&
+      (options.isPreviewAudible?.() !== true ||
+        musicMuted ||
+        !musicTracks().some((info) => info.id === track))
+    )
+      return false;
+    musicPreview = track;
+    music?.select(track ?? musicTrack);
+    syncMusic();
+    return true;
   }
   function setMusicMuted(value: boolean): void {
     musicMuted = value;
@@ -297,6 +320,14 @@ export function createGameAudio(
   return {
     unlock,
     syncMusic,
+    selectMusic,
+    previewMusic,
+    get musicTrack() {
+      return musicTrack;
+    },
+    get previewTrack() {
+      return musicPreview;
+    },
     setMusicMuted,
     pauseMusic: () => music?.stop(),
     get musicMuted() {
