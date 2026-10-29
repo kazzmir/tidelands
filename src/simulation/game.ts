@@ -3,6 +3,7 @@ import { STARTING_POWER, CHARACTER_SPEED } from '../game-settings';
 import { walkDistance } from './walk';
 import { birthLocation } from '../birth-location';
 import { EnemyTerraformer } from '../enemy-ai';
+import type { BridgeRequest } from '../shore-bridge';
 import { EnemySpellcaster } from '../enemy-spells';
 import { EnemyKnightStrategy } from '../enemy-knights';
 import { TerrainSurface, type GridPoint } from '../terrain-surface';
@@ -122,6 +123,7 @@ export class SimulationGame {
   private readonly combat = new CombatSystem<Person>();
   private readonly finale = new Armageddon<Person>();
   private readonly routes = new SharedPursuit<Tile>();
+  private readonly bridgeIntents = new Map<Person, { enemy: Person; from: Tile }>();
   private readonly swamps = new Set<Tile>();
   private readonly rocks = new Set<Tile>();
 
@@ -359,11 +361,42 @@ export class SimulationGame {
             starts.push(t);
         }
     }
-    return rallySteps(
+    const steps = rallySteps(
       c.tile,
       this.neighbors(c.tile),
       this.routes.field(c.tile, goal, starts, this.neighbors, this.revision),
     );
+    if (other && other.population !== c.population && !steps.length)
+      this.bridgeIntents.set(c, { enemy: other, from: c.tile });
+    else this.bridgeIntents.delete(c);
+    return steps;
+  }
+  private bridgeRequests(side: Side): BridgeRequest[] {
+    const requests: BridgeRequest[] = [];
+    for (const [actor, intent] of this.bridgeIntents) {
+      if (
+        !this.people.includes(actor) ||
+        !this.people.includes(intent.enemy) ||
+        !this.alive(actor) ||
+        actor.survival.phase !== 'alive' ||
+        actor.home ||
+        actor.target ||
+        this.combat.opponent(actor) ||
+        this.tileOf(actor) !== intent.from ||
+        !this.alive(intent.enemy) ||
+        intent.enemy.survival.phase !== 'alive'
+      ) {
+        this.bridgeIntents.delete(actor);
+        continue;
+      }
+      if (
+        actor.population === side.color &&
+        !side.knights.holds(actor) &&
+        !side.knights.follows(actor)
+      )
+        requests.push({ from: intent.from, toward: this.tileOf(intent.enemy) });
+    }
+    return requests;
   }
   private ai(side: Side, seconds: number): void {
     const own = this.people.filter((c) => c.population === side.color && this.alive(c));
@@ -394,6 +427,7 @@ export class SimulationGame {
         own,
         this.lookup,
         canEdit,
+        () => this.bridgeRequests(side),
       )?.status === 'changed'
     )
       this.reconcile();

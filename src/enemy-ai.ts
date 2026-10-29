@@ -1,5 +1,6 @@
 import type { GridPoint, PowerBudget, TerrainSurface, TerraformResult } from './terrain-surface';
 import type { Resident, SettlementTile } from './settlement';
+import { shoreBridgeCorner, type BridgeRequest } from './shore-bridge';
 
 export interface TerracePlan {
   center: GridPoint;
@@ -13,6 +14,7 @@ export class EnemyTerraformer {
   readonly sites: TerracePlan[] = [];
   edits = 0;
   spent = 0;
+  bridgeEdits = 0;
   constructor(
     readonly anchor: GridPoint,
     readonly interval = 4,
@@ -27,6 +29,7 @@ export class EnemyTerraformer {
     this.sites.length = 0;
     this.edits = 0;
     this.spent = 0;
+    this.bridgeEdits = 0;
   }
 
   private corners(center: GridPoint): GridPoint[] {
@@ -198,6 +201,7 @@ export class EnemyTerraformer {
           (location.x + 0.5 - point.x) ** 2 + (location.z + 0.5 - point.z) ** 2 <= 100 + 1e-9
         );
       }),
+    bridgeRequests: () => readonly BridgeRequest[] = () => [],
   ): TerraformResult | null {
     if (!Number.isFinite(seconds) || seconds <= 0) return null;
     const living = residents.filter((resident) => resident.characterPower > 0);
@@ -208,6 +212,16 @@ export class EnemyTerraformer {
     this.elapsed += seconds;
     if (this.elapsed + 1e-9 < this.interval) return null;
     this.elapsed = 0; // Never bank a burst of edits after a stall or a long update.
+    const bridge = shoreBridgeCorner(surface, bridgeRequests(), living, lookup, canEdit);
+    if (bridge) {
+      const result = surface.terraform(bridge.x, bridge.z, 1, false, budget);
+      if (result.status === 'changed') {
+        this.edits++;
+        this.bridgeEdits++;
+        this.spent += result.cost;
+      }
+      return result;
+    }
     for (let i = this.sites.length - 1; i >= 0; i--) {
       const site = this.sites[i];
       const height = surface.level(site.center.x, site.center.z);

@@ -25,6 +25,10 @@ test('live and headless movement share the ten-percent faster character speed, n
 function options(overrides={}){return{seed:42,red:profileById('balanced'),blue:profileById('patient'),scenario:'plains',size:40,seconds:90,step:1,...overrides};}
 function settings(overrides={}){return{games:100,seed:100,size:40,seconds:1,step:1,scenarios:['plains','tidal','islands','highlands'],profiles:aiProfiles(),...overrides};}
 
+test('a real AI knight stranded at water builds a paid reachable crossing and continues its hostile pursuit',()=>{
+ const game=new SimulationGame(options({size:40,seconds:120,step:.25,red:profileById('patient'),blue:profileById('patient')})),size=40;game.surface.levels.fill(0);for(let z=0;z<=size;z++)for(let x=0;x<=size;x++)if(x<=4||x>=13)game.surface.levels[z*(size+1)+x]=1;for(const tile of game.tiles){tile.tree=false;tile.house=false;tile.reserved=false;tile.castleGap=false;tile.swamp=false;}
+ const knight=game.people.find(c=>c.population==='red'),enemy=game.people.find(c=>c.population==='blue');game.people=[knight,enemy];for(const [c,x]of [[knight,4],[enemy,16]]){c.home=null;c.power=0;c.tile=game.tiles[12*size+x];c.x=x+.5;c.z=12.5;c.target=null;c.wait=0;c.progress=0;c.characterPower=100;}knight.knight=true;const before=game.sides[0].money.value;for(let i=0;i<480&&knight.x<11;i++)game.step(.25);assert.ok(game.sides[0].terrain.bridgeEdits>0);assert.ok(knight.x>10.5);assert.ok(knight.characterPower>0);assert.equal(before-game.sides[0].money.value,game.sides[0].terrain.spent);assert.equal(game.surface.level(9,0),0);
+});
 test('generated simulations accept the current 150-tile Small map with both full populations',()=>{
  const game=new SimulationGame(options({size:150,scenario:'generated',seconds:1}));assert.equal(game.surface.size,150);assert.equal(game.metrics('red').population,24);assert.equal(game.metrics('blue').population,24);
 });

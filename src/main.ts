@@ -1,6 +1,7 @@
 import './style.css';
 import { generateWorldHeights, playerStartAnchor, enemyStartAnchor } from './world-generation';
 import { EnemyTerraformer } from './enemy-ai';
+import type { BridgeRequest } from './shore-bridge';
 import { EnemySpellcaster } from './enemy-spells';
 import { EnemyKnightStrategy } from './enemy-knights';
 import { difficultyProfile, type Difficulty } from './ai-profiles';
@@ -972,6 +973,7 @@ function startGame(): void {
             (enemyBuildDistance.get(characterTile(b)) ?? Infinity),
         )[0] ?? null;
   }
+  const enemyBridgeIntents = new Map<Settler, { enemy: Settler; from: Tile }>();
   const pursuitRoutes = new Map<
     Settler,
     { goal: Tile; revision: number; distance: Map<Tile, number> }
@@ -1009,7 +1011,39 @@ function startGame(): void {
       };
       pursuitRoutes.set(character, route);
     }
-    return rallySteps(character.tile, neighbors(character.tile), route.distance);
+    const steps = rallySteps(character.tile, neighbors(character.tile), route.distance);
+    if (
+      character.population === enemyColor &&
+      enemy.population !== character.population &&
+      !steps.length
+    )
+      enemyBridgeIntents.set(character, { enemy, from: character.tile });
+    else enemyBridgeIntents.delete(character);
+    return steps;
+  }
+  function enemyBridgeRequests(): BridgeRequest[] {
+    const requests: BridgeRequest[] = [];
+    for (const [actor, intent] of enemyBridgeIntents) {
+      if (
+        !settlers.includes(actor) ||
+        !settlers.includes(intent.enemy) ||
+        actor.characterPower <= 0 ||
+        actor.survival.phase !== 'alive' ||
+        actor.home ||
+        actor.target ||
+        combat.opponent(actor) ||
+        enemyKnights.holds(actor) ||
+        enemyKnights.follows(actor) ||
+        characterTile(actor) !== intent.from ||
+        intent.enemy.characterPower <= 0 ||
+        intent.enemy.survival.phase !== 'alive'
+      ) {
+        enemyBridgeIntents.delete(actor);
+        continue;
+      }
+      requests.push({ from: intent.from, toward: characterTile(intent.enemy) });
+    }
+    return requests;
   }
   let navigationRevision = 0;
   let rallyRevision = -1;
@@ -1578,7 +1612,7 @@ function startGame(): void {
         settler.population === enemyColor &&
         (settler.survival.phase === 'alive' || settler.survival.phase === 'drowning'),
     );
-    badge.title = `${enemyColor} enemy: ${living.length} settlers · ${living.filter((settler) => settler.home).length} housed · ${living.filter((settler) => settler.power === 5).length} castles · ${enemyPowerMeter.value.toLocaleString()} power · ${enemyAI.edits} paid terrain edits (one / ${enemyAI.interval}s) · ${enemyAI.spent} spent · ${enemySpellcaster.casts} spell${enemySpellcaster.casts === 1 ? '' : 's'} cast (${enemySpellcaster.spent.toLocaleString()} power) · ${living.filter((actor) => actor.knight).length} knights (${enemyKnights.created} trained; ${enemyKnights.phase}) · ${difficulty} / ${profile.label} · E to view${encounterTest ? ' · Encounter test: combat enabled; terraforming AI disabled' : ''}`;
+    badge.title = `${enemyColor} enemy: ${living.length} settlers · ${living.filter((settler) => settler.home).length} housed · ${living.filter((settler) => settler.power === 5).length} castles · ${enemyPowerMeter.value.toLocaleString()} power · ${enemyAI.edits} paid terrain edits (${enemyAI.bridgeEdits} bridge; one / ${enemyAI.interval}s) · ${enemyAI.spent} spent · ${enemySpellcaster.casts} spell${enemySpellcaster.casts === 1 ? '' : 's'} cast (${enemySpellcaster.spent.toLocaleString()} power) · ${living.filter((actor) => actor.knight).length} knights (${enemyKnights.created} trained; ${enemyKnights.phase}) · ${difficulty} / ${profile.label} · E to view${encounterTest ? ' · Encounter test: combat enabled; terraforming AI disabled' : ''}`;
   }
   function updateSettlementStats(): void {
     const living = settlers.filter(
@@ -1784,6 +1818,7 @@ function startGame(): void {
   function generateWorld(): void {
     gameAudio.stopAll();
     castleSoundTracker.reset();
+    enemyBridgeIntents.clear();
     powerMeter.reset();
     enemyPowerMeter.reset();
     enemyAI.reset();
@@ -3170,6 +3205,7 @@ function startGame(): void {
           enemyResidents,
           tileAt,
           (point) => withinTerrainReach(point, false, enemyResidents, enemyColor, combatPosition),
+          enemyBridgeRequests,
         )?.status === 'changed'
       )
         refreshTerrainAfterEdit();

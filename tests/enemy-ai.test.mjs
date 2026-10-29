@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import test from 'node:test';
 import {transformWithOxc} from 'vite';
-async function load(path){const source=await readFile(new URL(path,import.meta.url),'utf8');const {code}=await transformWithOxc(source,'test.ts',{target:'es2022'});return import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);}
+async function moduleUrl(path){const file=new URL(path,import.meta.url),source=await readFile(file,'utf8');let {code}=await transformWithOxc(source,'test.ts',{target:'es2022'});for(const name of new Set([...code.matchAll(/\bfrom\s*['"]([.][^'"]+)['"]/g)].map(m=>m[1]))){const child=await moduleUrl(new URL(name+'.ts',file).href);code=code.replaceAll(`'${name}'`,JSON.stringify(child)).replaceAll(`"${name}"`,JSON.stringify(child));}return `data:text/javascript;base64,${Buffer.from(code).toString('base64')}`;}
+async function load(path){return import(await moduleUrl(path));}
 const {TerrainSurface}=await load('../src/terrain-surface.ts');
 const {PowerMeter}=await load('../src/power.ts');
 const {EnemyTerraformer}=await load('../src/enemy-ai.ts');
@@ -15,6 +16,25 @@ function world(height=7){
  return{surface,tiles,lookup,resident,ai:new EnemyTerraformer({x:32,z:32}),budget:new PowerMeter(5,10000)};
 }
 
+function coast(balance=100){
+ const size=24,surface=new TerrainSurface(size,new Uint8Array((size+1)**2),.65);for(let z=0;z<=size;z++)for(let x=0;x<=size;x++)if(x<=4||x>=13)surface.levels[z*(size+1)+x]=1;const tiles=Array.from({length:size**2},(_,i)=>({x:i%size,z:Math.floor(i/size),house:false,tree:false})),lookup=(x,z)=>x>=0&&z>=0&&x<size&&z<size?tiles[z*size+x]:undefined,resident={tile:lookup(4,12),home:null,power:0,homeLevel:null,characterPower:15},ai=new EnemyTerraformer({x:2,z:12}),budget=new PowerMeter(5,balance);return{surface,lookup,resident,ai,budget};
+}
+test('stalled shore pursuits receive one paid one-level edit per shared terrain interval, without catch-up bursts',()=>{
+ const w=coast(),request=()=>[{from:w.resident.tile,toward:{x:15,z:12}}],before=w.surface.levels.slice();assert.equal(w.ai.advance(3.99,w.surface,w.budget,[w.resident],w.lookup,()=>true,request),null);assert.deepEqual(w.surface.levels,before);assert.equal(w.ai.advance(.01,w.surface,w.budget,[w.resident],w.lookup,()=>true,request).status,'changed');assert.equal(w.ai.edits,1);assert.equal(w.ai.bridgeEdits,1);assert.equal(w.ai.spent,1);assert.equal(w.budget.value,99);assert.equal(w.surface.levels.reduce((sum,v,i)=>sum+Math.abs(v-before[i]),0),1);w.ai.advance(1000,w.surface,w.budget,[w.resident],w.lookup,()=>true,request);assert.equal(w.ai.edits,2);assert.equal(w.ai.advance(.1,w.surface,w.budget,[w.resident],w.lookup,()=>true,request),null);w.ai.reset();assert.equal(w.ai.bridgeEdits,0);
+});
+test('bridge construction stays affordable/reachable and never edits homes, land obstacles or absent pursuit goals',()=>{
+ const poor=coast(0),request=()=>[{from:poor.resident.tile,toward:{x:15,z:12}}],before=poor.surface.levels.slice();assert.equal(poor.ai.advance(4,poor.surface,poor.budget,[poor.resident],poor.lookup,()=>true,request).status,'insufficient');assert.deepEqual(poor.surface.levels,before);assert.equal(poor.ai.bridgeEdits,0);
+ for(const denied of ['reach','house','tree','no-goal']){const w=coast(),before=w.surface.levels.slice();if(denied==='house')w.lookup(5,12).house=true;if(denied==='tree')w.lookup(5,12).tree=true;w.ai.advance(4,w.surface,w.budget,[w.resident],w.lookup,()=>denied!=='reach',()=>denied==='no-goal'?[]:[{from:w.resident.tile,toward:{x:15,z:12}}]);assert.deepEqual(w.surface.levels,before);assert.equal(w.budget.value,100);}
+ const home=coast();home.resident.home=home.lookup(5,12);home.ai.advance(4,home.surface,home.budget,[home.resident],home.lookup,()=>true,()=>[{from:home.lookup(4,12),toward:{x:15,z:12}}]);assert.equal(home.ai.bridgeEdits,0);
+});
+test('paid incremental shore edits open a traversable causeway without teleporting or changing distant ocean',()=>{
+ const w=coast(),start=w.budget.value;let changes=0;
+ for(let tick=0;tick<70&&w.resident.tile.x<14;tick++){
+  const from=w.resident.tile,next=w.lookup(from.x+1,from.z);if(w.surface.sample(next.x+.5,next.z+.5)>.08&&w.surface.sample(from.x+1,from.z+.5)>.08){w.resident.tile=next;continue;}
+  const result=w.ai.advance(4,w.surface,w.budget,[w.resident],w.lookup,undefined,()=>[{from:w.resident.tile,toward:{x:15,z:12}}]);if(result?.status==='changed')changes++;
+ }
+ assert.ok(w.resident.tile.x>=14);assert.ok(changes>0);assert.equal(w.ai.bridgeEdits,changes);assert.equal(start-w.budget.value,w.ai.spent);assert.equal(w.surface.level(9,0),0);for(let z=0;z<24;z++)for(let x=0;x<24;x++)for(const [dx,dz]of [[1,0],[0,1],[1,1]])assert.ok(Math.abs(w.surface.level(x,z)-w.surface.level(x+dx,z+dz))<=1);
+});
 test('enemy terrain edits respect the same supplied character-reach gate without spending on denied plans',()=>{
  const far=world(),farBefore=far.surface.levels.slice();far.resident.tile=far.lookup(0,0);
  assert.equal(far.ai.advance(4,far.surface,far.budget,[far.resident],far.lookup),null);assert.deepEqual(far.surface.levels,farBefore);assert.equal(far.budget.value,10000);
