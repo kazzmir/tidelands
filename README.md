@@ -31,6 +31,19 @@ The background preview uses the real simulation/AI controllers and the **same ho
 
 **New world** reopens the menu with the current settings. While it is open, the existing game is frozen; Cancel/Escape returns to it without losing progress or changing its pause state. Confirming starts a fresh, unpaused world at 1× speed. Terrain storage, streaming, navigation, starts, and minimap use the selected dimensions.
 
+## Guided tutorial
+
+Press **Tutorial** in the new-game menu to start an isolated practice island. The lesson highlights the required control and a **gold ring on the map**, and advances only when you actually accomplish each goal. The target icon in the lesson panel recenters the camera if you pan away:
+
+
+1. Press **Raise land** and tap the low corner: your real builder settles into a house on the newly flat tile.
+2. Press **Lower land** and tap the high corner (or long-press on mobile): the flat 3×3 neighborhood upgrades that house into a fortress.
+3. Select **Move leader pole**, place it at the ring, and wait for a follower to physically walk over and recover it.
+4. Select **Knight** to convert the outdoor leader with the normal paid, permanent 1.5× transformation.
+5. Select **Earthquake**, then target the enemy fortress at the ring. A successful paid cast completes the lesson.
+
+Practice uses **two red followers, one blue resident and 5,000 player power**, explicitly shown in the instructions. Enemy AI, births and ordinary roaming are held so the lesson cannot run away while you read; house support, fortress reservations, terrain reach/costs, pole recovery, knight conversion and spells use normal production rules. Unrelated terrain edits/spells/orders cannot derail the lesson. Camera and pause controls remain available, and there is no timer or click-through completion. **New world** can restart the tutorial or leave it; Cancel preserves progress. Finishing offers a normal new world, which restores the usual 24 settlers and 500 power per side and removes the tutorial UI and restrictions.
+
 ## AI difficulty and simulation tournaments
 
 Choose **Easy / Normal / Hard** in the startup menu. The header difficulty control also opens that menu to confirm a new game; it does not discard the current world until Start is pressed. These are different decision policies, **not** HP, currency, damage, or income cheats.

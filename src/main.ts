@@ -43,6 +43,7 @@ import { createDeveloperView, developerModels } from './developer-view';
 import { clampCameraCenter } from './camera-bounds';
 import { bindMinimapNavigation } from './minimap-navigation';
 import { TerrainPressTracker } from './terrain-press';
+import { Tutorial, tutorialCopy, type TutorialStep } from './tutorial';
 import { createGameAudio, CastleSoundTracker, gameSoundOptions } from './game-audio';
 import { chooseMusicTrack, allMusicTracks, type MusicTrack } from './ambient-music';
 import { createWaterTextures, animateWaterTextures } from './water-texture';
@@ -268,6 +269,10 @@ function startGame(): void {
   });
   const castleSoundTracker = new CastleSoundTracker();
   let encounterTest = false;
+  let tutorial: Tutorial | null = null;
+  let tutorialBuilder: Settler | null = null;
+  let tutorialMarker: THREE.Group | null = null;
+  let shownTutorialStep: TutorialStep | null = null;
   const playerStart = playerStartAnchor(SIZE);
   const enemyStart = enemyStartAnchor(SIZE);
   function resetEnemyCamera(): void {
@@ -503,7 +508,8 @@ function startGame(): void {
         x,
         z,
         height,
-        tree: !encounterTest && initialSurface.elevation(x, z) > 2 && hash(x, z) > 0.97,
+        tree:
+          !tutorial && !encounterTest && initialSurface.elevation(x, z) > 2 && hash(x, z) > 0.97,
         house: false,
         swamp: false,
         rock: false,
@@ -1165,6 +1171,7 @@ function startGame(): void {
         : 'Place an anchor for your leader to walk toward';
   }
   function toggleLeaderAnchor(): void {
+    if (tutorial) return;
     if (watchView || gameWinner !== null || armageddon.active) return;
     if (leaderAnchor.active) {
       leaderAnchor.reset();
@@ -1235,6 +1242,7 @@ function startGame(): void {
     button.title = 'attack enemies';
   }
   function toggleAttackOrder(): void {
+    if (tutorial) return;
     if (watchView || gameWinner !== null || armageddon.active) return;
     cancelSpell();
     attackOrder.toggle();
@@ -1380,6 +1388,7 @@ function startGame(): void {
     return rallySteps(settler.tile, neighbors(settler.tile), rallyDistance);
   }
   function toggleRally(): void {
+    if (tutorial) return;
     if (watchView || gameWinner !== null || encounterTest || armageddon.active) return;
     if (!leadership.leader && !leadership.droppedTile) {
       toast('There is no leader object to gather around.');
@@ -1600,6 +1609,31 @@ function startGame(): void {
   }
   function spawnSettlers(): void {
     clearSettlers();
+    if (tutorial) {
+      const leader = createSettler(
+        tileAt(tutorial.playerStart.x, tutorial.playerStart.z)!,
+        10,
+        populationColor,
+      );
+      leadership.appoint(leader);
+      tutorialBuilder = createSettler(
+        tileAt(tutorial.center.x, tutorial.center.z)!,
+        10,
+        populationColor,
+      );
+      const enemy = createSettler(
+        tileAt(tutorial.enemyStart.x, tutorial.enemyStart.z)!,
+        10,
+        enemyColor,
+      );
+      enemyLeadership.appoint(enemy);
+      trySettle(enemy, surface);
+      reconcileWorldSettlements();
+      rebuildBuildings();
+      syncResidentMeshes();
+      updateSettlementStats();
+      return;
+    }
     const claimed = new Set<Tile>();
     const radius = encounterTest ? 4 : 14;
     for (const [anchor, color, state] of [
@@ -1867,6 +1901,7 @@ function startGame(): void {
     enemyBridgeIntents.clear();
     powerMeter.reset();
     enemyPowerMeter.reset();
+    if (tutorial) powerMeter.value = 5000;
     enemyAI.reset();
     enemySpellcaster.reset();
     enemyKnights.reset();
@@ -1880,7 +1915,7 @@ function startGame(): void {
     sheepSpawner.reset();
     tiles.length = 0;
     tileCache.clear();
-    const scenario = encounterTest ? createEncounterScenario(SIZE) : null;
+    const scenario = tutorial ?? (encounterTest ? createEncounterScenario(SIZE) : null);
     Object.assign(playerStart, scenario?.playerStart ?? playerStartAnchor(SIZE));
     Object.assign(enemyStart, scenario?.enemyStart ?? enemyStartAnchor(SIZE));
     cornerLevels.set(scenario?.levels ?? generateWorldHeights(SIZE, seed));
@@ -2181,11 +2216,17 @@ function startGame(): void {
               : tool
           : event.button === 2
             ? 'lower'
-            : 'raise';
+            : tutorial
+              ? tool
+              : 'raise';
       if (action === 'inspect') return;
       if (event.pointerType !== 'touch' || !down.longPress) selectTool(action);
       const delta = action === 'raise' ? 1 : -1;
       const selection = shiftHeld ? hovered : hoveredCorner;
+      if (tutorial && !tutorial.canEdit(selection, delta, shiftHeld)) {
+        toast('Follow the tutorial: use the highlighted control and gold ring.');
+        return;
+      }
       if (!withinTerrainReach(selection, shiftHeld, settlers, populationColor, combatPosition)) {
         toast('Out of reach. Select land within 10 tiles of one of your living characters.');
         return;
@@ -2207,6 +2248,7 @@ function startGame(): void {
         );
         return;
       }
+      if (result.status === 'changed') tutorial?.edited();
       refreshTerrainAfterEdit();
       updateHover(event);
     });
@@ -2262,6 +2304,10 @@ function startGame(): void {
     if (lastPointer) updateHover(lastPointer);
   }
   function selectSpell(spell: Spell): void {
+    if (tutorial && spell !== tutorial.allowedSpell) {
+      toast('Use the highlighted tutorial control first.');
+      return;
+    }
     if (watchView || gameWinner !== null || armageddon.active) return;
     leaderAnchor.cancelPlacement();
     updateAnchorButton();
@@ -2349,6 +2395,7 @@ function startGame(): void {
     finishGame(winner, 'armageddon');
   }
   function resolveGameEnd(): boolean {
+    if (tutorial) return false;
     if (gameWinner !== null) return true;
     if (armageddon.active) {
       finishArmageddon();
@@ -2407,6 +2454,10 @@ function startGame(): void {
   function castSpell(spell: Spell, target?: Tile, caster: PopulationColor = populationColor): void {
     if (watchView || gameWinner !== null || armageddon.active) return;
     const playerCast = caster === populationColor;
+    if (tutorial && (!playerCast || !tutorial.canCast(spell, target))) {
+      toast('Use the highlighted tutorial spell on the gold ring.');
+      return;
+    }
     if (!playerCast && spell !== 'earthquake' && spell !== 'swamp' && spell !== 'volcano') return;
     const budget = playerCast ? powerMeter : enemyPowerMeter;
     if (spell === 'armageddon') {
@@ -2418,6 +2469,7 @@ function startGame(): void {
       const result = leadership.relocate(target, () => powerMeter.spend(SPELL_COSTS.pole));
       if (result === 'moved') {
         gameAudio.play('pole');
+        tutorial?.cast('pole');
         // Restore shared pole materials before detaching it from a glowing combatant.
         combatEffects.clear();
         rallyDestination = null;
@@ -2506,6 +2558,7 @@ function startGame(): void {
     }
     if (!budget.spend(cost)) return;
     gameAudio.play(spell);
+    tutorial?.cast(spell);
     if (playerCast) {
       selectedSpell = null;
       selectTool(tool);
@@ -2645,11 +2698,13 @@ function startGame(): void {
   }
   function selectTool(next: Tool): void {
     tool = next;
-    const editHint = window.matchMedia('(pointer: coarse)').matches
-      ? `${next === 'lower' ? 'Tap to lower' : 'Tap to raise'} · Hold to lower · Drag to pan`
-      : shiftHeld
-        ? 'All four corners · Left raises · Right lowers'
-        : 'Left raises · Right lowers · Shift selects surface';
+    const editHint = tutorial
+      ? 'Tap the gold ring to use this tool'
+      : window.matchMedia('(pointer: coarse)').matches
+        ? `${next === 'lower' ? 'Tap to lower' : 'Tap to raise'} · Hold to lower · Drag to pan`
+        : shiftHeld
+          ? 'All four corners · Left raises · Right lowers'
+          : 'Left raises · Right lowers · Shift selects surface';
     const hints: Record<Tool, [string, string]> = {
       raise: [shiftHeld ? 'Raise a surface' : 'Raise a corner', editHint],
       lower: [shiftHeld ? 'Lower a surface' : 'Lower a corner', editHint],
@@ -2967,6 +3022,7 @@ function startGame(): void {
     canvas.setAttribute('aria-label', normalCanvasLabel);
   }
   function startWatchMode(settings: NewGameSettings): void {
+    stopTutorial();
     document
       .querySelectorAll<HTMLButtonElement>('[data-speed]')
       .forEach((button) => button.classList.toggle('selected', button.dataset.speed === '1'));
@@ -3054,6 +3110,111 @@ function startGame(): void {
       watchResultAnnounced = true;
       gameAudio.finishMusic(simulation.outcome === 'draw' ? 'draw' : 'victory');
     }
+  }
+  function stopTutorial(): void {
+    if (tutorial) tool = 'raise';
+    tutorial = null;
+    tutorialBuilder = null;
+    shownTutorialStep = null;
+    if (tutorialMarker) {
+      scene.remove(tutorialMarker);
+      tutorialMarker.traverse((node) => {
+        if (node instanceof THREE.Mesh) {
+          node.geometry.dispose();
+          (node.material as THREE.Material).dispose();
+        }
+      });
+      tutorialMarker = null;
+    }
+    document.body.classList.remove('tutorial-mode');
+    element('#tutorial-panel').hidden = true;
+    document
+      .querySelectorAll('.tutorial-focus')
+      .forEach((node) => node.classList.remove('tutorial-focus'));
+  }
+  function startTutorial(): void {
+    applyNewGame({ difficulty: 'easy', worldSize: 'small' });
+    tutorial = new Tutorial();
+    clearTimeout(toastTimer);
+    element('#toast').classList.remove('visible');
+    generateWorld();
+    selectTool('raise');
+    document.body.classList.add('tutorial-mode');
+    element('#tutorial-panel').hidden = false;
+    tutorialMarker = new THREE.Group();
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.3, 0.43, 32),
+      new THREE.MeshBasicMaterial({
+        color: '#e9a616',
+        side: THREE.DoubleSide,
+        depthTest: false,
+        toneMapped: false,
+      }),
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.renderOrder = 10;
+    const arrow = new THREE.Mesh(
+      new THREE.ConeGeometry(0.16, 0.4, 8),
+      new THREE.MeshBasicMaterial({ color: '#e9a616', depthTest: false, toneMapped: false }),
+    );
+    arrow.rotation.z = Math.PI;
+    arrow.position.y = 1.2;
+    arrow.renderOrder = 10;
+    tutorialMarker.add(ring, arrow);
+    scene.add(tutorialMarker);
+    camera.position.copy(controls.target).add(new THREE.Vector3(24, 44, 24));
+    camera.zoom = 2;
+    camera.updateProjectionMatrix();
+    updateTutorial();
+  }
+  function locateTutorialTarget(): void {
+    if (!tutorial) return;
+    camera.position.copy(controls.target).add(new THREE.Vector3(24, 44, 24));
+    camera.zoom = 2;
+    camera.updateProjectionMatrix();
+    shownTutorialStep = null;
+    updateTutorial();
+  }
+  function updateTutorial(): void {
+    if (!tutorial) return;
+    tutorial.update({
+      housed: !!tutorialBuilder?.home,
+      fortress: tutorialBuilder?.power === 5,
+      poleRecovered:
+        leadership.droppedTile === null && !!leadership.leader && !leadership.leader.home,
+      knight: !!leadership.leader?.knight,
+    });
+    const copy = tutorialCopy(tutorial.step),
+      target = tutorial.target;
+    if (shownTutorialStep !== tutorial.step) {
+      shownTutorialStep = tutorial.step;
+      element('#tutorial-title').textContent = copy.title;
+      element('#tutorial-detail').textContent = copy.detail;
+      document
+        .querySelectorAll('.tutorial-focus')
+        .forEach((node) => node.classList.remove('tutorial-focus'));
+      element(copy.button).classList.add('tutorial-focus');
+      element('#tutorial-finish').hidden = tutorial.step !== 'complete';
+      element('#tutorial-terrain').hidden =
+        tutorial.step !== 'house' && tutorial.step !== 'fortress';
+      const center = new THREE.Vector3(target.x - SIZE / 2 + 0.25, 1.3, target.z - SIZE / 2 + 0.25);
+      camera.position.add(center.clone().sub(controls.target));
+      controls.target.copy(center);
+      controls.update();
+      lastMinimapPaint = 0;
+    }
+    if (tutorialMarker) {
+      tutorialMarker.visible = tutorial.step !== 'complete' && tutorial.step !== 'knight';
+      tutorialMarker.position.set(
+        target.x - SIZE / 2 + (tutorial.step === 'pole' || tutorial.step === 'spell' ? 0.5 : 0),
+        surface.sample(target.x, target.z) + 0.08,
+        target.z - SIZE / 2 + (tutorial.step === 'pole' || tutorial.step === 'spell' ? 0.5 : 0),
+      );
+    }
+    element('#tutorial-status').textContent = paused
+      ? 'Paused — press Pause to resume the lesson.'
+      : `Practice power: ${powerMeter.value.toLocaleString()} · No enemy AI or births during the lesson`;
+    element('#pause').classList.toggle('tutorial-focus', paused);
   }
   function menuChoice(group: string): string {
     return element(group).querySelector<HTMLInputElement>('input:checked')?.value ?? '';
@@ -3143,6 +3304,10 @@ function startGame(): void {
   }
   function bindNewGameMenu(): void {
     element('#menu-game-mode').addEventListener('change', updateStartButton);
+    element('#tutorial-raise').addEventListener('click', () => selectTool('raise'));
+    element('#tutorial-lower').addEventListener('click', () => selectTool('lower'));
+    element('#tutorial-finish').addEventListener('click', () => openNewGameMenu());
+    element('#tutorial-locate').addEventListener('click', locateTutorialTarget);
     document.addEventListener('visibilitychange', () => {
       if (attractView) clock.getDelta();
       if (document.hidden) {
@@ -3164,27 +3329,30 @@ function startGame(): void {
     element<HTMLFormElement>('#new-game-form').addEventListener('submit', async (event) => {
       event.preventDefault();
       if (startingGame) return;
-      const settings = newGameSettings(
-        menuChoice('#menu-ai-difficulty'),
-        menuChoice('#menu-world-size'),
-      );
+      const tutorialRequested = (event as SubmitEvent).submitter?.id === 'start-tutorial';
+      const settings = tutorialRequested
+        ? newGameSettings('easy', 'small')
+        : newGameSettings(menuChoice('#menu-ai-difficulty'), menuChoice('#menu-world-size'));
       if (!settings) return;
       const button = element<HTMLButtonElement>('#start-new-game');
       startingGame = true;
       if (attractView) attractView.simulation.paused = true;
       button.disabled = true;
+      element<HTMLButtonElement>('#start-tutorial').disabled = true;
       button.textContent = 'Creating world…';
       try {
         await new Promise<void>((resolve) =>
           requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
         );
-        if (menuChoice('#menu-game-mode') === 'watch') startWatchMode(settings);
+        if (tutorialRequested) startTutorial();
+        else if (menuChoice('#menu-game-mode') === 'watch') startWatchMode(settings);
         else applyNewGame(settings);
         newGameMenu.close();
         controls.enabled = !watchView;
         if (watchControls) watchControls.enabled = true;
       } catch (error) {
         console.error('Unable to start world', error);
+        stopTutorial();
         gameStarted = false;
         startAttractMode();
         element('#cancel-new-game').hidden = true;
@@ -3195,6 +3363,7 @@ function startGame(): void {
       } finally {
         startingGame = false;
         button.disabled = false;
+        element<HTMLButtonElement>('#start-tutorial').disabled = false;
         updateStartButton();
       }
     });
@@ -3203,6 +3372,7 @@ function startGame(): void {
     stopAttractMode();
     stopDeveloperMode();
     stopWatchMode();
+    stopTutorial();
     gameStarted = true;
     encounterTest = test;
     clearTimeout(shakeTimer);
@@ -3395,6 +3565,7 @@ function startGame(): void {
       renderWorldFrame(!!(horizontal || vertical));
       return;
     }
+    updateTutorial();
     // Real-time easing keeps feedback responsive even when the simulation is paused.
     hoverStrength = THREE.MathUtils.lerp(
       hoverStrength,
@@ -3425,7 +3596,7 @@ function startGame(): void {
         (settler.survival.phase === 'alive' || settler.survival.phase === 'drowning'),
     );
     if (armageddon.active && !armageddon.finished && dt > 0) updateArmageddonLand();
-    if (!encounterTest && !armageddon.active) {
+    if (!tutorial && !encounterTest && !armageddon.active) {
       if (
         enemyAI.advance(
           dt,
@@ -3446,7 +3617,13 @@ function startGame(): void {
       updateEnemyBuilder();
       advanceEnemySpells(dt);
     }
-    let settlementsChanged = false;
+    let settlementsChanged = !!(
+      tutorial &&
+      dt > 0 &&
+      tutorialBuilder &&
+      !tutorialBuilder.home &&
+      trySettle(tutorialBuilder, surface)
+    );
     let survivalChanged = !armageddon.active && triggerBuildingContacts(dt);
     combat.match(armageddon.active ? [...armageddon.leaders.values()] : settlers, combatPosition);
     updatePoleCollectors();
@@ -3492,6 +3669,11 @@ function startGame(): void {
         settler.wait = 0;
         settler.mesh.position.y = ground;
       }
+      if (
+        tutorial &&
+        !(tutorial.step === 'pole' && poleCollectors.get(populationColor) === settler)
+      )
+        continue;
       if (!dt) continue;
       // Another settler may have built a house after this walk was planned.
       if (settler.target && !isWalkable(settler.target)) {
@@ -3702,7 +3884,7 @@ function startGame(): void {
       if (lastPointer) updateHover(lastPointer);
     }
     const births =
-      encounterTest || armageddon.active
+      tutorial || encounterTest || armageddon.active
         ? []
         : growPopulation(
             settlers.filter((settler) => !combat.opponent(settler)),
