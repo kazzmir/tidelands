@@ -115,6 +115,10 @@ function element<T extends HTMLElement>(selector: string): T {
 }
 function createIconRenderer(): (name: string) => string {
   const icons: Record<string, string> = {
+    music:
+      '<path d="M9 18V5l12-3v13M9 8l12-3"/><ellipse cx="6" cy="18" rx="3" ry="2"/><ellipse cx="18" cy="15" rx="3" ry="2"/>',
+    'music-off':
+      '<path d="M9 18V5l12-3v13M3 3l18 18"/><ellipse cx="6" cy="18" rx="3" ry="2"/><ellipse cx="18" cy="15" rx="3" ry="2"/>',
     volume: '<path d="M11 4 6 8H3v8h3l5 4V4Zm4 4a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/>',
     muted: '<path d="M11 4 6 8H3v8h3l5 4V4Zm5 5 6 6m0-6-6 6"/>',
     developer: '<path d="m8 5-7 7 7 7m8-14 7 7-7 7m-3-17-2 20"/>',
@@ -237,6 +241,7 @@ function startGame(): void {
   const gameAudio = createGameAudio({
     isAudible: () => gameStarted && !newGameMenu.open && !developerView && !document.hidden,
     isPreviewAudible: () => gameStarted && !newGameMenu.open && !!developerView && !document.hidden,
+    isMusicAudible: () => !developerView && !document.hidden,
   });
   const castleSoundTracker = new CastleSoundTracker();
   let encounterTest = false;
@@ -2591,17 +2596,44 @@ function startGame(): void {
         : 'Small-map sandbox active: 20,000 starting player power. Choose a scenario to reset the world.';
   }
   function bindAudioControls(): void {
+    let musicMuted = false;
     try {
       gameAudio.setMuted(localStorage.getItem('tidelands-muted') === '1');
+      const preference = localStorage.getItem('tidelands-music-muted');
+      musicMuted = preference === null ? gameAudio.muted : preference === '1';
     } catch {
       /* Storage may be unavailable. */
     }
+    gameAudio.setMusicMuted(musicMuted);
+    const musicButton = element<HTMLButtonElement>('#toggle-music');
+    function updateMusic(): void {
+      musicButton.innerHTML = icon(gameAudio.musicMuted ? 'music-off' : 'music');
+      musicButton.setAttribute('aria-pressed', String(gameAudio.musicMuted));
+      musicButton.setAttribute(
+        'aria-label',
+        gameAudio.musicMuted ? 'Play ambient music' : 'Mute ambient music',
+      );
+      musicButton.title = gameAudio.musicMuted ? 'Ambient music off' : 'Ambient music on';
+    }
+    musicButton.addEventListener('click', () => {
+      gameAudio.setMusicMuted(!gameAudio.musicMuted);
+      if (!gameAudio.musicMuted) gameAudio.unlock();
+      try {
+        localStorage.setItem('tidelands-music-muted', gameAudio.musicMuted ? '1' : '0');
+      } catch {
+        /* Optional preference. */
+      }
+      updateMusic();
+    });
     const button = element<HTMLButtonElement>('#toggle-sound');
     function update(): void {
       button.innerHTML = icon(gameAudio.muted ? 'muted' : 'volume');
       button.setAttribute('aria-pressed', String(gameAudio.muted));
-      button.setAttribute('aria-label', gameAudio.muted ? 'Unmute sounds' : 'Mute sounds');
-      button.title = gameAudio.muted ? 'Sounds muted' : 'Sounds on';
+      button.setAttribute(
+        'aria-label',
+        gameAudio.muted ? 'Unmute sound effects' : 'Mute sound effects',
+      );
+      button.title = gameAudio.muted ? 'Sound effects muted' : 'Sound effects on';
     }
     function unlock(event: Event): void {
       if (event.isTrusted) gameAudio.unlock();
@@ -2620,10 +2652,13 @@ function startGame(): void {
       update();
     });
     window.addEventListener('pagehide', (event) => {
-      if (event.persisted) gameAudio.stopAll();
-      else gameAudio.dispose();
+      if (event.persisted) {
+        gameAudio.stopAll();
+        gameAudio.pauseMusic();
+      } else gameAudio.dispose();
     });
     update();
+    updateMusic();
   }
   function updateDeveloperControls(): void {
     if (!developerView) return;
@@ -2703,6 +2738,7 @@ function startGame(): void {
         canvas,
         window.matchMedia('(prefers-reduced-motion: reduce)').matches,
       );
+      gameAudio.syncMusic();
       document.body.classList.add('developer-mode');
       element('#developer-panel').hidden = false;
       element('#developer-caption').hidden = false;
@@ -2787,6 +2823,7 @@ function startGame(): void {
     document.addEventListener('visibilitychange', () => {
       if (attractView) clock.getDelta();
       if (document.hidden) gameAudio.stopAll();
+      gameAudio.syncMusic();
     });
     newGameMenu.addEventListener('cancel', (event) => {
       event.preventDefault();
@@ -2949,6 +2986,7 @@ function startGame(): void {
   function animate(): void {
     requestAnimationFrame(animate);
     const elapsed = clock.getDelta();
+    gameAudio.syncMusic();
     if (developerView) {
       if (!document.hidden) developerView.render(elapsed, world.clientWidth, world.clientHeight);
       return;

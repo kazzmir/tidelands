@@ -145,7 +145,9 @@ All spells update homes, castles, farming, trees, and settler positions just lik
 
 New castles play a short construction fanfare. Each successful spell has its own synthesized cue: pole chimes, a knight flourish, earthquake rumble, swamp bubbles, a volcanic burst, a flood whoosh, and an Armageddon chord. Enemy spell casts use the same cues. The sounds use Web Audio oscillators and filtered noise; there are no audio downloads.
 
-The **speaker icon in the footer** mutes/unmutes effects and remembers the setting. Audio unlocks only after a real click/tap/key gesture. Invalid or unaffordable casts, scene redraws, startup AI previews and developer model animations are silent. Explicit developer sound buttons can audition the effects. Pausing, opening settings, entering the model viewer or hiding the tab stops existing effects; no delayed sound backlog is replayed. Missing or blocked Web Audio never prevents playing.
+A gentle, original **24-second looping ambient song** adds warm stereo pads, a slow four-chord progression, soft bass and a sparse bell melody. It is synthesized once into a small reusable buffer, loops seamlessly and fades in softly. It ducks under sound effects so spell and construction cues stay clear. Music stays independent of simulation speed and continues through pause/settings. It pauses in hidden tabs and developer mode (so sound auditions are clear), then resumes at the same phrase position without catching up.
+
+The **music-note icon in the footer** controls music separately from the **speaker icon** for sound effects; both preferences are remembered. Existing sound-mute preferences default the new music to muted, so it doesn't unexpectedly override earlier silence. Audio unlocks only after a real click/tap/key gesture. Invalid or unaffordable casts, scene redraws, startup AI previews and developer model animations never trigger sound effects. Explicit developer sound buttons can audition the effects. Pausing, opening settings, entering the model viewer or hiding the tab stops existing effects; no delayed sound backlog is replayed. Missing or blocked Web Audio never prevents playing.
 
 ## Developer model viewer
 
@@ -276,7 +278,8 @@ Rock persists through dry terrain edits. Lowering it into water destroys the roc
 - `tests/minimap.test.mjs` — terrain cache correctness, team glyphs, crowded characters, and coordinate bounds.
 - `src/game-models.ts` — shared normal house/castle, settler, knight/equipment, leader models and walking pose, used by normal play and previews.
 - `src/developer-view.ts` — isolated, orbitable developer model gallery with production walking and combat animations.
-- `src/game-audio.ts` — lazy, bounded Web Audio sound synthesis and castle construction transition tracking.
+- `src/game-audio.ts` — lazy, bounded Web Audio sound synthesis, independent music/effect preferences and castle construction transition tracking.
+- `src/ambient-music.ts` — original ambient score, seamless stereo synthesis, and one-source looping playback with pause/resume and cleanup.
 - `src/attract-simulation.ts`, `src/attract-view.ts` — isolated, bounded AI-vs-AI startup preview using the normal game's shared models.
 - `tests/attract-mode.test.mjs` — preview rules, pause, frame budgets, looping, determinism, rendering cleanup, and live-game isolation.
 - `src/game-settings.ts` — validated new-game choices, size presets, and shared 500-power start.

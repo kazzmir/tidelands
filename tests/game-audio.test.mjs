@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import test from 'node:test';
 import {transformWithOxc,parseSync} from 'vite';
-const {code}=await transformWithOxc(await readFile(new URL('../src/game-audio.ts',import.meta.url),'utf8'),'game-audio.ts',{target:'es2022'});
+const {code:musicCode}=await transformWithOxc(await readFile(new URL('../src/ambient-music.ts',import.meta.url),'utf8'),'ambient-music.ts',{target:'es2022'});
+const musicUrl=`data:text/javascript;base64,${Buffer.from(musicCode).toString('base64')}`;
+let {code}=await transformWithOxc(await readFile(new URL('../src/game-audio.ts',import.meta.url),'utf8'),'game-audio.ts',{target:'es2022'});
+code=code.replaceAll("'./ambient-music'",JSON.stringify(musicUrl)).replaceAll('"./ambient-music"',JSON.stringify(musicUrl));
 const {createGameAudio,gameSoundPlan,gameSoundOptions,CastleSoundTracker}=await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
 const sounds=['castle','pole','knight','earthquake','swamp','volcano','flood','armageddon'];
 function parameter(value=1){return{value,events:[],setValueAtTime(v,t){this.events.push(['set',v,t]);this.value=v;},linearRampToValueAtTime(v,t){this.events.push(['linear',v,t]);this.value=v;},exponentialRampToValueAtTime(v,t){this.events.push(['exp',v,t]);this.value=v;},cancelScheduledValues(t){this.events.push(['cancel',t]);}};}
@@ -10,7 +13,7 @@ function context(){
  const ctx={currentTime:0,sampleRate:1000,state:'running',destination:{},nodes:[],sources:[],closed:0};
  function node(){const n={gain:parameter(),frequency:parameter(),Q:parameter(),connections:[],disconnected:0,connect(other){this.connections.push(other);return other;},disconnect(){this.disconnected++;}};ctx.nodes.push(n);return n;}
  function source(){const n=Object.assign(node(),{starts:[],stops:[],ended:false,start(t){this.starts.push(t);},stop(t){this.stops.push(t);}});ctx.sources.push(n);return n;}
- Object.assign(ctx,{createGain:node,createOscillator:source,createBufferSource:source,createBiquadFilter:node,createBuffer(channels,length){const data=new Float32Array(length);return{getChannelData(){return data;}};},resume(){ctx.state='running';return Promise.resolve();},close(){ctx.closed++;ctx.state='closed';return Promise.resolve();},flush(){for(const s of ctx.sources)if(!s.ended){s.ended=true;s.onended?.();}}});return ctx;
+ Object.assign(ctx,{createGain:node,createOscillator:source,createBufferSource:source,createBiquadFilter:node,createBuffer(channels,length,rate=ctx.sampleRate){const data=Array.from({length:channels},()=>new Float32Array(length));return{length,duration:length/rate,sampleRate:rate,numberOfChannels:channels,getChannelData(channel){return data[channel];}};},resume(){ctx.state='running';return Promise.resolve();},close(){ctx.closed++;ctx.state='closed';return Promise.resolve();},flush(){for(const s of ctx.sources)if(!s.ended){s.ended=true;s.onended?.();}}});return ctx;
 }
 test('castle and all seven spells have distinct, finite, short synthesized waveform recipes',()=>{
  const plans=sounds.map(gameSoundPlan);assert.equal(new Set(plans.map(p=>JSON.stringify(p))).size,8);
@@ -45,6 +48,9 @@ test('explicit developer previews bypass only the live-world gate, obey mute/vis
 });
 test('developer audition buttons call audio directly without casting spells and stop playback on exit',async()=>{
  const source=await readFile(new URL('../src/main.ts',import.meta.url),'utf8'),html=await readFile(new URL('../index.html',import.meta.url),'utf8');const binding=source.slice(source.indexOf('function bindDeveloperMode()'),source.indexOf('function updatePreviewControls()'));assert.match(binding,/gameSoundOptions\(\)/);assert.match(binding,/button.dataset.developerSound = sound.id/);assert.match(binding,/gameAudio.preview\(sound.id\)/);assert.doesNotMatch(binding,/castSpell\(|\.spend\(/);assert.match(source,/function stopDeveloperMode\(\): void \{\s*if \(!developerView\) return;\s*gameAudio.stopAll\(\)/);assert.match(html,/id="developer-sounds" role="group"/);assert.match(html,/id="developer-sound-status" role="status"/);
+});
+test('ambient music is lazy, independently muted, and pauses/resumes without hidden-time catch-up',()=>{
+ const ctx=context();let audible=true,created=0;const audio=createGameAudio({createContext:()=>{created++;return ctx;},isMusicAudible:()=>audible});audio.setMusicMuted(false);assert.equal(created,0);audio.unlock();assert.equal(audio.musicPlaying,true);const buffer=ctx.sources.find(s=>s.loop).buffer;audio.setMuted(true);assert.equal(audio.musicPlaying,true);assert.equal(audio.play('castle'),false);ctx.currentTime=5;audible=false;audio.syncMusic();assert.equal(audio.musicPlaying,false);const position=audio.musicPosition;ctx.currentTime=50;assert.equal(audio.musicPosition,position);audible=true;audio.syncMusic();assert.equal(audio.musicPlaying,true);assert.equal(audio.musicPosition,position);assert.equal(ctx.sources.filter(s=>s.loop).at(-1).buffer,buffer);audio.setMusicMuted(true);assert.equal(audio.musicPlaying,false);audio.setMuted(false);assert.equal(audio.play('castle'),true);audio.dispose();assert.equal(ctx.closed,1);
 });
 test('live integration plays only successful casts, tracks castle identities, and silences previews/hidden tabs',async()=>{
  const source=await readFile(new URL('../src/main.ts',import.meta.url),'utf8'),functions=new Map();function visit(node){if(!node||typeof node!=='object')return;if(node.type==='FunctionDeclaration'&&node.id)functions.set(node.id.name,source.slice(node.start,node.end));for(const value of Object.values(node))if(Array.isArray(value))value.forEach(visit);else if(value&&typeof value==='object')visit(value);}visit(parseSync('main.ts',source).program);

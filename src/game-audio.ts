@@ -1,4 +1,5 @@
 import type { Spell } from './spells';
+import { createAmbientMusic } from './ambient-music';
 
 export type GameSound = Spell | 'castle';
 export function gameSoundOptions(): readonly { id: GameSound; label: string }[] {
@@ -101,6 +102,7 @@ export function createGameAudio(
     createContext?: () => AudioContext | null;
     isAudible?: () => boolean;
     isPreviewAudible?: () => boolean;
+    isMusicAudible?: () => boolean;
   } = {},
 ) {
   let context: AudioContext | null = null,
@@ -108,10 +110,12 @@ export function createGameAudio(
     noise: AudioBuffer | null = null,
     muted = false,
     disposed = false;
+  let musicMuted = true,
+    music: ReturnType<typeof createAmbientMusic> | null = null;
   const active = new Set<{ stop(): void }>(),
     lastPlayed = new Map<GameSound, number>();
   function unlock(): void {
-    if (disposed || muted) return;
+    if (disposed || (muted && musicMuted)) return;
     try {
       if (!context) {
         const Constructor =
@@ -135,7 +139,12 @@ export function createGameAudio(
           samples[i] = (seed / 4294967296) * 2 - 1;
         }
       }
-      if (context.state === 'suspended') void context.resume().catch(() => {});
+      if (context.state === 'suspended')
+        void context
+          .resume()
+          .then(syncMusic)
+          .catch(() => {});
+      else syncMusic();
     } catch {
       try {
         if (context) void context.close().catch(() => {});
@@ -146,6 +155,30 @@ export function createGameAudio(
       master = null;
       noise = null;
     }
+  }
+  function syncMusic(): void {
+    if (
+      disposed ||
+      musicMuted ||
+      !context ||
+      context.state !== 'running' ||
+      options.isMusicAudible?.() !== true
+    ) {
+      music?.stop();
+      return;
+    }
+    try {
+      music ??= createAmbientMusic(context);
+      music.start();
+    } catch {
+      music?.dispose();
+      music = null;
+      musicMuted = true;
+    }
+  }
+  function setMusicMuted(value: boolean): void {
+    musicMuted = value;
+    syncMusic();
   }
   function stopAll(): void {
     for (const effect of active) effect.stop();
@@ -194,7 +227,9 @@ export function createGameAudio(
       },
     };
     active.add(effect);
-    for (const layer of gameSoundPlan(sound)) {
+    const plan = gameSoundPlan(sound);
+    music?.duck(Math.max(...plan.map((layer) => layer.start + layer.duration)));
+    for (const layer of plan) {
       const start = now + 0.005 + layer.start,
         end = start + layer.duration,
         gain = ctx.createGain();
@@ -251,6 +286,8 @@ export function createGameAudio(
     if (disposed) return;
     disposed = true;
     stopAll();
+    music?.dispose();
+    music = null;
     master?.disconnect();
     if (context) void context.close().catch(() => {});
     context = null;
@@ -259,6 +296,18 @@ export function createGameAudio(
   }
   return {
     unlock,
+    syncMusic,
+    setMusicMuted,
+    pauseMusic: () => music?.stop(),
+    get musicMuted() {
+      return musicMuted;
+    },
+    get musicPlaying() {
+      return music?.playing ?? false;
+    },
+    get musicPosition() {
+      return music?.position ?? 0;
+    },
     play: (sound: GameSound) => play(sound),
     preview(sound: GameSound): boolean {
       if (options.isPreviewAudible?.() !== true) return false;
