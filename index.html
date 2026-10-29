@@ -14,15 +14,29 @@
     <div id="app">
       <header class="header">
         <a class="brand" href="./" aria-label="Tidelands home"><span class="brand-mark">≋</span><span>tidelands<span class="brand-dot">.</span></span></a>
-        <div class="header-actions"><label class="ai-difficulty" title="Enemy AI strategy. Changing difficulty starts a new world."><span>AI</span><select id="ai-difficulty" aria-label="Enemy AI difficulty (starts a new world)"><option value="easy">Easy</option><option value="normal" selected>Normal</option><option value="hard">Hard</option></select></label><button id="test-scenario" class="text-button" aria-pressed="false" title="Set up shared-island combat test (resets world)" aria-label="Set up shared-island test scenario"><span data-icon="test"></span><span class="scenario-label">Test scenario</span></button><button id="new-world" class="text-button"><span data-icon="refresh"></span> New world</button></div>
+        <div class="header-actions"><label class="ai-difficulty" title="Choose settings for a new game."><span>AI</span><select id="ai-difficulty" aria-label="AI difficulty for a new game"><option value="easy">Easy</option><option value="normal" selected>Normal</option><option value="hard">Hard</option></select></label><button id="test-scenario" class="text-button" aria-pressed="false" title="Set up shared-island combat test (resets world)" aria-label="Set up shared-island test scenario"><span data-icon="test"></span><span class="scenario-label">Test scenario</span></button><button id="new-world" class="text-button" aria-haspopup="dialog"><span data-icon="refresh"></span> New world</button></div>
       </header>
+      <dialog id="new-game-menu" aria-labelledby="new-game-title" aria-describedby="new-game-description">
+        <form id="new-game-form">
+          <span class="new-game-eyebrow">TIDELANDS · A NEW BEGINNING</span>
+          <h1 id="new-game-title">Shape a new world.</h1>
+          <p id="new-game-description">Choose your rival and the size of your archipelago.</p>
+          <label for="menu-ai-difficulty">AI difficulty</label>
+          <select id="menu-ai-difficulty" name="difficulty" required autofocus><option value="easy">Easy</option><option value="normal" selected>Normal</option><option value="hard">Hard</option></select>
+          <label for="menu-world-size">World size</label>
+          <select id="menu-world-size" name="worldSize" required><option value="small">Small · 200 × 200 tiles</option><option value="medium">Medium · 350 × 350 tiles</option><option value="large" selected>Large · 500 × 500 tiles</option></select>
+          <p class="new-game-rules">Both populations start with <strong>24 settlers</strong> and <strong>500 power</strong>. Smaller worlds are quicker to explore.</p>
+          <p id="new-game-error" role="alert" hidden></p>
+          <div class="new-game-actions"><button id="cancel-new-game" type="button" hidden>Cancel</button><button id="start-new-game" type="submit">Start new game</button></div>
+        </form>
+      </dialog>
       <main id="world">
         <canvas id="scene" aria-label="Interactive isometric island. Point at a corner, or hold Shift to select a surface. Left-click to raise, right-click to lower, drag to pan, middle-drag to orbit, arrow keys to pan, scroll to zoom."></canvas>
         <div class="scene-grain"></div>
         <aside class="minimap-panel" aria-label="World overview" title="Click the map to move the camera"><div class="minimap-heading"><span>WORLD</span><span>N ↑</span></div><canvas id="minimap" width="192" height="192" role="img" aria-label="World minimap showing water, elevation, team buildings, and uncrowded characters. Click to move the camera."></canvas><div class="minimap-legend"><span id="minimap-player-key">● You</span><span id="minimap-enemy-key">● Enemy</span></div></aside>
         <div id="pause-overlay" class="pause-overlay" role="status" aria-live="polite" hidden><strong>PAUSED</strong></div>
         <section id="game-result" class="game-result" role="status" aria-live="assertive" hidden><div><strong id="game-result-title">VICTORY</strong><p id="game-result-detail"></p><small>Choose New world to play again.</small></div></section>
-        <section class="world-stats" aria-label="Population and power"><div class="stat"><span class="stat-icon" data-icon="people"></span><div><span class="stat-label">POPULATION</span><strong id="population">24 <small>settlers</small></strong></div></div><span class="stat-divider"></span><div class="stat"><span class="stat-icon" data-icon="power"></span><div><span class="stat-label">POWER</span><strong id="power" title="Start with 10,000 power. Terrain costs 1 power per affected point and requires an owned character within 10 tiles. Buildings generate power every 5 simulation seconds.">10,000</strong></div></div></section>
+        <section class="world-stats" aria-label="Population and power"><div class="stat"><span class="stat-icon" data-icon="people"></span><div><span class="stat-label">POPULATION</span><strong id="population">24 <small>settlers</small></strong></div></div><span class="stat-divider"></span><div class="stat"><span class="stat-icon" data-icon="power"></span><div><span class="stat-label">POWER</span><strong id="power" title="Both populations start with 500 power. Terrain costs 1 power per affected point and requires an owned character within 10 tiles. Buildings generate power every 5 simulation seconds.">500</strong></div></div></section>
         <div class="compass" aria-label="North direction"><div class="compass-n">N</div><svg width="52" height="52" viewBox="0 0 52 52"><path d="M26 7 34 32 26 27 18 32Z" fill="#4a7068"/><path d="m26 27 8 5-8 13-8-13Z" fill="#fff" opacity=".8"/></svg></div>
         <div class="spell-stack">
         <section id="leader-vitals" class="leader-vitals" aria-label="Your leader's HP and combat power" title="Your pole holder's character HP and combat power, not player currency. Bars use a fixed 10,000 maximum." hidden>

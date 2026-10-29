@@ -1,5 +1,6 @@
 import { SimulationGame, type MatchOptions, type MatchResult, type Scenario } from './game';
 import type { AIProfile } from '../ai-profiles';
+import { STARTING_POWER } from '../game-settings';
 
 export interface TournamentSettings {
   games: number;
@@ -8,6 +9,7 @@ export interface TournamentSettings {
   seconds: number;
   step: number;
   finaleSeconds?: number;
+  startingPower?: number;
   scenarios: Scenario[];
   profiles: readonly AIProfile[];
 }
@@ -71,6 +73,8 @@ export function scheduleTournament(settings: TournamentSettings): MatchJob[] {
       throw new Error('AI terrain intervals must preserve the four-second minimum');
   // Validate all simulation options before starting workers.
   if (
+    !Number.isSafeInteger(settings.startingPower ?? STARTING_POWER) ||
+    (settings.startingPower ?? STARTING_POWER) < 0 ||
     !Number.isInteger(settings.size) ||
     settings.size < 40 ||
     settings.size > 500 ||
@@ -103,6 +107,7 @@ export function scheduleTournament(settings: TournamentSettings): MatchJob[] {
               seconds: settings.seconds,
               step: settings.step,
               finaleSeconds: settings.finaleSeconds ?? 0,
+              startingPower: settings.startingPower ?? STARTING_POWER,
               red: profiles[swap ? b : a],
               blue: profiles[swap ? a : b],
             },
@@ -206,7 +211,7 @@ export function tournamentReport(
           ([key, value]) => key !== 'hp' && !Number.isSafeInteger(value),
         ) ||
         metrics.currency !==
-          10000 +
+          (settings.startingPower ?? STARTING_POWER) +
             metrics.earned -
             metrics.spellSpent -
             metrics.terrainSpent -
@@ -258,7 +263,7 @@ export function tournamentReport(
     protocol: 1,
     createdAt: new Date().toISOString(),
     engineDigest,
-    settings,
+    settings: { ...settings, startingPower: settings.startingPower ?? STARTING_POWER },
     matches: matches.slice().sort((a, b) => a.id - b.id),
     training,
     holdout,
@@ -273,7 +278,7 @@ export function tournamentReport(
       'Each pair plays both sides of the same seeded world. Confidence intervals are approximate 95% seed-cluster intervals, not proof of superiority.',
       'Recommendations use training seeds only; holdout seeds are reported separately and are not used to select profiles.',
       'Shared production terrain, economy, growth, combat, spell, and AI modules run without rendering. Fixed-step movement/contact timing and compact controlled maps differ from the interactive 500x500 game; benchmark strength is not a guarantee against humans.',
-      'No resource, HP, damage, birth-rate, or price bonuses. All profiles start with 24 characters and 10000 power per side.',
+      `No resource, HP, damage, birth-rate, or price bonuses. All profiles start with 24 characters and ${settings.startingPower ?? STARTING_POWER} power per side.`,
       ...(settings.games / (settings.profiles.length * (settings.profiles.length - 1)) < 5 ||
       training[0].score === training[training.length - 1].score
         ? [

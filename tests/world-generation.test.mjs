@@ -159,7 +159,7 @@ test('the playable world is 500×500 with scaled island count and full-sized sta
     assert.ok(occupied.size>=1800);
   }
   const source=await readFile(new URL('../src/main.ts',import.meta.url),'utf8');
-  assert.match(source,/const SIZE = 500;/);
+  assert.match(source,/let SIZE = worldDimension\(worldSize\);/);
 });
 
 test('streamed geometry contains only requested tiles, retaining global positions and heights', () => {

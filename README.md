@@ -19,9 +19,15 @@ npm run preview # Serve the production build
 
 Tests use Vite's Oxc transformer and parser rather than the legacy TypeScript compiler API removed in TypeScript 7. Type-checking uses the pinned TypeScript 7.0.2 compiler.
 
+## Start a game
+
+The page opens with a **New game** menu. Choose **Easy / Normal / Hard AI** and **Small (200×200)**, **Medium (350×350)**, or **Large (500×500)**, then press **Start new game**. No world is generated or simulated until you confirm. Both populations start with **24 settlers and 500 power**.
+
+**New world** reopens the menu with the current settings. While it is open, the existing game is frozen; Cancel/Escape returns to it without losing progress or changing its pause state. Confirming starts a fresh, unpaused world at 1× speed. Terrain storage, streaming, navigation, starts, and minimap use the selected dimensions.
+
 ## AI difficulty and simulation tournaments
 
-Choose **Easy / Normal / Hard** in the header. Changing difficulty starts a fresh world; New world retains the selection. These are different decision policies, **not** HP, currency, damage, or income cheats.
+Choose **Easy / Normal / Hard** in the startup menu. The header difficulty control also opens that menu to confirm a new game; it does not discard the current world until Start is pressed. These are different decision policies, **not** HP, currency, damage, or income cheats.
 
 ```sh
 npm run ai:tournament # 1,000 seeded, side-swapped AI-vs-AI games; Node 22+
@@ -31,13 +37,13 @@ npm run ai:replay -- --replay reports/ai-tournament.json --match 42
 
 The headless simulator reuses production terrain/economy/population/combat/spell/knight modules. Five candidate policies compete across multiple map scenarios, with held-out seeds, seed-cluster uncertainty estimates, JSON/CSV/Markdown reports, exact replay, and crash/Ctrl+C checkpoints. The optional, paid Armageddon referee finale finishes otherwise open-ended sandbox matches; unresolved time limits remain draws. It does **not** enable automatic Armageddon in the live enemy.
 
-Completed calibration: **1,000 baseline games**, **100 half-step games**, and **four actual 500×500-world checks**. Easy uses **Patient**, Normal retains **Balanced**, and Hard uses **Sorcerer** (80% held-out score in the baseline's paid-finale protocol). Raw replayable reports and limitations are in **[benchmark results](benchmarks/README.md)**.
+Completed calibration: **1,000 baseline games**, **100 half-step games**, and **four actual 500×500-world checks**. Easy uses **Patient**, Normal retains **Balanced**, and Hard uses **Sorcerer** (80% held-out score in the **historical 10,000-power** baseline's paid-finale protocol; this is not a revalidated result for the current 500-power start). Raw replayable reports and limitations are in **[benchmark results](benchmarks/README.md)**.
 
 See **[AI simulation guide](docs/ai-simulation.md)** for setup, policy tuning, larger/full-world batches, natural-only matches, step-resolution checks, resume/replay, and interpretation limits.
 
 ## World size and rendering
 
-Worlds contain **500 × 500 tiles**, initially at sea level. The generator chooses high points (levels **6–8**) in **roughly 20–26 irregularly scattered islands across the full map**, then raises surrounding points only as needed to satisfy the same **one-level neighboring-height invariant** used by editing. Nearby summit foothills naturally overlap into continuous, multi-mountain landmasses: small islets roughly **10–35 tiles across**, medium islands, and larger islands reaching **60–95 tiles across**. There are **no artificial bridges, island masks, or separately sculpted coastlines**: every raised point is required by a summit’s height constraint. Separated clusters retain water between them. The archipelago includes northern, southern, eastern, central, and corner islands—not just the player's western starting area. There are **no rows, columns, or fixed island grid**. Seeded rejection sampling scatters variable-radius islands with ocean gaps, varied proportions, uneven branching ridges, and different summit counts. Broad regions retain islands while allowing irregular open-water areas. The human-controlled red population starts on a dedicated island near the **far western edge**, around tile **(48, 250)** rather than the map center. Both population starts reserve **large, broad islands** (at least 1,800 dry corner points and 50 tiles in both directions), with enough margin for their full foothills. Other islands may be much smaller. Settlers spawn on dry, walkable tiles within 14 tiles of that anchor. The initial camera, **Reset View**, and each **New world** focus on this western start. A separate **blue enemy population** starts on the opposite **southeastern corner island**, around **(452, 452)**—about 452 tiles from the human start, the farthest inset corner while leaving room for the full island.
+Worlds contain **200×200, 350×350, or 500×500 tiles**, according to the menu selection. The island counts and coordinates in the following description refer to **Large** worlds. Large worlds contain **500 × 500 tiles**, initially at sea level. The generator chooses high points (levels **6–8**) in **roughly 20–26 irregularly scattered islands across the full map**, then raises surrounding points only as needed to satisfy the same **one-level neighboring-height invariant** used by editing. Nearby summit foothills naturally overlap into continuous, multi-mountain landmasses: small islets roughly **10–35 tiles across**, medium islands, and larger islands reaching **60–95 tiles across**. There are **no artificial bridges, island masks, or separately sculpted coastlines**: every raised point is required by a summit’s height constraint. Separated clusters retain water between them. The archipelago includes northern, southern, eastern, central, and corner islands—not just the player's western starting area. There are **no rows, columns, or fixed island grid**. Seeded rejection sampling scatters variable-radius islands with ocean gaps, varied proportions, uneven branching ridges, and different summit counts. Broad regions retain islands while allowing irregular open-water areas. The human-controlled red population starts on a dedicated island near the **far western edge**, around tile **(48, 250)** rather than the map center. Both population starts reserve **large, broad islands** (at least 1,800 dry corner points and 50 tiles in both directions), with enough margin for their full foothills. Other islands may be much smaller. Settlers spawn on dry, walkable tiles within 14 tiles of that anchor. The initial camera, **Reset View**, and each **New world** focus on this western start. A separate **blue enemy population** starts on the opposite **southeastern corner island**, around **(452, 452)**—about 452 tiles from the human start, the farthest inset corner while leaving room for the full island.
 
 Only a padded camera region is converted into render geometry; that region streams as the camera pans, rotates, or zooms. Tile objects are created lazily and retain their building, farming, and tree state when revisited. Trees are drawn in instanced batches, and settlement updates touch home neighborhoods rather than scanning the million-tile map. Height edits remain global, including cascades beyond the current view. Water, wave detail, lighting, and shadows cover/follow the expanded world.
 
@@ -59,7 +65,7 @@ Gathering, playback, speed, and camera controls sit in a compact, right-aligned 
 - **Space / pause button:** pause/resume. Pausing dims the game area behind large centered **PAUSED** text; playback controls remain visible and usable. Camera movement, terrain editing, and spell casting still work while paused.
 - **1× / 2× / 4×:** simulation speed.
 - **Reset camera icon:** return to the original isometric view.
-- **New world:** generate a fresh island and population.
+- **New world:** open the AI/world-size setup menu; confirm to generate a fresh archipelago and population, or cancel to keep playing.
 
 Settlers choose neighboring dry tiles, climb one elevation step at a time, and avoid trees and cottages. After walking onto an unoccupied, treeless tile with four equal, above-water corner heights, they build a house and live inside it, disappearing from the map. Each house belongs to one settler; total population includes both roaming and housed settlers. Making a home’s ground non-flat (including through a cascaded edit) removes it and returns its resident to walking. Moving all four corners together preserves the home if it remains dry. Flooding a home also releases its resident. Settlers whose ground disappears stay in place and wave their arms for **2 simulation seconds** while drowning. Raising land under their actual position before that deadline rescues them and restores normal walking. Otherwise they die, leave the population count, and sink below the water over 0.8 seconds. They cannot be revived after death. Pause freezes the timer; speed controls accelerate it. Hover the population count to see roaming, housed, drowning, and castle counts; Inspect identifies occupied homes and drowning settlers. This is a terrain and settlement sandbox, not yet a full civilization simulation. Worlds are not persisted between reloads.
 
@@ -109,7 +115,7 @@ Newborns appear on the nearest reachable dry, unobstructed walking tile outside 
 
 ## Accumulated power
 
-The upper-right HUD shows total population and accumulated **Power**. Each world starts with **10,000 power**. Every **5 simulation seconds**, power increases by the sum of occupied ordinary-ground building power levels (houses 1–4, castles 5). Rock-ground buildings pay their full level only every **10 simulation seconds**. For example, two power-2 houses and a castle on ordinary ground produce 9 power per collection. Roaming settlers produce none. Pausing stops collection; 2×/4× speed accelerates it. Existing power is retained if a building is lost; creating a new world resets the balance to 10,000 and resets the collection timer. Hover the Power number to see the current income rate.
+The upper-right HUD shows total population and accumulated **Power**. Each population starts with **500 power**. Every **5 simulation seconds**, power increases by the sum of occupied ordinary-ground building power levels (houses 1–4, castles 5). Rock-ground buildings pay their full level only every **10 simulation seconds**. For example, two power-2 houses and a castle on ordinary ground produce 9 power per collection. Roaming settlers produce none. Pausing stops collection; 2×/4× speed accelerates it. Existing power is retained if a building is lost; creating a new world resets each side's balance to 500 and resets the collection timer. Hover the Power number to see the current income rate.
 
 ### Terraforming costs
 
@@ -137,7 +143,7 @@ All spells update homes, castles, farming, trees, and settler positions just lik
 
 The **Test scenario button beside New world** resets into a deterministic test scenario: 24 red and 24 blue characters on the same clear island, with camp centers just **six tiles apart**. They start in distinct unoccupied cells, wander freely, and reserve walking destinations so they go around each other instead of passing through or swapping head-on. Each side still has its own leader pole.
 
-**Nearby opposing characters now fight in this test**, with facing, strike animations, and a red glow. Knight conversion is available to test a stronger combatant. Gathering, automatic houses/births, and enemy terraforming remain disabled to keep the test focused on encounters. Manual terrain edits and other spells remain available, so environmental hazards still apply if you create them. The test starts unpaused at 1× speed; pause/speed, minimap, and camera buttons continue working. Clicking Test scenario again restarts it. **New world** leaves the test and restores the regular archipelago and existing normal-game mechanics.
+**Nearby opposing characters now fight in this test**, with facing, strike animations, and a red glow. Knight conversion still uses its normal 1,000-power cost; the encounter also starts with 500, so expensive spells require a separately funded development fixture. Gathering, automatic houses/births, and enemy terraforming remain disabled to keep the test focused on encounters. Manual terrain edits and other spells remain available, so environmental hazards still apply if you create them. The test starts unpaused at 1× speed; pause/speed, minimap, and camera buttons continue working. Clicking Test scenario again restarts it. **New world** opens the setup menu; confirming leaves the test and restores the regular archipelago and existing normal-game mechanics.
 
 ## Minimap
 
@@ -147,7 +153,7 @@ Terrain is cached at coarse resolution to keep small islands visible, and only c
 
 ## Enemy population and terrain AI
 
-Both sides start with **24 characters, their own leader/pole, and 10,000 power**. The enemy occupies the opposite southeastern corner island; its houses, castles, and shirts are blue (the opposite of the human population). The Population display counts human settlers, with an enemy count alongside it. Human Power and income exclude enemy buildings. Hover the enemy count beside Population for enemy population, housed/castle counts, power, and paid edit count. Press **E** or click the enemy area on the minimap to inspect that side; **Home / Reset View** returns to the human start.
+Both sides start with **24 characters, their own leader/pole, and 500 power**. The enemy occupies the opposite southeastern corner island; its houses, castles, and shirts are blue (the opposite of the human population). The Population display counts human settlers, with an enemy count alongside it. Human Power and income exclude enemy buildings. Hover the enemy count beside Population for enemy population, housed/castle counts, power, and paid edit count. Press **E** or click the enemy area on the minimap to inspect that side; **Home / Reset View** returns to the human start.
 
 The enemy pays the **same full cascade costs and obeys the same slope limits** as the player. Its selected edit corners must also be within **10 tiles of its own living characters**, using their current walking positions or home centers; unreachable plans are dropped without spending power. It makes at most **one one-level corner edit every 4 simulation seconds**, pauses with the game, and never catches up with bursts of edits after a stall. Its separate power budget is replenished by its own occupied homes on the same normal/rock income schedule as the human side. It stops editing if eliminated and cannot edit without sufficient power; it gets no free spells or resource bonuses.
 
@@ -195,7 +201,7 @@ Normal orders, terrain editing, other spells, births, and enemy terraforming are
 
 The **crossed-swords button in the bottom toolbar** toggles **Attack enemy** for roaming human characters. Existing houses/castles remain occupied and keep their residents, HP/power, income, farms, and normal growth. Roaming characters—including newborns once outside—pursue the nearest living enemy, including residents in enemy buildings. Building contact releases the defender and starts the normal fight. Human characters do not build while attacking. Disconnected enemies are approached from the nearest reachable shore; a new crossing lets the army resume. Flow fields are shared across troops and cached with a bounded size.
 
-Click again to cancel and resume normal orders. Attack cancels gathering (so the army does not merge into its leader), and enabling gathering cancels attack. The leader's anchor stays placed but is temporarily overridden by the attack order. With no enemies left, the army waits until attack is cancelled. Pause freezes movement/combat; New world/Test scenario clears the order. Enemy characters are not commanded, and HP, population, and player currency are not granted by the toggle.
+Click again to cancel and resume normal orders. Attack cancels gathering (so the army does not merge into its leader), and enabling gathering cancels attack. The leader's anchor stays placed but is temporarily overridden by the attack order. With no enemies left, the army waits until attack is cancelled. Pause freezes movement/combat; confirming a New world or starting Test scenario clears the order. Enemy characters are not commanded, and HP, population, and player currency are not granted by the toggle.
 
 ## Leader HP and power panel
 
@@ -207,7 +213,7 @@ The panel refreshes when health/power changes or a new character picks up the po
 
 Click the **anchor button in the bottom toolbar**, then click a map tile to place a visible anchor. Your current human leader leaves any home without losing HP/power, follows dry walkable routes toward it, and waits there instead of building. Knights follow the anchor rather than chasing distant enemies; nearby combat still takes priority. Gathering followers can continue following the moving leader.
 
-Click the same button again to **remove the anchor** (or cancel placement). Escape/right-click cancels pending placement without editing terrain or spending power. Water, blocked, or disconnected destinations lead the leader to the nearest reachable point, where they wait until terrain changes provide a route. The anchor persists for a successor after leadership changes. Pause freezes movement; New world/Test scenario clears the anchor.
+Click the same button again to **remove the anchor** (or cancel placement). Escape/right-click cancels pending placement without editing terrain or spending power. Water, blocked, or disconnected destinations lead the leader to the nearest reachable point, where they wait until terrain changes provide a route. The anchor persists for a successor after leadership changes. Pause freezes movement; confirming a New world or starting Test scenario clears the anchor.
 
 ## Leader and gathering
 
@@ -247,6 +253,8 @@ Rock persists through dry terrain edits. Lowering it into water destroys the roc
 - `tests/encounter-scenario.test.mjs` — connected camps, movement reservations, and combat-enabled scenario guards.
 - `src/minimap.ts` — incremental elevation raster, team markers, crowd suppression, and map navigation coordinates.
 - `tests/minimap.test.mjs` — terrain cache correctness, team glyphs, crowded characters, and coordinate bounds.
+- `src/game-settings.ts` — validated new-game choices, size presets, and shared 500-power start.
+- `tests/game-settings.test.mjs` — settings validation, all world dimensions/starts, and deferred startup.
 - `src/ai-profiles.ts` — shared strategy parameters and Easy/Normal/Hard mapping.
 - `src/simulation/` — deterministic headless games, continuous movement, tournaments, validation, and reports.
 - `tools/run-ai.mjs`, `tools/ai-entry.mjs` — Node worker CLI, checkpoints, compressed reports, and replay.

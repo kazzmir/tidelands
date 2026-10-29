@@ -1,5 +1,7 @@
 # AI calibration results
 
+> **Historical funding:** These recorded games used **10,000 starting power per side**. The live game and new tournament defaults now use **500**. The policy choices are retained, but the win rates below have **not** been revalidated for the new funding. Raw historical reports are unchanged.
+
 ## Selected playable modes
 
 | Mode | Policy | Training score | Unseen holdout score |
@@ -10,7 +12,7 @@
 
 Easy/Hard are the weakest/strongest policies in the **training** field. Normal deliberately retains the existing Balanced behavior, rather than automatically replacing it with the median-ranked Steward. Balanced is near the field's 50% score and was more stable than the middle-ranked policies in the resolution check. Holdout data was not used to search or tune parameters.
 
-All modes use the same initial population/HP/currency, prices, damage, growth and income rules. Difficulty changes decision timing, spell preferences, targeting noise, and military recruitment policy, not hidden resource bonuses. Choosing a mode in the header starts a fresh world.
+All modes use the same initial population/HP/currency, prices, damage, growth and income rules. Difficulty changes decision timing, spell preferences, targeting noise, and military recruitment policy, not hidden resource bonuses. Choose a mode in the startup menu; New world and the header control reopen setup, and a fresh world starts only after confirmation.
 
 ## Main experiment: 1,000 games
 
@@ -34,10 +36,12 @@ This is explicitly an **Armageddon-finale benchmark**, not evidence that the pol
 Reproduce:
 
 ```sh
-npm run ai:tournament -- --games 1000 --seed 73129 --seconds 240 --finale 180 \
+npm run ai:tournament -- --games 1000 --seed 73129 --seconds 240 --finale 180 --starting-power 10000 \
   --workers 4 --out reports/ai-baseline.json.gz
-npm run ai:replay -- --replay benchmarks/ai-baseline.json.gz --match 42
+npm run ai:replay -- --replay benchmarks/ai-baseline.json.gz --match 42 --allow-version-change
 ```
+
+For the original engine-digest-verified replay, check out revision `2503c34` and omit `--allow-version-change`. The commands above deliberately restore legacy funding under the current engine for comparison; they do not claim that engine versions are identical.
 
 [Full standings and protocol](ai-baseline.md) · [Raw replayable report](ai-baseline.json.gz) · [Per-game CSV](ai-baseline.csv).
 
@@ -49,7 +53,7 @@ This supports, but does not prove, coarse-step stability of the selected extreme
 
 ```sh
 npm run ai:tournament -- --games 100 --seed 81000 --seconds 240 --finale 180 \
-  --step 0.5 --workers 2 --out reports/ai-half-step.json.gz
+  --step 0.5 --starting-power 10000 --workers 2 --out reports/ai-half-step.json.gz
 ```
 
 [Standings](ai-half-step.md) · [Raw report](ai-half-step.json.gz) · [CSV](ai-half-step.csv).
@@ -62,9 +66,9 @@ Four games are a functional/fidelity smoke check, **not a statistically meaningf
 
 ```sh
 npm run ai:tournament -- --profiles balanced,sorcerer --games 4 --seed 90010 \
-  --size 500 --scenarios generated --seconds 240 --finale 900 --workers 1 \
+  --size 500 --scenarios generated --seconds 240 --finale 900 --starting-power 10000 --workers 1 \
   --out reports/ai-full-world.json.gz
-npm run ai:replay -- --replay benchmarks/ai-full-world.json.gz --match 0
+npm run ai:replay -- --replay benchmarks/ai-full-world.json.gz --match 0 --allow-version-change
 ```
 
 [Standings](ai-full-world.md) · [Raw report](ai-full-world.json.gz) · [CSV](ai-full-world.csv).

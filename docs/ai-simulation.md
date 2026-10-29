@@ -1,6 +1,6 @@
 # AI simulation, tournaments, and difficulty
 
-The game has a rendering-free fixed-step simulator, five parameterized policies, and an in-game **Easy / Normal / Hard** selector. Policies share production rules/controllers; they do not get extra starting money, residents, HP, income, or damage.
+The game has a rendering-free fixed-step simulator, five parameterized policies, and a startup menu with **Easy / Normal / Hard** AI and world-size choices. The current live game and default tournaments start each population with **500 power**. The checked-in historical calibration used **10,000 power**; its scores have not been revalidated for the new funding. Policies share production rules/controllers; they do not get extra starting money, residents, HP, income, or damage.
 
 ## Playable presets
 
@@ -20,8 +20,8 @@ npm run ai:tournament -- --help
 # Default: 1,000 games, five policies, four controlled map types.
 npm run ai:tournament
 
-# The checked-in baseline: 50 seeds × 10 policy pairs × 2 sides.
-npm run ai:tournament -- --games 1000 --seed 73129 --seconds 240 --finale 180 \
+# Re-run the historical baseline's funding: 50 seeds × 10 pairs × 2 sides.
+npm run ai:tournament -- --games 1000 --seed 73129 --seconds 240 --finale 180 --starting-power 10000 \
   --workers 4 --out reports/ai-baseline.json.gz
 
 # Longer games; larger batches need no source changes.
@@ -48,7 +48,7 @@ With all five policies, `--games` must be a multiple of **20**, so every seed co
 
 ## What a match means
 
-Both sides begin with **24 characters at 10 HP** and **10,000 power**. The simulator runs the ordinary game for `--seconds` simulation seconds. Policies terraform, build, reproduce, earn income, cast harmful spells, gather real donors, train paid knights, physically transfer leadership, and pursue opponents. Death, permanent sickness, two-second drowning, buildings releasing their existing defenders, isolated-island shore routing, and knight multipliers use the game's modules.
+Both sides begin with **24 characters at 10 HP** and **500 power** by default. `--starting-power` changes both sides equally for controlled experiments and is recorded in new reports. Use `--starting-power 10000` only when deliberately comparing with the historical calibration. The simulator runs the ordinary game for `--seconds` simulation seconds. Policies terraform, build, reproduce, earn income, cast harmful spells, gather real donors, train paid knights, physically transfer leadership, and pursue opponents. Death, permanent sickness, two-second drowning, buildings releasing their existing defenders, isolated-island shore routing, and knight multipliers use the game's modules.
 
 The sandbox can continue indefinitely without a human choosing Armageddon. Therefore the tournament has an explicit, optional **referee finale**:
 
@@ -76,9 +76,11 @@ npm run ai:tournament -- --resume reports/ai-baseline.json.gz.checkpoint.json \
   --workers 4
 ```
 
-Reports contain every profile's complete parameters, seed, map type, time step, horizon, finale window, raw results, runtime information, and a SHA-256 digest of the bundled engine. **Replays and resumes reject a different engine/profile version.** Check out the original source revision to reproduce old results. `--allow-version-change` is an explicit replay-only comparison escape hatch, not a way to mix engines in one tournament.
+Reports contain every profile's complete parameters, starting power, seed, map type, time step, horizon, finale window, raw results, runtime information, and a SHA-256 digest of the bundled engine. **Replays and resumes reject a different engine/profile version.** Check out the original source revision to reproduce old results. `--allow-version-change` is an explicit replay-only comparison escape hatch, not a way to mix engines in one tournament.
 
 Resume uses the checkpoint's original settings; new horizon/seed/policy flags are not mixed into an existing batch. Treat checkpoint/report files as immutable inputs rather than editing them by hand.
+
+Old checked-in reports without a `startingPower` field used 10,000; the replay reader restores that legacy value explicitly. Their old engine digest still requires the original revision (for example `2503c34`), or `--allow-version-change` for an intentional comparison under today's engine. Historical results are kept unchanged, not relabeled as 500-power results.
 
 Worker count/completion order does not change individual results or standings. Workers are independent; no live game state, shared RNG, or cross-game economy persists between matches. The renderer bundle never imports the tournament/Node runner.
 
@@ -89,7 +91,7 @@ Worker count/completion order does not change individual results or standings. W
 - With at least five seed blocks, the first **80%** are training and the final **20%** are held out. Recommendations are selected using training data **only**. The holdout results are not silently used to optimize policies.
 - Ranking is average match points: **win 1, draw 0.5, loss 0**. HP, income, training counts, costs, and currency are diagnostics, not hidden win criteria.
 - Approximate 95% intervals cluster results by seed, rather than incorrectly treating swapped sides and opponents on the same map as independent samples. Small batches or all-tied scores emit an explicit insufficient-evidence warning.
-- Every game audits `currency = 10000 + building income − terrain costs − spell costs − knight costs − finale costs`, and checks finite/nonnegative character state. Worker errors stop the batch and preserve a checkpoint; incomplete tournaments are never ranked as complete.
+- Every game audits `currency = startingPower + building income − terrain costs − spell costs − knight costs − finale costs` (normally startingPower = 500), and checks finite/nonnegative character state. Worker errors stop the batch and preserve a checkpoint; incomplete tournaments are never ranked as complete.
 
 Compact AI-vs-AI performance is **not proof of universal strength against humans**. Human terrain editing, orders, pole relocation, global Flood, and choosing when to cast Armageddon add options autonomous tournament policies do not use. Simulation movement/contact decisions are fixed-step, not the browser's animation loop. Fractional movement distance is carried across tile boundaries, preserving speed and the exact 1.05× finale follower multiplier even at coarse steps. Use `--step 0.5` or smaller to check ranking stability. Rendering, camera, sheep animation, and purely visual effects are intentionally absent.
 
@@ -103,7 +105,7 @@ Edit `src/ai-profiles.ts`. `aiProfiles()` is the registry; `difficultyProfile()`
 
 Terrain reach, paid slope cascades, spell prices/effects, HP, initial population/currency, combat damage, birth rates, and building income remain common rules. Add new candidates by returning additional distinct profiles; the scheduler automatically creates all pairings. For a genuinely different decision algorithm, implement it in shared controller code and use it from both `src/main.ts` and `src/simulation/game.ts`, rather than adding a benchmark-only combat approximation.
 
-The UI selector starts a fresh world when changed and retains the selected difficulty across New world. Test scenario still disables ordinary enemy AI. The live controller instances and headless teams receive the **same policy objects**. Difficulty is not changed automatically by a tournament: inspect the training recommendations, holdout intervals, and full-world/step-sensitivity results before editing the mapping.
+The startup menu lets you choose AI and Small/Medium/Large world size before generating a world. New world and the header AI selector reopen that menu; only confirmation discards the old game. Cancelling preserves its world and pause state. Test scenario still disables ordinary enemy AI. The live controller instances and headless teams receive the **same policy objects**. Difficulty is not changed automatically by a tournament: inspect the training recommendations, holdout intervals, and full-world/step-sensitivity results before editing the mapping.
 
 ## Code map and tests
 

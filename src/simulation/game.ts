@@ -1,4 +1,5 @@
 import type { AIProfile } from '../ai-profiles';
+import { STARTING_POWER } from '../game-settings';
 import { walkDistance } from './walk';
 import { birthLocation } from '../birth-location';
 import { EnemyTerraformer } from '../enemy-ai';
@@ -40,6 +41,7 @@ export interface MatchOptions {
   seconds: number;
   step: number;
   finaleSeconds?: number;
+  startingPower?: number;
 }
 export interface TeamMetrics {
   population: number;
@@ -125,6 +127,8 @@ export class SimulationGame {
 
   constructor(readonly options: MatchOptions) {
     if (
+      !Number.isSafeInteger(options.startingPower ?? STARTING_POWER) ||
+      (options.startingPower ?? STARTING_POWER) < 0 ||
       !Number.isSafeInteger(options.seed) ||
       options.seed < 0 ||
       options.seed > 0xffffffff ||
@@ -191,7 +195,7 @@ export class SimulationGame {
     this.sides = ([options.red, options.blue] as const).map((profile, i) => ({
       color: i === 0 ? 'red' : 'blue',
       profile,
-      money: new PowerMeter(5, 10000),
+      money: new PowerMeter(5, options.startingPower ?? STARTING_POWER),
       leader: new Leadership<Tile, Person>(),
       terrain: new EnemyTerraformer(anchors[i], profile.terrainInterval),
       spells: new EnemySpellcaster(
@@ -678,7 +682,7 @@ export class SimulationGame {
         !Number.isSafeInteger(side.money.value) ||
         side.money.value < 0 ||
         side.money.value !==
-          10000 +
+          (this.options.startingPower ?? STARTING_POWER) +
             side.earned -
             side.terrain.spent -
             side.spells.spent -

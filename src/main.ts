@@ -6,6 +6,13 @@ import { EnemyKnightStrategy } from './enemy-knights';
 import { difficultyProfile, type Difficulty } from './ai-profiles';
 import { planTerrainSpell, safeForAllies } from './spell-plan';
 import { birthLocation } from './birth-location';
+import {
+  STARTING_POWER,
+  worldDimension,
+  newGameSettings,
+  type WorldSize,
+  type NewGameSettings,
+} from './game-settings';
 import { createEncounterScenario, unoccupiedWalkSteps } from './encounter-scenario';
 import { CombatSystem, combatClosingOffset } from './combat';
 import { enemyBuildingContacts, buildingDefenderPoint, touchesBuilding } from './building-contact';
@@ -207,7 +214,11 @@ function startGame(): void {
     world,
     element('.spellbox'),
   );
-  const SIZE = 500;
+  let worldSize: WorldSize = 'large';
+  let SIZE = worldDimension(worldSize);
+  let gameStarted = false;
+  const newGameMenu = element<HTMLDialogElement>('#new-game-menu');
+  let startingGame = false;
   let encounterTest = false;
   const playerStart = playerStartAnchor(SIZE);
   const enemyStart = enemyStartAnchor(SIZE);
@@ -221,8 +232,8 @@ function startGame(): void {
   }
   const STEP = 0.65;
   const SEA = 0.08;
-  const powerMeter = new PowerMeter(5, 10_000);
-  const enemyPowerMeter = new PowerMeter(5, 10_000);
+  const powerMeter = new PowerMeter(5, STARTING_POWER);
+  const enemyPowerMeter = new PowerMeter(5, STARTING_POWER);
   let difficulty: Difficulty = 'normal';
   let profile = difficultyProfile(difficulty);
   let enemyAI = new EnemyTerraformer(enemyStart, profile.terrainInterval);
@@ -247,7 +258,7 @@ function startGame(): void {
   const tileCache = new Map<number, Tile>();
   let visibleTiles: Tile[] = [];
   let renderedBounds: TerrainBounds = { x: 0, z: 0, width: 0, depth: 0 };
-  const cornerLevels = new Uint8Array((SIZE + 1) ** 2);
+  let cornerLevels = new Uint8Array((SIZE + 1) ** 2);
   const terrain = new THREE.Group();
   const scenery = new THREE.Group();
   const people = new THREE.Group();
@@ -293,10 +304,13 @@ function startGame(): void {
   }
   const mapContext = minimapContext(minimapCanvas);
   const mapBaseContext = minimapContext(minimapBase);
-  const minimapTerrain = new MinimapTerrain(SIZE, minimapCanvas.width, minimapCanvas.height, [
-    '#659e95',
-    ...heightColors.slice(1).map((color) => `#${color.getHexString()}`),
-  ]);
+  function createMinimapTerrain(): MinimapTerrain {
+    return new MinimapTerrain(SIZE, minimapCanvas.width, minimapCanvas.height, [
+      '#659e95',
+      ...heightColors.slice(1).map((color) => `#${color.getHexString()}`),
+    ]);
+  }
+  let minimapTerrain = createMinimapTerrain();
   const minimapImage = mapBaseContext.createImageData(minimapCanvas.width, minimapCanvas.height);
   const minimapRay = new THREE.Raycaster();
   const minimapPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -2724,26 +2738,91 @@ function startGame(): void {
     });
     element('#reset-view').addEventListener('click', resetPlayerCamera);
     element('#test-scenario').addEventListener('click', () => startWorld(true));
-    element('#new-world').addEventListener('click', () => startWorld(false));
+    element('#new-world').addEventListener('click', () => openNewGameMenu());
     element<HTMLSelectElement>('#ai-difficulty').addEventListener('change', (event) => {
       const value = (event.currentTarget as HTMLSelectElement).value;
       if (value !== 'easy' && value !== 'normal' && value !== 'hard') return;
-      difficulty = value;
-      profile = difficultyProfile(difficulty);
-      enemyAI = new EnemyTerraformer(enemyStart, profile.terrainInterval);
-      enemySpellcaster = new EnemySpellcaster(
-        profile.spells.minimumDelay,
-        profile.spells.maximumDelay,
-        profile.spells,
+      element<HTMLSelectElement>('#ai-difficulty').value = difficulty;
+      openNewGameMenu(value);
+    });
+  }
+  function openNewGameMenu(proposedDifficulty: Difficulty = difficulty): void {
+    if (startingGame || newGameMenu.open) return;
+    element<HTMLSelectElement>('#menu-ai-difficulty').value = proposedDifficulty;
+    element<HTMLSelectElement>('#menu-world-size').value = worldSize;
+    element<HTMLButtonElement>('#cancel-new-game').hidden = !gameStarted;
+    element('#new-game-error').hidden = true;
+    panKeys.clear();
+    controls.enabled = false;
+    newGameMenu.showModal();
+  }
+  function closeNewGameMenu(): void {
+    if (!gameStarted || startingGame) return;
+    newGameMenu.close();
+    controls.enabled = true;
+  }
+  function applyNewGame(settings: NewGameSettings): void {
+    difficulty = settings.difficulty;
+    worldSize = settings.worldSize;
+    lastPointer = null;
+    hovered = null;
+    hoveredCorner = null;
+    SIZE = worldDimension(worldSize);
+    cornerLevels = new Uint8Array((SIZE + 1) ** 2);
+    minimapTerrain = createMinimapTerrain();
+    profile = difficultyProfile(difficulty);
+    enemyAI = new EnemyTerraformer(enemyStart, profile.terrainInterval);
+    enemySpellcaster = new EnemySpellcaster(
+      profile.spells.minimumDelay,
+      profile.spells.maximumDelay,
+      profile.spells,
+    );
+    enemyKnights = new EnemyKnightStrategy<Settler>(profile.knights);
+    element<HTMLSelectElement>('#ai-difficulty').value = difficulty;
+    startWorld(false);
+  }
+  function bindNewGameMenu(): void {
+    newGameMenu.addEventListener('cancel', (event) => {
+      event.preventDefault();
+      closeNewGameMenu();
+    });
+    element('#cancel-new-game').addEventListener('click', closeNewGameMenu);
+    element<HTMLFormElement>('#new-game-form').addEventListener('submit', async (event) => {
+      event.preventDefault();
+      if (startingGame) return;
+      const settings = newGameSettings(
+        element<HTMLSelectElement>('#menu-ai-difficulty').value,
+        element<HTMLSelectElement>('#menu-world-size').value,
       );
-      enemyKnights = new EnemyKnightStrategy<Settler>(profile.knights);
-      startWorld(false);
-      toast(
-        `${difficulty[0].toUpperCase() + difficulty.slice(1)} AI · ${profile.label}. New world started.`,
-      );
+      if (!settings) return;
+      const button = element<HTMLButtonElement>('#start-new-game');
+      startingGame = true;
+      button.disabled = true;
+      button.textContent = 'Creating world…';
+      try {
+        await new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        );
+        applyNewGame(settings);
+        newGameMenu.close();
+        controls.enabled = true;
+      } catch (error) {
+        console.error('Unable to start world', error);
+        gameStarted = false;
+        element('#cancel-new-game').hidden = true;
+        const message = element('#new-game-error');
+        message.textContent =
+          'Unable to create this world. Please try again or choose a smaller world.';
+        message.hidden = false;
+      } finally {
+        startingGame = false;
+        button.disabled = false;
+        button.textContent = 'Start new game';
+      }
     });
   }
   function startWorld(test: boolean): void {
+    gameStarted = true;
     encounterTest = test;
     clearTimeout(shakeTimer);
     document.body.classList.remove('earthquake-shake');
@@ -2751,14 +2830,12 @@ function startGame(): void {
     selectTool(test ? 'inspect' : tool);
     seed = test ? 34 : seed + 17;
     simulationTime = 0;
-    if (test) {
-      speed = 1;
-      document
-        .querySelectorAll<HTMLButtonElement>('[data-speed]')
-        .forEach((button) => button.classList.toggle('selected', button.dataset.speed === '1'));
-      if (paused) togglePause();
-    }
+    speed = 1;
+    document
+      .querySelectorAll<HTMLButtonElement>('[data-speed]')
+      .forEach((button) => button.classList.toggle('selected', button.dataset.speed === '1'));
     generateWorld();
+    if (paused) togglePause();
     selectTool(tool);
     hovered = null;
     hoveredCorner = null;
@@ -2788,6 +2865,7 @@ function startGame(): void {
   const panOffset = new THREE.Vector3();
   function bindKeyboardControls(): void {
     window.addEventListener('keydown', (event) => {
+      if (!gameStarted || newGameMenu.open) return;
       if (
         event.target instanceof HTMLElement &&
         (event.target.isContentEditable || event.target.matches('input, textarea, select'))
@@ -2847,6 +2925,7 @@ function startGame(): void {
   function animate(): void {
     requestAnimationFrame(animate);
     const elapsed = clock.getDelta();
+    if (!gameStarted || newGameMenu.open) return;
     // Pan on the ground relative to the camera's current orientation, even while paused.
     const horizontal = Number(panKeys.has('ArrowRight')) - Number(panKeys.has('ArrowLeft'));
     const vertical = Number(panKeys.has('ArrowUp')) - Number(panKeys.has('ArrowDown'));
@@ -3223,11 +3302,12 @@ function startGame(): void {
   }
 
   resize();
-  generateWorld();
   bindTerrainInput();
   bindSpellControls();
   bindSimulationControls();
   bindKeyboardControls();
+  bindNewGameMenu();
+  openNewGameMenu();
   startRendering();
 }
 

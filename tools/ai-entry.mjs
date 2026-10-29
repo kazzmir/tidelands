@@ -5,6 +5,7 @@ import { dirname } from 'node:path';
 import { gzipSync, gunzipSync } from 'node:zlib';
 import assert from 'node:assert/strict';
 import { aiProfiles, profileById } from '../src/ai-profiles.ts';
+import { STARTING_POWER } from '../src/game-settings.ts';
 import {
   scheduleTournament,
   playJob,
@@ -34,6 +35,7 @@ function args(argv) {
     'workers',
     'scenarios',
     'profiles',
+    'starting-power',
     'out',
     'resume',
     'replay',
@@ -75,7 +77,7 @@ async function startGame() {
     const options = args(process.argv.slice(2));
     if (options.help) {
       console.log(
-        'AI tournaments: --games 1000 --seed 73129 --size 64 --seconds 360 --finale 180 --step 1 --workers 4 --scenarios plains,tidal,islands,highlands --out reports/tournament.json[.gz]\nResume: --resume reports/tournament.json.checkpoint.json --workers 4\nReplay: --replay reports/tournament.json[.gz] --match 42\nGames must be a multiple of 20 for the five default profiles. --size 500 --scenarios generated runs the actual archipelago (much slower). --profiles balanced,sorcerer restricts a comparison to two policies (games then multiple of 2).',
+        'AI tournaments: --games 1000 --seed 73129 --size 64 --seconds 360 --finale 180 --step 1 --workers 4 --scenarios plains,tidal,islands,highlands --out reports/tournament.json[.gz]\nResume: --resume reports/tournament.json.checkpoint.json --workers 4\nReplay: --replay reports/tournament.json[.gz] --match 42\nGames must be a multiple of 20 for the five default profiles. --size 500 --scenarios generated runs the actual archipelago (much slower). --profiles balanced,sorcerer restricts a comparison to two policies (games then multiple of 2). Both sides default to 500 power; --starting-power 10000 reproduces legacy funding.',
       );
       return;
     }
@@ -87,8 +89,12 @@ async function startGame() {
         throw new Error(
           'Engine/profile code differs from this report. Use the original revision or explicitly --allow-version-change.',
         );
+      const settings = {
+        ...report.settings,
+        startingPower: report.settings.startingPower ?? 10000,
+      };
       const id = Number(options.match ?? 0),
-        job = scheduleTournament(report.settings).find((job) => job.id === id),
+        job = scheduleTournament(settings).find((job) => job.id === id),
         expected = report.matches.find((match) => match.id === id);
       if (!job || !expected) throw new Error('Match ID not present in report');
       const actual = playJob(job);
@@ -112,6 +118,7 @@ async function startGame() {
       seconds: Number(options.seconds ?? 360),
       finaleSeconds: Number(options.finale ?? 180),
       step: Number(options.step ?? 1),
+      startingPower: Number(options['starting-power'] ?? STARTING_POWER),
       scenarios: (options.scenarios ?? 'plains,tidal,islands,highlands').split(','),
       profiles: options.profiles ? options.profiles.split(',').map(profileById) : aiProfiles(),
     };
