@@ -141,11 +141,16 @@ Walking onto swamp or standing on newly swamped ground causes **persistent sickn
 
 All spells update homes, castles, farming, trees, and settler positions just like ordinary terrain edits. Spells can be cast while the simulation is paused.
 
-## Shared-island encounter test
+## Test scenarios
 
-The **Test scenario button beside New world** resets into a deterministic test scenario: 24 red and 24 blue characters on the same clear island, with camp centers just **six tiles apart**. They start in distinct unoccupied cells, wander freely, and reserve walking destinations so they go around each other instead of passing through or swapping head-on. Each side still has its own leader pole.
+The **Test scenario dropdown beside New world** immediately loads the chosen scenario (resetting the current world). It returns to its prompt so you can select the same scenario again to restart it.
 
-**Nearby opposing characters now fight in this test**, with facing, strike animations, and a red glow. Knight conversion still uses its normal 1,000-power cost; the encounter also starts with 500, so expensive spells require a separately funded development fixture. Gathering, automatic houses/births, and enemy terraforming remain disabled to keep the test focused on encounters. Manual terrain edits and other spells remain available, so environmental hazards still apply if you create them. The test starts unpaused at 1× speed; pause/speed, minimap, and camera buttons continue working. Clicking Test scenario again restarts it. **New world** opens the setup menu; confirming leaves the test and restores the regular archipelago and existing normal-game mechanics.
+- **Shared-island combat:** the existing deterministic encounter test described below.
+- **Small map · 20,000 power:** a fresh **Small (200×200)** archipelago with **20,000 player power**, the normal **500 enemy power**, and 24 settlers per side. Normal settlement growth, gathering, spells, combat and enemy AI remain enabled, using the current difficulty. The extra funding is confined to this sandbox; confirming a regular New world restores the normal 500/500 start.
+
+**Shared-island combat** starts with 24 red and 24 blue characters on the same clear island, with camp centers just **six tiles apart**. They start in distinct unoccupied cells, wander freely, and reserve walking destinations so they go around each other instead of passing through or swapping head-on. Each side still has its own leader pole.
+
+**Nearby opposing characters now fight in this test**, with facing, strike animations, and a red glow. Knight conversion still uses its normal 1,000-power cost; the encounter also starts with 500, so expensive spells require a separately funded development fixture. Gathering, automatic houses/births, and enemy terraforming remain disabled to keep the test focused on encounters. Manual terrain edits and other spells remain available, so environmental hazards still apply if you create them. The test starts unpaused at 1× speed; pause/speed, minimap, and camera buttons continue working. Selecting **Shared-island combat** again restarts it. **New world** opens the setup menu; confirming leaves the test and restores the regular archipelago and existing normal-game mechanics.
 
 ## Minimap
 

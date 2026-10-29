@@ -45,9 +45,10 @@ test('walkers cannot swap head-on, but can follow after another walker vacates a
  second.tile=c;second.target=null;assert.deepEqual(unoccupiedWalkSteps(first,[b],[first,second]),[b]);
 });
 
-test('scenario button enables combat while keeping automatic births disabled',async()=>{
+test('scenario picker retains combat while keeping automatic births disabled',async()=>{
  const source=await readFile(new URL('../src/main.ts',import.meta.url),'utf8');
- assert.match(source,/element\('#test-scenario'\).addEventListener\('click', \(\) => startWorld\(true\)\)/);
+ assert.match(source,/element<HTMLSelectElement>\('#test-scenario'\).addEventListener\('change'/);
+ assert.match(source,/selection === 'combat'\) startWorld\(true\)/);
  assert.match(source,/for \(const defeated of combat.advance\(dt\)\)/);
  assert.doesNotMatch(source,/encounterTest\s*\?\s*\[\]\s*:\s*combat.advance/);
  assert.match(source,/encounterTest\s*\|\|\s*armageddon.active\s*\?\s*\[\]\s*:\s*growPopulation/);

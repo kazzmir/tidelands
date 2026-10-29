@@ -1773,12 +1773,12 @@ function startGame(): void {
     Object.assign(playerStart, scenario?.playerStart ?? playerStartAnchor(SIZE));
     Object.assign(enemyStart, scenario?.enemyStart ?? enemyStartAnchor(SIZE));
     cornerLevels.set(scenario?.levels ?? generateWorldHeights(SIZE, seed));
-    const testButton = element<HTMLButtonElement>('#test-scenario');
-    testButton.classList.toggle('active', encounterTest);
-    testButton.setAttribute('aria-pressed', String(encounterTest));
-    testButton.title = encounterTest
-      ? 'Restart shared-island combat test'
-      : 'Set up shared-island combat test (resets world)';
+    const testSelect = element<HTMLSelectElement>('#test-scenario');
+    testSelect.value = '';
+    testSelect.classList.toggle('active', encounterTest);
+    testSelect.title = encounterTest
+      ? 'Shared-island combat test active. Choose a scenario to reset the world.'
+      : 'Choose a test scenario (resets the current world)';
     surface = new TerrainSurface(SIZE, cornerLevels, STEP);
     initialSurface = new TerrainSurface(SIZE, cornerLevels.slice(), STEP);
     minimapTerrain.invalidate();
@@ -2536,7 +2536,9 @@ function startGame(): void {
       });
     });
     element('#reset-view').addEventListener('click', resetPlayerCamera);
-    element('#test-scenario').addEventListener('click', () => startWorld(true));
+    element<HTMLSelectElement>('#test-scenario').addEventListener('change', (event) => {
+      startTestScenario((event.currentTarget as HTMLSelectElement).value);
+    });
     element('#new-world').addEventListener('click', () => openNewGameMenu());
     element<HTMLSelectElement>('#ai-difficulty').addEventListener('change', (event) => {
       const value = (event.currentTarget as HTMLSelectElement).value;
@@ -2544,6 +2546,23 @@ function startGame(): void {
       element<HTMLSelectElement>('#ai-difficulty').value = difficulty;
       openNewGameMenu(value);
     });
+  }
+  function startTestScenario(selection: string): void {
+    if (selection === 'combat') startWorld(true);
+    else if (selection === 'sandbox') {
+      applyNewGame({ difficulty, worldSize: 'small' });
+      powerMeter.value = 20_000;
+      updatePowerDisplay();
+      toast('Small-map sandbox: 20,000 player power. Normal gameplay and enemy AI enabled.');
+    } else return;
+    const select = element<HTMLSelectElement>('#test-scenario');
+    // This is an action picker: return to the prompt so the same scenario can be restarted.
+    select.value = '';
+    select.classList.add('active');
+    select.title =
+      selection === 'combat'
+        ? 'Shared-island combat test active. Choose a scenario to reset the world.'
+        : 'Small-map sandbox active: 20,000 starting player power. Choose a scenario to reset the world.';
   }
   function updatePreviewControls(): void {
     element('#new-game-preview').hidden = !attractView;
