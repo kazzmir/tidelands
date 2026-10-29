@@ -10,6 +10,14 @@ export class WatchSimulation {
   readonly maxStepsPerFrame = 2;
   readonly stepSeconds = 0.25;
   paused = false;
+  private playbackSpeed = 1;
+  get speed(): number {
+    return this.playbackSpeed;
+  }
+  set speed(value: number) {
+    if (value !== 1 && value !== 2 && value !== 4) throw new Error('Invalid watch speed');
+    this.playbackSpeed = value;
+  }
   outcome: GameWinner | null = null;
   private match: SimulationGame | null;
   private accumulator = 0;
@@ -50,7 +58,7 @@ export class WatchSimulation {
     )
       return 0;
     this.accumulator = Math.min(
-      this.accumulator + Math.min(seconds, 0.05),
+      this.accumulator + Math.min(seconds, 0.05) * this.speed,
       this.stepSeconds * this.maxStepsPerFrame,
     );
     let steps = 0;

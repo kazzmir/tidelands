@@ -2687,8 +2687,8 @@ function startGame(): void {
     element('#leader-view').addEventListener('click', focusLeaderPole);
     document.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach((button) => {
       button.addEventListener('click', () => {
-        if (watchView) return;
-        speed = Number(button.dataset.speed);
+        if (watchView) watchView.simulation.speed = Number(button.dataset.speed);
+        else speed = Number(button.dataset.speed);
         document
           .querySelectorAll('[data-speed]')
           .forEach((node) => node.classList.toggle('selected', node === button));
@@ -2944,6 +2944,9 @@ function startGame(): void {
     canvas.setAttribute('aria-label', normalCanvasLabel);
   }
   function startWatchMode(settings: NewGameSettings): void {
+    document
+      .querySelectorAll<HTMLButtonElement>('[data-speed]')
+      .forEach((button) => button.classList.toggle('selected', button.dataset.speed === '1'));
     stopDeveloperMode();
     stopAttractMode();
     stopWatchMode();
