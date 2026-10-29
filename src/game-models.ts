@@ -10,6 +10,16 @@ export interface CharacterModel {
   legs: THREE.Mesh[];
 }
 
+/** The production walking pose, also used by the developer model stage. */
+export function animateWalkingModel(
+  model: Pick<CharacterModel, 'legs'>,
+  seconds: number,
+  phase = 0,
+): void {
+  for (let i = 0; i < model.legs.length; i++)
+    model.legs[i].rotation.x = Math.sin(seconds * 9 + phase) * (i < 2 ? 0.45 : -0.45);
+}
+
 /** The single model factory used by both normal play and the startup simulation. */
 export function createGameModels() {
   const geometries = new Set<THREE.BufferGeometry>(),

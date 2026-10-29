@@ -34,7 +34,8 @@ import { Armageddon, armageddonLand } from './armageddon';
 import { nearestPoleCollector } from './pole-recovery';
 import { leaderVitals, createLeaderVitalsView } from './leader-vitals';
 import { withinTerrainReach } from './terrain-reach';
-import { createGameModels } from './game-models';
+import { createGameModels, animateWalkingModel } from './game-models';
+import { createDeveloperView, developerModels } from './developer-view';
 import { clampCameraCenter } from './camera-bounds';
 import { bindMinimapNavigation } from './minimap-navigation';
 import { createWaterTextures, animateWaterTextures } from './water-texture';
@@ -113,6 +114,7 @@ function element<T extends HTMLElement>(selector: string): T {
 }
 function createIconRenderer(): (name: string) => string {
   const icons: Record<string, string> = {
+    developer: '<path d="m8 5-7 7 7 7m8-14 7 7-7 7m-3-17-2 20"/>',
     test: '<path d="M9 3h6m-5 0v6l-6 10a1 1 0 0 0 1 2h14a1 1 0 0 0 1-2L14 9V3M7 16h10"/><circle cx="10" cy="18" r=".7"/>',
     armageddon:
       '<path d="m4 4 6 5-5 3 5 8m10-16-6 5 5 3-5 8M12 3v6m0 6v6"/><circle cx="12" cy="12" r="3"/>',
@@ -228,6 +230,7 @@ function startGame(): void {
   const newGameMenu = element<HTMLDialogElement>('#new-game-menu');
   let startingGame = false;
   let attractView: AttractView | null = null;
+  let developerView: ReturnType<typeof createDeveloperView> | null = null;
   let encounterTest = false;
   const playerStart = playerStartAnchor(SIZE);
   const enemyStart = enemyStartAnchor(SIZE);
@@ -1860,7 +1863,7 @@ function startGame(): void {
   const pointer = new THREE.Vector2();
   let hovered: Tile | null = null;
   let tool: Tool = 'raise';
-  let pointerDown = { x: 0, y: 0 };
+  let pointerDown: { x: number; y: number } | null = null;
   let toastTimer: ReturnType<typeof setTimeout>;
   function toast(message: string): void {
     const node = element('#toast');
@@ -2019,6 +2022,7 @@ function startGame(): void {
   }
   function bindTerrainInput(): void {
     canvas.addEventListener('pointermove', (event) => {
+      if (developerView) return;
       setShift(event.shiftKey);
       updateHover(event);
     });
@@ -2031,12 +2035,16 @@ function startGame(): void {
       element('#tile-info').hidden = true;
     });
     canvas.addEventListener('pointerdown', (event) => {
+      if (developerView) return;
       pointerDown = { x: event.clientX, y: event.clientY };
     });
     canvas.addEventListener('pointerup', (event) => {
+      const down = pointerDown;
+      pointerDown = null;
+      if (developerView || !down) return;
       if (
         (event.button !== 0 && event.button !== 2) ||
-        Math.hypot(event.clientX - pointerDown.x, event.clientY - pointerDown.y) > 5
+        Math.hypot(event.clientX - down.x, event.clientY - down.y) > 5
       )
         return;
       setShift(event.shiftKey);
@@ -2503,7 +2511,7 @@ function startGame(): void {
   }
   function bindSimulationControls(): void {
     bindMinimapNavigation(minimapCanvas, (event) => {
-      if (!gameStarted || newGameMenu.open) return;
+      if (!gameStarted || newGameMenu.open || developerView) return;
       const bounds = minimapCanvas.getBoundingClientRect();
       const point = minimapWorldPoint(
         (event.clientX - bounds.left) / bounds.width,
@@ -2563,6 +2571,75 @@ function startGame(): void {
         ? 'Shared-island combat test active. Choose a scenario to reset the world.'
         : 'Small-map sandbox active: 20,000 starting player power. Choose a scenario to reset the world.';
   }
+  function updateDeveloperControls(): void {
+    if (!developerView) return;
+    element('#developer-title').textContent = developerModels().find(
+      (model) => model.id === developerView?.selection,
+    )!.label;
+    document.querySelectorAll<HTMLButtonElement>('[data-developer-model]').forEach((button) => {
+      button.setAttribute(
+        'aria-pressed',
+        String(button.dataset.developerModel === developerView?.selection),
+      );
+    });
+    const animation = element<HTMLButtonElement>('#developer-animation');
+    animation.textContent = developerView.paused ? 'Play animation' : 'Pause animation';
+    animation.setAttribute('aria-pressed', String(developerView.paused));
+  }
+  function stopDeveloperMode(): void {
+    if (!developerView) return;
+    developerView.dispose();
+    developerView = null;
+    document.body.classList.remove('developer-mode');
+    element('#developer-panel').hidden = true;
+    element('#developer-caption').hidden = true;
+    element('#developer-toggle').setAttribute('aria-pressed', 'false');
+    controls.enabled = gameStarted && !newGameMenu.open;
+    panKeys.clear();
+    pointerDown = null;
+    lastPointer = null;
+  }
+  function bindDeveloperMode(): void {
+    const picker = element('#developer-models');
+    for (const model of developerModels()) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = model.label;
+      button.dataset.developerModel = model.id;
+      button.setAttribute('aria-pressed', 'false');
+      button.addEventListener('click', () => {
+        developerView?.select(model.id);
+        updateDeveloperControls();
+      });
+      picker.append(button);
+    }
+    element('#developer-toggle').addEventListener('click', () => {
+      if (developerView) {
+        stopDeveloperMode();
+        return;
+      }
+      if (!gameStarted || newGameMenu.open) return;
+      panKeys.clear();
+      pointerDown = null;
+      lastPointer = null;
+      controls.enabled = false;
+      developerView = createDeveloperView(
+        renderer,
+        canvas,
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+      );
+      document.body.classList.add('developer-mode');
+      element('#developer-panel').hidden = false;
+      element('#developer-caption').hidden = false;
+      element('#developer-toggle').setAttribute('aria-pressed', 'true');
+      updateDeveloperControls();
+    });
+    element('#developer-animation').addEventListener('click', () => {
+      if (!developerView) return;
+      developerView.paused = !developerView.paused;
+      updateDeveloperControls();
+    });
+  }
   function updatePreviewControls(): void {
     element('#new-game-preview').hidden = !attractView;
     if (!attractView) return;
@@ -2593,6 +2670,7 @@ function startGame(): void {
     updatePreviewControls();
   }
   function openNewGameMenu(proposedDifficulty: Difficulty = difficulty): void {
+    stopDeveloperMode();
     if (startingGame || newGameMenu.open) return;
     element<HTMLSelectElement>('#menu-ai-difficulty').value = proposedDifficulty;
     element<HTMLSelectElement>('#menu-world-size').value = worldSize;
@@ -2680,6 +2758,7 @@ function startGame(): void {
   }
   function startWorld(test: boolean): void {
     stopAttractMode();
+    stopDeveloperMode();
     gameStarted = true;
     encounterTest = test;
     clearTimeout(shakeTimer);
@@ -2723,6 +2802,14 @@ function startGame(): void {
   const panOffset = new THREE.Vector3();
   function bindKeyboardControls(): void {
     window.addEventListener('keydown', (event) => {
+      if (developerView) {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          stopDeveloperMode();
+          element('#developer-toggle').focus();
+        }
+        return;
+      }
       if (!gameStarted || newGameMenu.open) return;
       if (
         event.target instanceof HTMLElement &&
@@ -2784,6 +2871,10 @@ function startGame(): void {
   function animate(): void {
     requestAnimationFrame(animate);
     const elapsed = clock.getDelta();
+    if (developerView) {
+      if (!document.hidden) developerView.render(elapsed, world.clientWidth, world.clientHeight);
+      return;
+    }
     if (!gameStarted) {
       if (attractView && !document.hidden)
         attractView.render(elapsed, world.clientWidth, world.clientHeight);
@@ -3039,10 +3130,7 @@ function startGame(): void {
       const wasSick = settler.sick;
       updateSickness(settler, 0);
       if (settler.sick !== wasSick) survivalChanged = true;
-      for (let i = 0; i < settler.legs.length; i++) {
-        settler.legs[i].rotation.x =
-          Math.sin(simulationTime * 9 + settler.phase) * (i < 2 ? 0.45 : -0.45);
-      }
+      animateWalkingModel(settler, simulationTime, settler.phase);
       if (encounterLeader(settler)) survivalChanged = true;
       if (settler.characterPower <= 0) continue;
       if (settler.progress >= 1) {
@@ -3173,6 +3261,7 @@ function startGame(): void {
   bindSimulationControls();
   bindKeyboardControls();
   bindNewGameMenu();
+  bindDeveloperMode();
   startAttractMode();
   openNewGameMenu();
   startRendering();

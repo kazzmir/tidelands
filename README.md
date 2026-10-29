@@ -141,6 +141,12 @@ Walking onto swamp or standing on newly swamped ground causes **persistent sickn
 
 All spells update homes, castles, farming, trees, and settler positions just like ordinary terrain edits. Spells can be cast while the simulation is paused.
 
+## Developer model viewer
+
+The **code (`</>`) icon at the bottom right** toggles developer mode after starting a game. The left-side picker shows the **walking character**, **houses at levels 1–4**, **level-5 castle**, **walking knight with full equipment**, and **two characters fighting** with the normal strike poses, red glow and yellow lightning.
+
+These are the real game models, using shared production walking/combat animations. Drag the preview to orbit and scroll/pinch to zoom. **Pause animation / Play animation** controls playback; reduced-motion preferences start it paused. The live world, economies and camera are frozen and untouched while inspecting models. Press **Escape** or the code icon to return with the original pause state and touch controls restored.
+
 ## Test scenarios
 
 The **Test scenario dropdown beside New world** immediately loads the chosen scenario (resetting the current world). It returns to its prompt so you can select the same scenario again to restart it.
@@ -262,7 +268,8 @@ Rock persists through dry terrain edits. Lowering it into water destroys the roc
 - `src/minimap.ts` — incremental elevation raster, team markers, crowd suppression, and map navigation coordinates.
 - `src/minimap-navigation.ts` — captured mouse/touch minimap dragging and release/cancellation handling.
 - `tests/minimap.test.mjs` — terrain cache correctness, team glyphs, crowded characters, and coordinate bounds.
-- `src/game-models.ts` — shared normal house/castle, settler, knight/equipment, and leader models, used by normal play and the startup preview.
+- `src/game-models.ts` — shared normal house/castle, settler, knight/equipment, leader models and walking pose, used by normal play and previews.
+- `src/developer-view.ts` — isolated, orbitable developer model gallery with production walking and combat animations.
 - `src/attract-simulation.ts`, `src/attract-view.ts` — isolated, bounded AI-vs-AI startup preview using the normal game's shared models.
 - `tests/attract-mode.test.mjs` — preview rules, pause, frame budgets, looping, determinism, rendering cleanup, and live-game isolation.
 - `src/game-settings.ts` — validated new-game choices, size presets, and shared 500-power start.
