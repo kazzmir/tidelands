@@ -17,6 +17,7 @@ import {
 } from './game-settings';
 import { createEncounterScenario, unoccupiedWalkSteps } from './encounter-scenario';
 import { CombatSystem, combatClosingOffset } from './combat';
+import { eliminationWinner, type GameWinner } from './game-result';
 import { enemyBuildingContacts, buildingDefenderPoint, touchesBuilding } from './building-contact';
 import { createCombatEffects } from './combat-effects';
 import { LeaderAnchor } from './leader-anchor';
@@ -236,13 +237,15 @@ function startGame(): void {
   }
   controls.addEventListener('change', keepCameraInBounds);
   let gameStarted = false;
+  let gameWinner: GameWinner | null = null;
   const newGameMenu = element<HTMLDialogElement>('#new-game-menu');
   let startingGame = false;
   let attractView: AttractView | null = null;
   let developerView: ReturnType<typeof createDeveloperView> | null = null;
   let developerMusicPreview = false;
   const gameAudio = createGameAudio({
-    isAudible: () => gameStarted && !newGameMenu.open && !developerView && !document.hidden,
+    isAudible: () =>
+      gameStarted && gameWinner === null && !newGameMenu.open && !developerView && !document.hidden,
     isPreviewAudible: () => gameStarted && !newGameMenu.open && !!developerView && !document.hidden,
     isMusicAudible: () => (!developerView || developerMusicPreview) && !document.hidden,
   });
@@ -1066,7 +1069,7 @@ function startGame(): void {
   }
   function updateAnchorButton(): void {
     const button = element<HTMLButtonElement>('#leader-anchor');
-    button.disabled = armageddon.active;
+    button.disabled = gameWinner !== null || armageddon.active;
     button.classList.toggle('active', leaderAnchor.active);
     button.setAttribute('aria-pressed', String(leaderAnchor.active));
     button.setAttribute(
@@ -1082,7 +1085,7 @@ function startGame(): void {
         : 'Place an anchor for your leader to walk toward';
   }
   function toggleLeaderAnchor(): void {
-    if (armageddon.active) return;
+    if (gameWinner !== null || armageddon.active) return;
     if (leaderAnchor.active) {
       leaderAnchor.reset();
       anchorMarker.visible = false;
@@ -1142,7 +1145,7 @@ function startGame(): void {
   }
   function updateAttackButton(): void {
     const button = element<HTMLButtonElement>('#attack-enemy');
-    button.disabled = armageddon.active;
+    button.disabled = gameWinner !== null || armageddon.active;
     button.classList.toggle('active', attackOrder.active);
     button.setAttribute('aria-pressed', String(attackOrder.active));
     button.setAttribute(
@@ -1152,7 +1155,7 @@ function startGame(): void {
     button.title = 'attack enemies';
   }
   function toggleAttackOrder(): void {
-    if (armageddon.active) return;
+    if (gameWinner !== null || armageddon.active) return;
     cancelSpell();
     attackOrder.toggle();
     if (attackOrder.active) {
@@ -1187,7 +1190,7 @@ function startGame(): void {
       ? 'Locate your dropped leader pole, including in water (L)'
       : 'Locate your leader pole (L)';
     const button = element<HTMLButtonElement>('#rally');
-    button.disabled = encounterTest || armageddon.active;
+    button.disabled = gameWinner !== null || encounterTest || armageddon.active;
     const label = leadership.rallying ? 'Stop gathering' : 'Gather followers';
     button.setAttribute('aria-label', label);
     button.classList.toggle('active', leadership.rallying);
@@ -1223,7 +1226,7 @@ function startGame(): void {
     return rallySteps(settler.tile, neighbors(settler.tile), field);
   }
   function encounterLeader(settler: Settler): boolean {
-    if (armageddon.finished || (armageddon.active && paused)) return false;
+    if (gameWinner !== null || armageddon.finished || (armageddon.active && paused)) return false;
     if (settler.home || settler.survival.phase !== 'alive') return false;
     const state = settler.population === populationColor ? leadership : enemyLeadership;
     const owner = state.leader;
@@ -1297,7 +1300,7 @@ function startGame(): void {
     return rallySteps(settler.tile, neighbors(settler.tile), rallyDistance);
   }
   function toggleRally(): void {
-    if (encounterTest || armageddon.active) return;
+    if (gameWinner !== null || encounterTest || armageddon.active) return;
     if (!leadership.leader && !leadership.droppedTile) {
       toast('There is no leader object to gather around.');
       return;
@@ -1483,6 +1486,7 @@ function startGame(): void {
     return settler;
   }
   function clearSettlers(): void {
+    gameWinner = null;
     leaderVitalsView.update(null);
     poleCollectors.clear();
     armageddon.reset();
@@ -1561,7 +1565,7 @@ function startGame(): void {
       button.classList.toggle('affordable', affordable);
       button.classList.toggle('selected', selectedSpell === spell);
       button.setAttribute('aria-pressed', String(selectedSpell === spell));
-      button.disabled = armageddon.active;
+      button.disabled = gameWinner !== null || armageddon.active;
       button.setAttribute('aria-disabled', String(!affordable || button.disabled));
     });
   }
@@ -2044,7 +2048,7 @@ function startGame(): void {
   }
   function bindTerrainInput(): void {
     canvas.addEventListener('pointermove', (event) => {
-      if (developerView) return;
+      if (gameWinner !== null || developerView) return;
       setShift(event.shiftKey);
       updateHover(event);
     });
@@ -2063,7 +2067,7 @@ function startGame(): void {
     canvas.addEventListener('pointerup', (event) => {
       const down = pointerDown;
       pointerDown = null;
-      if (developerView || !down) return;
+      if (gameWinner !== null || developerView || !down) return;
       if (
         (event.button !== 0 && event.button !== 2) ||
         Math.hypot(event.clientX - down.x, event.clientY - down.y) > 5
@@ -2071,7 +2075,7 @@ function startGame(): void {
         return;
       setShift(event.shiftKey);
       updateHover(event);
-      if (armageddon.active) return;
+      if (gameWinner !== null || armageddon.active) return;
       if (leaderAnchor.placing) {
         if (event.button === 2) cancelSpell();
         else if (hovered) placeLeaderAnchor(hovered);
@@ -2159,7 +2163,7 @@ function startGame(): void {
     if (lastPointer) updateHover(lastPointer);
   }
   function selectSpell(spell: Spell): void {
-    if (armageddon.active) return;
+    if (gameWinner !== null || armageddon.active) return;
     leaderAnchor.cancelPlacement();
     updateAnchorButton();
     if (selectedSpell === spell) {
@@ -2243,6 +2247,31 @@ function startGame(): void {
     if (!armageddon.active || armageddon.finished) return;
     const winner = armageddon.resolve();
     if (winner === null) return;
+    finishGame(winner, 'armageddon');
+  }
+  function resolveGameEnd(): boolean {
+    if (gameWinner !== null) return true;
+    if (armageddon.active) {
+      finishArmageddon();
+      return gameWinner !== null;
+    }
+    const winner = eliminationWinner(settlers);
+    if (winner !== null) finishGame(winner, 'elimination');
+    return gameWinner !== null;
+  }
+  function finishGame(winner: GameWinner, reason: 'armageddon' | 'elimination'): void {
+    if (gameWinner !== null) return;
+    gameWinner = winner;
+    reconcileWorldSettlements();
+    rebuildBuildings();
+    syncResidentMeshes();
+    for (const character of settlers)
+      if (
+        character.characterPower <= 0 ||
+        character.survival.phase === 'dead' ||
+        character.survival.phase === 'sinking'
+      )
+        character.mesh.visible = false;
     gameAudio.finishMusic(
       winner === 'draw' ? 'draw' : winner === populationColor ? 'victory' : 'defeat',
     );
@@ -2250,17 +2279,34 @@ function startGame(): void {
     element('#game-result-title').textContent =
       winner === 'draw' ? 'DRAW' : winner === populationColor ? 'VICTORY' : 'DEFEAT';
     element('#game-result-detail').textContent =
-      winner === 'draw'
-        ? 'Both leaders fell together.'
-        : winner === populationColor
-          ? 'Your leader won Armageddon.'
-          : 'The enemy leader won Armageddon.';
+      reason === 'elimination'
+        ? winner === 'draw'
+          ? 'Both populations have been eliminated.'
+          : winner === populationColor
+            ? 'All enemy characters and settlements have been eliminated.'
+            : 'Your characters and settlements have been eliminated.'
+        : winner === 'draw'
+          ? 'Both leaders fell together.'
+          : winner === populationColor
+            ? 'Your leader won Armageddon.'
+            : 'The enemy leader won Armageddon.';
     element<HTMLButtonElement>('#pause').disabled = true;
     element('#pause-overlay').hidden = true;
+    cornerMarker.visible = false;
+    surfaceHighlight.visible = false;
+    hoverTarget = surfaceTarget = 0;
+    lastPointer = null;
+    hovered = null;
+    hoveredCorner = null;
+    canvas.style.cursor = 'grab';
+    updatePowerDisplay();
+    updateAttackButton();
+    updateAnchorButton();
+    updateRallyButton();
     selectTool(tool);
   }
   function castSpell(spell: Spell, target?: Tile, caster: PopulationColor = populationColor): void {
-    if (armageddon.active) return;
+    if (gameWinner !== null || armageddon.active) return;
     const playerCast = caster === populationColor;
     if (!playerCast && spell !== 'earthquake' && spell !== 'swamp' && spell !== 'volcano') return;
     const budget = playerCast ? powerMeter : enemyPowerMeter;
@@ -2515,22 +2561,23 @@ function startGame(): void {
       ],
       inspect: ['Explore your world', 'Hover a tile to discover what lives there'],
     };
-    element('#tool-hint').innerHTML = armageddon.finished
-      ? '<strong>Armageddon complete</strong><span class="hint-detail">Choose New world to play again</span>'
-      : armageddon.active
-        ? '<strong>Armageddon</strong><span class="hint-detail">Both leaders march for the final battle</span>'
-        : leaderAnchor.placing
-          ? '<strong>Place leader anchor</strong><span class="hint-detail">Click a location · Esc or right-click to cancel</span>'
-          : selectedSpell
-            ? `<strong>Cast ${SPELL_NAMES[selectedSpell]}</strong><span class="hint-detail">Click a tile to cast · Esc or right-click to cancel</span>`
-            : `<strong>${hints[next][0]}</strong><span class="hint-detail">${hints[next][1]}</span>`;
+    element('#tool-hint').innerHTML =
+      gameWinner !== null
+        ? '<strong>Armageddon complete</strong><span class="hint-detail">Choose New world to play again</span>'
+        : armageddon.active
+          ? '<strong>Armageddon</strong><span class="hint-detail">Both leaders march for the final battle</span>'
+          : leaderAnchor.placing
+            ? '<strong>Place leader anchor</strong><span class="hint-detail">Click a location · Esc or right-click to cancel</span>'
+            : selectedSpell
+              ? `<strong>Cast ${SPELL_NAMES[selectedSpell]}</strong><span class="hint-detail">Click a tile to cast · Esc or right-click to cancel</span>`
+              : `<strong>${hints[next][0]}</strong><span class="hint-detail">${hints[next][1]}</span>`;
     element('#tile-info').hidden = true;
   }
   let paused = false;
   let speed = 1;
   let simulationTime = 0;
   function togglePause(): void {
-    if (armageddon.finished) return;
+    if (gameWinner !== null || armageddon.finished) return;
     paused = !paused;
     if (paused) gameAudio.stopAll();
     element('#pause-overlay').hidden = !paused;
@@ -3076,6 +3123,10 @@ function startGame(): void {
       controls.target.add(panOffset);
       keepCameraInBounds();
     }
+    if (resolveGameEnd()) {
+      renderWorldFrame(!!(horizontal || vertical));
+      return;
+    }
     // Real-time easing keeps feedback responsive even when the simulation is paused.
     hoverStrength = THREE.MathUtils.lerp(
       hoverStrength,
@@ -3357,7 +3408,6 @@ function startGame(): void {
       renderSurvival(defeated);
       survivalChanged = true;
     }
-    finishArmageddon();
     if (settlementsChanged) {
       navigationRevision++;
       reconcileWorldSettlements();
@@ -3398,6 +3448,12 @@ function startGame(): void {
       updateSettlementStats();
       if (lastPointer) updateHover(lastPointer);
     }
+    if (resolveGameEnd()) {
+      updateSettlementStats();
+      updateLeadershipVisual();
+      renderWorldFrame(!!(horizontal || vertical));
+      return;
+    }
     swampTime.value = simulationTime;
     animateSheep(dt);
     spawnSheep(dt);
@@ -3419,13 +3475,16 @@ function startGame(): void {
     updateLeadershipVisual();
     updateRallyButton();
     updateEnemyStatus();
+    renderWorldFrame(!!(horizontal || vertical));
+  }
+  function renderWorldFrame(panning: boolean): void {
     controls.update();
     keepCameraInBounds();
     const viewChanged = updateVisibleTerrain();
     updateMinimap();
     sun.position.copy(controls.target).add(new THREE.Vector3(-18, 32, 12));
     sun.target.position.copy(controls.target);
-    if ((horizontal || vertical || viewChanged) && lastPointer) updateHover(lastPointer);
+    if ((panning || viewChanged) && lastPointer) updateHover(lastPointer);
     const direction = camera.position.clone().sub(controls.target);
     element<HTMLElement>('.compass svg').style.transform =
       `rotate(${(-Math.atan2(direction.x, direction.z) * 180) / Math.PI}deg)`;

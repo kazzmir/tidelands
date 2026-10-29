@@ -212,6 +212,12 @@ Nearby opposing outdoor characters automatically face one another and fight in s
 
 Fighters animate alternating strikes and a small body lean, with isolated red emissive materials and soft pulsing red auras. Bright **yellow zigzag lightning bolts** arc back and forth between the fighters at head height, with a moving spark marking each direction. Closing motion and lightning use simulation time, so pause freezes them and speed controls accelerate them. Other characters and shared team materials do not glow. The effects clear after combat or a world reset. Defeated characters use normal death and leader-pole succession. When any living outdoor character contacts an enemy house or castle, the building disappears and its existing resident emerges near the contacted edge. The resident retains their exact accumulated character HP/power (not the house's level), team, and leadership; no extra citizen or free power is created. Castle footprints/buffers, farms, sheep, and building income are removed through normal settlement cleanup. The attacker and released resident immediately pair off and fight. Friendly buildings are untouched, and contact conversion freezes while paused. Inspect identifies fighting characters.
 
+## Elimination victory and defeat
+
+A side **wins immediately when the other has no surviving characters or occupied buildings**—Armageddon is not required. Housed residents/leaders count as survivors, so eliminating only roaming characters is not enough. Drowning characters still count while rescue is possible; dead or terminally sinking characters do not. Both populations disappearing together is a draw.
+
+The result screen and victory/defeat song appear immediately. Simulation time, movement, combat, births, income, AI, editing and spell casting stop; camera controls, developer inspection and starting a fresh world remain available. New worlds/scenarios clear the result. Armageddon retains its special leader-death victory rule.
+
 ## Armageddon — 6,000 power
 
 Armageddon is an immediate, irreversible final-battle spell. Both populations evacuate every home without losing HP/power, follow their own leader, and merge all remaining character power into that leader. Existing living leaders are retained; if a pole has no living owner, that population's strongest available survivor becomes its leader. Casting requires living characters on both sides and charges only once.
@@ -314,6 +320,7 @@ Rock persists through dry terrain edits. Lowering it into water destroys the roc
 - `src/building-contact.ts` — enemy house/castle footprint contact and defender emergence positions.
 - `tests/building-contact.test.mjs` — both populations, footprint limits, power-preserving release, and immediate defender pairing.
 - `src/combat.ts` — stable opponent pairing and simultaneous proportional damage.
+- `src/game-result.ts` — population-elimination outcomes including living housed residents and rescuable drowning characters.
 - `src/combat-effects.ts` — facing, strikes, isolated red emission, soft combat auras, and traveling yellow lightning.
 - `tests/combat*.test.mjs` — damage, pairing, death, pause, animation, glow isolation, and cleanup.
 - `src/knights.ts` — permanent leader conversion, enemy selection, and simultaneous melee combat.
