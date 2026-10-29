@@ -2,6 +2,14 @@
 
 The game has a rendering-free fixed-step simulator, five parameterized policies, and a startup menu with **Easy / Normal / Hard** AI and world-size choices. The current live game and default tournaments start each population with **500 power**. The checked-in historical calibration used **10,000 power**; its scores have not been revalidated for the new funding. Policies share production rules/controllers; they do not get extra starting money, residents, HP, income, or damage.
 
+## Startup attract mode
+
+The setup menu now shows a separate **AI-vs-AI simulation** in the background. `AttractSimulation` runs the real `SimulationGame` with two policies, 24 characters/500 power per side, a compact 64×64 arena, 0.25-second steps and up to 6× presentation speed. It automatically starts a fresh seed after elimination or 240 simulation seconds, with a short hold between rounds. It neither advances nor initializes the player's world.
+
+The Three.js preview uses shared terrain triangles plus instanced trees, team-colored settlers/buildings, leaders and knights, and the game's water textures. It shares the existing renderer, not the player's scene or state. Preview work is bounded to two simulation steps per animation frame; hidden tabs do not advance it or catch up. Pause/Play is available in the menu, and reduced-motion preferences begin paused. Paused scenes are only redrawn when needed (for example, resize).
+
+Starting play disposes preview geometry/materials/textures, releases its simulation and caches, and restores normal canvas layout. Reopening setup during an existing player game still freezes that game rather than launching a demo over it. Preview camera/presentation limits and accelerated timing have no effect on live-game rules or tournament results.
+
 ## Playable presets
 
 - **Easy — Patient:** slower terrain work/spells, a later muster, and one active knight.
@@ -109,6 +117,7 @@ The startup menu lets you choose AI and Small/Medium/Large world size before gen
 
 ## Code map and tests
 
+- `src/attract-simulation.ts`, `src/attract-view.ts`: bounded startup AI match and isolated 3D presentation.
 - `src/simulation/game.ts`: headless game orchestration and optional paid finale.
 - `src/simulation/walk.ts`: continuous tile movement with fractional-distance carry.
 - `src/simulation/tournament.ts`: balanced schedule, validation, seed-cluster statistics, reports.

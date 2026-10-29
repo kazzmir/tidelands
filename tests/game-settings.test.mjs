@@ -19,7 +19,7 @@ test('every selectable world generates correctly sized terrain and separate dry 
   for(const point of [human,enemy])assert.ok(surface.sample(point.x+.5,point.z+.5)>.08);
  }
 });
-test('startup presents a native accessible settings dialog without generating or simulating a world first',async()=>{
+test('startup presents an accessible settings dialog without generating or simulating the player world first',async()=>{
  const html=await readFile(new URL('../index.html',import.meta.url),'utf8'),source=await readFile(new URL('../src/main.ts',import.meta.url),'utf8');
  assert.match(html,/<dialog id="new-game-menu"[^>]*aria-labelledby="new-game-title"/);assert.match(html,/id="menu-ai-difficulty"/);assert.match(html,/id="menu-world-size"/);assert.match(html,/id="start-new-game" type="submit"/);assert.match(html,/id="cancel-new-game" type="button" hidden/);
  const {program}=parseSync('main.ts',source),entry=program.body.find(n=>n.type==='FunctionDeclaration'&&n.id.name==='startGame');

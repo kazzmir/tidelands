@@ -6,6 +6,7 @@ import { EnemyKnightStrategy } from './enemy-knights';
 import { difficultyProfile, type Difficulty } from './ai-profiles';
 import { planTerrainSpell, safeForAllies } from './spell-plan';
 import { birthLocation } from './birth-location';
+import { createAttractView, type AttractView } from './attract-view';
 import {
   STARTING_POWER,
   worldDimension,
@@ -219,6 +220,7 @@ function startGame(): void {
   let gameStarted = false;
   const newGameMenu = element<HTMLDialogElement>('#new-game-menu');
   let startingGame = false;
+  let attractView: AttractView | null = null;
   let encounterTest = false;
   const playerStart = playerStartAnchor(SIZE);
   const enemyStart = enemyStartAnchor(SIZE);
@@ -2746,12 +2748,42 @@ function startGame(): void {
       openNewGameMenu(value);
     });
   }
+  function updatePreviewControls(): void {
+    element('#new-game-preview').hidden = !attractView;
+    if (!attractView) return;
+    const isPaused = attractView.simulation.paused;
+    const button = element<HTMLButtonElement>('#toggle-preview');
+    button.textContent = isPaused ? 'Play preview' : 'Pause preview';
+    button.setAttribute('aria-pressed', String(isPaused));
+    element('#preview-status').textContent = isPaused
+      ? 'AI vs AI · preview paused'
+      : 'AI vs AI · live preview';
+  }
+  function startAttractMode(): void {
+    if (gameStarted || attractView) return;
+    attractView = createAttractView(
+      renderer,
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+    );
+    document.body.classList.add('attract-mode');
+    resize();
+    updatePreviewControls();
+  }
+  function stopAttractMode(): void {
+    if (!attractView) return;
+    attractView.dispose();
+    attractView = null;
+    document.body.classList.remove('attract-mode');
+    resize();
+    updatePreviewControls();
+  }
   function openNewGameMenu(proposedDifficulty: Difficulty = difficulty): void {
     if (startingGame || newGameMenu.open) return;
     element<HTMLSelectElement>('#menu-ai-difficulty').value = proposedDifficulty;
     element<HTMLSelectElement>('#menu-world-size').value = worldSize;
     element<HTMLButtonElement>('#cancel-new-game').hidden = !gameStarted;
     element('#new-game-error').hidden = true;
+    updatePreviewControls();
     panKeys.clear();
     controls.enabled = false;
     newGameMenu.showModal();
@@ -2787,6 +2819,11 @@ function startGame(): void {
       closeNewGameMenu();
     });
     element('#cancel-new-game').addEventListener('click', closeNewGameMenu);
+    element('#toggle-preview').addEventListener('click', () => {
+      if (!attractView) return;
+      attractView.simulation.paused = !attractView.simulation.paused;
+      updatePreviewControls();
+    });
     element<HTMLFormElement>('#new-game-form').addEventListener('submit', async (event) => {
       event.preventDefault();
       if (startingGame) return;
@@ -2797,6 +2834,7 @@ function startGame(): void {
       if (!settings) return;
       const button = element<HTMLButtonElement>('#start-new-game');
       startingGame = true;
+      if (attractView) attractView.simulation.paused = true;
       button.disabled = true;
       button.textContent = 'Creating world…';
       try {
@@ -2809,6 +2847,7 @@ function startGame(): void {
       } catch (error) {
         console.error('Unable to start world', error);
         gameStarted = false;
+        startAttractMode();
         element('#cancel-new-game').hidden = true;
         const message = element('#new-game-error');
         message.textContent =
@@ -2822,6 +2861,7 @@ function startGame(): void {
     });
   }
   function startWorld(test: boolean): void {
+    stopAttractMode();
     gameStarted = true;
     encounterTest = test;
     clearTimeout(shakeTimer);
@@ -2912,7 +2952,8 @@ function startGame(): void {
   function resize(): void {
     const width = world.clientWidth;
     const height = world.clientHeight;
-    renderer.setSize(width, height, false);
+    const currentSize = renderer.getSize(new THREE.Vector2());
+    if (currentSize.x !== width || currentSize.y !== height) renderer.setSize(width, height, false);
     const aspect = width / height;
     const viewHeight = aspect < 1 ? 47 : 36;
     camera.left = (-viewHeight * aspect) / 2;
@@ -2925,7 +2966,12 @@ function startGame(): void {
   function animate(): void {
     requestAnimationFrame(animate);
     const elapsed = clock.getDelta();
-    if (!gameStarted || newGameMenu.open) return;
+    if (!gameStarted) {
+      if (attractView && !document.hidden)
+        attractView.render(elapsed, world.clientWidth, world.clientHeight);
+      return;
+    }
+    if (newGameMenu.open) return;
     // Pan on the ground relative to the camera's current orientation, even while paused.
     const horizontal = Number(panKeys.has('ArrowRight')) - Number(panKeys.has('ArrowLeft'));
     const vertical = Number(panKeys.has('ArrowUp')) - Number(panKeys.has('ArrowDown'));
@@ -3307,6 +3353,7 @@ function startGame(): void {
   bindSimulationControls();
   bindKeyboardControls();
   bindNewGameMenu();
+  startAttractMode();
   openNewGameMenu();
   startRendering();
 }

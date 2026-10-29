@@ -21,7 +21,9 @@ Tests use Vite's Oxc transformer and parser rather than the legacy TypeScript co
 
 ## Start a game
 
-The page opens with a **New game** menu. Choose **Easy / Normal / Hard AI** and **Small (200×200)**, **Medium (350×350)**, or **Large (500×500)**, then press **Start new game**. No world is generated or simulated until you confirm. Both populations start with **24 settlers and 500 power**.
+The page opens with a **New game** menu. Choose **Easy / Normal / Hard AI** and **Small (200×200)**, **Medium (350×350)**, or **Large (500×500)**, then press **Start new game**. A live **red AI vs blue AI** match plays behind the menu; your own world is not generated until you confirm. Both populations start with **24 settlers and 500 power**.
+
+The background preview uses the real simulation/AI controllers, runs independently at up to 6× speed, and loops into fresh matches. **Pause preview / Play preview** controls it; reduced-motion preferences start it paused. Starting your game stops and disposes the preview, without carrying over its population, terrain, power, or RNG.
 
 **New world** reopens the menu with the current settings. While it is open, the existing game is frozen; Cancel/Escape returns to it without losing progress or changing its pause state. Confirming starts a fresh, unpaused world at 1× speed. Terrain storage, streaming, navigation, starts, and minimap use the selected dimensions.
 
@@ -253,6 +255,8 @@ Rock persists through dry terrain edits. Lowering it into water destroys the roc
 - `tests/encounter-scenario.test.mjs` — connected camps, movement reservations, and combat-enabled scenario guards.
 - `src/minimap.ts` — incremental elevation raster, team markers, crowd suppression, and map navigation coordinates.
 - `tests/minimap.test.mjs` — terrain cache correctness, team glyphs, crowded characters, and coordinate bounds.
+- `src/attract-simulation.ts`, `src/attract-view.ts` — isolated, bounded AI-vs-AI startup preview and lightweight instanced 3D presentation.
+- `tests/attract-mode.test.mjs` — preview rules, pause, frame budgets, looping, determinism, rendering cleanup, and live-game isolation.
 - `src/game-settings.ts` — validated new-game choices, size presets, and shared 500-power start.
 - `tests/game-settings.test.mjs` — settings validation, all world dimensions/starts, and deferred startup.
 - `src/ai-profiles.ts` — shared strategy parameters and Easy/Normal/Hard mapping.
