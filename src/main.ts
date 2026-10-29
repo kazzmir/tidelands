@@ -1148,9 +1148,7 @@ function startGame(): void {
       'aria-label',
       attackOrder.active ? 'Stop attacking enemy' : 'Attack enemy with roaming human characters',
     );
-    button.title = attackOrder.active
-      ? 'Stop attacking; resume normal wandering, building, and leader anchor orders'
-      : 'Attack enemy: roaming human characters pursue enemies; buildings remain occupied';
+    button.title = 'attack enemies';
   }
   function toggleAttackOrder(): void {
     if (armageddon.active) return;
