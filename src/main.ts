@@ -245,6 +245,8 @@ function startGame(): void {
   let startingGame = false;
   let attractView: AttractView | null = null;
   let watchView: AttractView<WatchSimulation> | null = null;
+  let watchControls: OrbitControls | null = null;
+  let watchTouchAction = '';
   let watchResultAnnounced = false;
   let developerView: ReturnType<typeof createDeveloperView> | null = null;
   let developerMusicPreview = false;
@@ -357,14 +359,42 @@ function startGame(): void {
     lastMinimapPaint = now;
     const width = minimapCanvas.width,
       height = minimapCanvas.height;
-    if (minimapTerrain.update(surface)) {
+    const watchedGame = watchView?.simulation.game;
+    const mapCamera = watchView?.camera ?? camera;
+    if (minimapTerrain.update(watchedGame?.surface ?? surface)) {
       minimapImage.data.set(minimapTerrain.pixels);
       mapBaseContext.putImageData(minimapImage, 0, 0);
     }
     mapContext.clearRect(0, 0, width, height);
     mapContext.drawImage(minimapBase, 0, 0);
     const markers: MinimapMarker[] = [];
-    for (const settler of settlers) {
+    if (watchedGame) {
+      for (const person of watchedGame.people) {
+        if (
+          person.characterPower <= 0 ||
+          (person.survival.phase !== 'alive' && person.survival.phase !== 'drowning')
+        )
+          continue;
+        const leader = watchedGame.sides.some((side) => side.leader.leader === person);
+        markers.push(
+          person.home
+            ? {
+                x: person.home.x + 0.5,
+                z: person.home.z + 0.5,
+                population: person.population,
+                kind: person.power === 5 ? 'castle' : 'house',
+              }
+            : {
+                x: person.x,
+                z: person.z,
+                population: person.population,
+                kind: 'character',
+                priority: leader ? 3 : person.knight ? 2 : 0,
+              },
+        );
+      }
+    }
+    for (const settler of watchedGame ? [] : settlers) {
       if (settler.survival.phase !== 'alive' && settler.survival.phase !== 'drowning') continue;
       if (settler.home)
         markers.push({
@@ -404,7 +434,7 @@ function startGame(): void {
       [1, 1],
       [-1, 1],
     ]) {
-      minimapRay.setFromCamera(new THREE.Vector2(x, y), camera);
+      minimapRay.setFromCamera(new THREE.Vector2(x, y), mapCamera);
       const point = minimapRay.ray.intersectPlane(minimapPlane, new THREE.Vector3());
       if (!point) continue;
       const px = ((point.x + SIZE / 2) / SIZE) * width,
@@ -421,6 +451,8 @@ function startGame(): void {
     mapContext.lineWidth = 1;
     mapContext.strokeStyle = '#ffffff';
     mapContext.stroke();
+    element('#minimap-player-key').textContent = watchedGame ? '● Red' : '● You';
+    element('#minimap-enemy-key').textContent = watchedGame ? '● Blue' : '● Enemy';
     element('#minimap-player-key').style.color = populationShirtColor(populationColor);
     element('#minimap-enemy-key').style.color = populationShirtColor(enemyColor);
   }
@@ -2628,7 +2660,9 @@ function startGame(): void {
   }
   function bindSimulationControls(): void {
     bindMinimapNavigation(minimapCanvas, (event) => {
-      if (watchView || !gameStarted || newGameMenu.open || developerView) return;
+      if (!gameStarted || newGameMenu.open || developerView) return;
+      const mapControls = watchControls ?? controls,
+        mapCamera = watchView?.camera ?? camera;
       const bounds = minimapCanvas.getBoundingClientRect();
       const point = minimapWorldPoint(
         (event.clientX - bounds.left) / bounds.width,
@@ -2637,12 +2671,12 @@ function startGame(): void {
       );
       const target = new THREE.Vector3(
         point.x - SIZE / 2 + 0.5,
-        controls.target.y,
+        mapControls.target.y,
         point.z - SIZE / 2 + 0.5,
       );
-      camera.position.add(target.clone().sub(controls.target));
-      controls.target.copy(target);
-      controls.update();
+      mapCamera.position.add(target.clone().sub(mapControls.target));
+      mapControls.target.copy(target);
+      mapControls.update();
       lastMinimapPaint = 0;
     });
     minimapCanvas.addEventListener('contextmenu', (event) => event.preventDefault());
@@ -2897,6 +2931,11 @@ function startGame(): void {
     });
   }
   function stopWatchMode(): void {
+    if (watchControls) {
+      watchControls.dispose();
+      watchControls = null;
+      canvas.style.touchAction = watchTouchAction;
+    }
     watchView?.dispose();
     watchView = null;
     watchResultAnnounced = false;
@@ -2930,11 +2969,35 @@ function startGame(): void {
       }),
       true,
     );
+    watchTouchAction = canvas.style.touchAction;
+    watchControls = new OrbitControls(watchView.camera, canvas);
+    watchControls.target = watchView.cameraTarget;
+    watchControls.screenSpacePanning = false;
+    watchControls.enableDamping = true;
+    watchControls.minPolarAngle = 0.15;
+    watchControls.maxPolarAngle = Math.PI / 2 - 0.1;
+    watchControls.minZoom = 0.65;
+    watchControls.maxZoom = 8;
+    watchControls.mouseButtons = {
+      LEFT: THREE.MOUSE.PAN,
+      MIDDLE: THREE.MOUSE.ROTATE,
+      RIGHT: THREE.MOUSE.ROTATE,
+    };
+    watchControls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
+    watchControls.addEventListener('change', () => {
+      if (!watchView || !watchControls) return;
+      clampCameraCenter(watchView.camera.position, watchControls.target, SIZE);
+      lastMinimapPaint = 0;
+    });
+    watchControls.update();
+    watchControls.enabled = false;
+    minimapTerrain = createMinimapTerrain();
+    lastMinimapPaint = 0;
     document.body.classList.add('watch-mode');
     element('#watch-hud').hidden = false;
     canvas.setAttribute(
       'aria-label',
-      'Read-only AI-versus-AI match. Camera follows the action automatically.',
+      'AI-versus-AI match. Drag to pan, middle-drag to rotate, scroll to zoom; use the minimap to navigate. Gameplay is read-only.',
     );
     gameAudio.selectMusic(chooseMusicTrack());
     resize();
@@ -3014,12 +3077,14 @@ function startGame(): void {
     updatePreviewControls();
     panKeys.clear();
     controls.enabled = false;
+    if (watchControls) watchControls.enabled = false;
     newGameMenu.showModal();
   }
   function closeNewGameMenu(): void {
     if (!gameStarted || startingGame) return;
     newGameMenu.close();
     controls.enabled = !watchView;
+    if (watchControls) watchControls.enabled = true;
   }
   function applyNewGame(settings: NewGameSettings): void {
     difficulty = settings.difficulty;
@@ -3080,6 +3145,7 @@ function startGame(): void {
         else applyNewGame(settings);
         newGameMenu.close();
         controls.enabled = !watchView;
+        if (watchControls) watchControls.enabled = true;
       } catch (error) {
         console.error('Unable to start world', error);
         gameStarted = false;
@@ -3144,7 +3210,20 @@ function startGame(): void {
   const panOffset = new THREE.Vector3();
   function bindKeyboardControls(): void {
     window.addEventListener('keydown', (event) => {
-      if (watchView) return;
+      if (watchView) {
+        if (
+          !newGameMenu.open &&
+          arrowKeys.has(event.code) &&
+          !(
+            event.target instanceof HTMLElement &&
+            (event.target.isContentEditable || event.target.matches('input, textarea, select'))
+          )
+        ) {
+          event.preventDefault();
+          panKeys.add(event.code);
+        }
+        return;
+      }
       if (developerView) {
         if (event.key === 'Escape') {
           event.preventDefault();
@@ -3227,8 +3306,28 @@ function startGame(): void {
     }
     if (watchView) {
       if (!newGameMenu.open && !document.hidden) {
+        if (watchControls) {
+          const horizontal = Number(panKeys.has('ArrowRight')) - Number(panKeys.has('ArrowLeft'));
+          const vertical = Number(panKeys.has('ArrowUp')) - Number(panKeys.has('ArrowDown'));
+          const watchCamera = watchView.camera;
+          if (horizontal || vertical) {
+            panRight.setFromMatrixColumn(watchCamera.matrixWorld, 0).setY(0).normalize();
+            panForward.subVectors(watchControls.target, watchCamera.position).setY(0).normalize();
+            panOffset
+              .copy(panRight)
+              .multiplyScalar(horizontal)
+              .addScaledVector(panForward, vertical)
+              .normalize()
+              .multiplyScalar((24 * Math.min(elapsed, 0.05)) / watchCamera.zoom);
+            watchCamera.position.add(panOffset);
+            watchControls.target.add(panOffset);
+            clampCameraCenter(watchCamera.position, watchControls.target, SIZE);
+          }
+          watchControls.update();
+        }
         watchView.render(elapsed, world.clientWidth, world.clientHeight);
         updateWatchHud();
+        updateMinimap();
       }
       return;
     }

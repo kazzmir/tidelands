@@ -14,6 +14,8 @@ export interface SceneSimulation {
 }
 export interface AttractView<S extends SceneSimulation = AttractSimulation> {
   readonly simulation: S;
+  readonly camera: THREE.OrthographicCamera;
+  readonly cameraTarget: THREE.Vector3;
   render(seconds: number, width: number, height: number): void;
   dispose(): void;
 }
@@ -49,13 +51,14 @@ export function createAttractView(
     0.1,
     Math.max(300, simulation.game.options.size * 4),
   );
-  const cameraFocus = new THREE.Vector3(),
-    focusTarget = new THREE.Vector3();
-  let focusElapsed = 1,
-    watchViewHeight = 40,
-    firstFocus = true;
-  camera.position.set(65, 70, 65);
-  camera.lookAt(0, 1.5, 0);
+  const cameraFocus = new THREE.Vector3(0, 1.5, 0);
+  if (watch) {
+    const actor = simulation.game.people[0],
+      half = simulation.game.options.size / 2;
+    if (actor) cameraFocus.set(actor.x - half, 1.5, actor.z - half);
+  }
+  camera.position.copy(cameraFocus).add(new THREE.Vector3(65, watch ? 70 : 68.5, 65));
+  camera.lookAt(cameraFocus);
   scene.add(new THREE.HemisphereLight('#fff6d7', '#567b65', 2.1));
   const sun = new THREE.DirectionalLight('#fff7dc', 3.1);
   sun.position.set(-30, 60, 25);
@@ -340,7 +343,13 @@ export function createAttractView(
   }
   function render(seconds: number, width: number, height: number): void {
     if (disposed) return;
-    if (simulation.paused && previousPaused && width === previousWidth && height === previousHeight)
+    if (
+      !watch &&
+      simulation.paused &&
+      previousPaused &&
+      width === previousWidth &&
+      height === previousHeight
+    )
       return;
     previousPaused = simulation.paused;
     previousWidth = width;
@@ -380,47 +389,11 @@ export function createAttractView(
         }),
         simulation.game.elapsed,
       );
-      focusElapsed += dt;
-      if (focusElapsed >= 0.5 || firstFocus) {
-        focusElapsed = 0;
-        const game = simulation.game,
-          half = game.options.size / 2,
-          pair = pairs[0];
-        if (pair) {
-          focusTarget.set((pair.a.x + pair.b.x) / 2 - half, 1.5, (pair.a.z + pair.b.z) / 2 - half);
-          watchViewHeight = 18;
-        } else {
-          const color = Math.floor(visualTime / 12) % 2 ? 'blue' : 'red';
-          const own = game.people.filter(
-            (c) => c.population === color && c.characterPower > 0 && c.survival.phase === 'alive',
-          );
-          const knight = own.find((c) => c.knight && !c.home),
-            leader = game.sides.find((s) => s.color === color)?.leader.leader;
-          const actor = knight ?? leader ?? own[0];
-          if (actor) {
-            focusTarget.set(actor.x - half, 1.5, actor.z - half);
-            watchViewHeight = 40;
-          }
-        }
-        if (firstFocus) {
-          cameraFocus.copy(focusTarget);
-          firstFocus = false;
-        }
-      }
-      cameraFocus.lerp(focusTarget, 1 - Math.exp(-2 * dt));
-      camera.position.copy(cameraFocus).add(new THREE.Vector3(65, 70, 65));
-      camera.lookAt(cameraFocus);
       sun.position.copy(cameraFocus).add(new THREE.Vector3(-30, 60, 25));
       sun.target.position.copy(cameraFocus);
       sun.target.updateMatrixWorld();
     }
-    const viewHeight = watch
-      ? aspect < 1
-        ? watchViewHeight * 1.4
-        : watchViewHeight
-      : aspect < 1
-        ? 72
-        : 56;
+    const viewHeight = watch ? (aspect < 1 ? 56 : 40) : aspect < 1 ? 72 : 56;
     camera.left = (-viewHeight * aspect) / 2;
     camera.right = (viewHeight * aspect) / 2;
     camera.top = viewHeight / 2;
@@ -445,5 +418,5 @@ export function createAttractView(
     scene.clear();
     renderer.renderLists.dispose();
   }
-  return { simulation, render, dispose };
+  return { simulation, camera, cameraTarget: cameraFocus, render, dispose };
 }
