@@ -3,7 +3,7 @@ import type { GridPoint, TerrainSurface } from './terrain-surface';
 export type Spell = 'pole' | 'earthquake' | 'volcano' | 'flood' | 'swamp' | 'knight' | 'armageddon';
 export const SPELL_COSTS: Record<Spell, number> = {
   pole: 100,
-  earthquake: 500,
+  earthquake: 800,
   knight: 1000,
   volcano: 2000,
   flood: 3000,

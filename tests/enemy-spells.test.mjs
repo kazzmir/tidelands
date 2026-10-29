@@ -10,14 +10,15 @@ function fixture(roll=0,balance=10000){const caster=new EnemySpellcaster(),budge
 
 test('enemy spells have an opening grace period, freeze on pause, and never catch up in bursts',()=>{
  const w=fixture();assert.equal(w.advance(0),null);assert.equal(w.advance(74.99),null);assert.equal(w.calls.length,0);
- assert.equal(w.advance(.01).spell,'earthquake');assert.equal(w.budget.value,9500);assert.equal(w.caster.spent,500);
+ assert.equal(w.advance(.01).spell,'earthquake');assert.equal(w.budget.value,9200);assert.equal(w.caster.spent,800);
  w.advance(10000);assert.equal(w.calls.length,2);assert.equal(w.caster.casts,2);w.caster.reset();assert.equal(w.caster.spent,0);assert.equal(w.caster.lastSpell,null);assert.equal(w.advance(74),null);
 });
 test('earthquake, swamp, and volcano use normal costs from the shared enemy budget',()=>{
  for(const [roll,spell]of [[0,'earthquake'],[.55,'swamp'],[.95,'volcano']]){
   const w=fixture(roll);assert.equal(w.advance(75).spell,spell);assert.equal(w.budget.value,10000-SPELL_COSTS[spell]);assert.equal(w.caster.spent,SPELL_COSTS[spell]);
  }
- const poor=fixture(.99,500);assert.equal(poor.advance(75).spell,'earthquake');assert.equal(poor.budget.value,0);assert.equal(poor.advance(1000),null);
+ const insufficient=fixture(.99,799);assert.equal(insufficient.advance(75),null);assert.equal(insufficient.budget.value,799);
+ const poor=fixture(.99,800);assert.equal(poor.advance(75).spell,'earthquake');assert.equal(poor.budget.value,0);assert.equal(poor.advance(1000),null);
 });
 test('failed/no-effect casts never count as paid successes and do not retry every frame',()=>{
  const caster=new EnemySpellcaster(),budget={value:10000};let calls=0;
