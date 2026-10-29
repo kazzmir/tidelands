@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { AttractSimulation } from './attract-simulation';
 import { createWaterTextures, animateWaterTextures } from './water-texture';
-import { createGameModels, type CharacterModel } from './game-models';
+import { createGameModels, buildingPoleHeight, type CharacterModel } from './game-models';
 
 export interface AttractView {
   readonly simulation: AttractSimulation;
@@ -273,7 +273,7 @@ export function createAttractView(
           pole.position.set(
             owner.home.x + 0.5 - half,
             game.surface.sample(owner.home.x + 0.5, owner.home.z + 0.5) +
-              (owner.power === 5 ? 2.15 : 0.55 + owner.power * 0.05),
+              buildingPoleHeight(owner.power),
             owner.home.z + 0.5 - half,
           );
           pole.visible = true;

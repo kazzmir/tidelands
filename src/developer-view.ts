@@ -17,10 +17,10 @@ export type DeveloperModel =
 export function developerModels(): readonly { id: DeveloperModel; label: string }[] {
   return [
     { id: 'character', label: 'Character walking' },
-    { id: 'house-1', label: 'House · level 1' },
-    { id: 'house-2', label: 'House · level 2' },
-    { id: 'house-3', label: 'House · level 3' },
-    { id: 'house-4', label: 'House · level 4' },
+    { id: 'house-1', label: 'Hut · level 1' },
+    { id: 'house-2', label: 'Cottage · level 2' },
+    { id: 'house-3', label: 'Townhouse · level 3' },
+    { id: 'house-4', label: 'Manor · level 4' },
     { id: 'castle', label: 'Castle · level 5' },
     { id: 'knight', label: 'Knight walking' },
     { id: 'combat', label: 'Two characters fighting' },
@@ -126,8 +126,8 @@ export function createDeveloperView(
           : models.house(tile, power, 'red', surface, 0);
       building.position.x = building.position.z = 0;
       root.add(building);
-      targetHeight = power === 5 ? 1 : 0.5;
-      viewHeight = power === 5 ? 4.8 : 2.5;
+      targetHeight = power === 5 ? 1 : power >= 3 ? 0.75 : 0.5;
+      viewHeight = power === 5 ? 4.8 : power >= 3 ? 3 : 2.5;
       viewWidth = power === 5 ? 4.6 : 1.8;
     }
     controls.enableDamping = false;

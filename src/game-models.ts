@@ -20,6 +20,11 @@ export function animateWalkingModel(
     model.legs[i].rotation.x = Math.sin(seconds * 9 + phase) * (i < 2 ? 0.45 : -0.45);
 }
 
+/** Roof-height-aware resting position for the white pole on occupied buildings. */
+export function buildingPoleHeight(power: HousePower): number {
+  return power === 5 ? 2.15 : power === 4 ? 1.3 : power === 3 ? 1.3 : power === 2 ? 0.85 : 0.6;
+}
+
 /** The single model factory used by both normal play and the startup simulation. */
 export function createGameModels() {
   const geometries = new Set<THREE.BufferGeometry>(),
@@ -33,8 +38,29 @@ export function createGameModels() {
     return value;
   }
   const wallMaterial = material(new THREE.MeshStandardMaterial({ color: '#f0dfb7', roughness: 1 }));
-  const roofMaterials = ['#ad6548', '#bd7950', '#8b6650'].map((color) =>
-    material(new THREE.MeshStandardMaterial({ color, roughness: 1 })),
+  const thatchMaterial = material(
+    new THREE.MeshStandardMaterial({ color: '#c5a463', roughness: 1 }),
+  );
+  const wattleMaterial = material(
+    new THREE.MeshStandardMaterial({ color: '#aa8b56', roughness: 1 }),
+  );
+  const timberMaterial = material(
+    new THREE.MeshStandardMaterial({ color: '#715039', roughness: 1 }),
+  );
+  const tileMaterial = material(new THREE.MeshStandardMaterial({ color: '#a65e42', roughness: 1 }));
+  const stoneMaterial = material(
+    new THREE.MeshStandardMaterial({ color: '#b2baa7', roughness: 1 }),
+  );
+  const slateMaterial = material(
+    new THREE.MeshStandardMaterial({ color: '#506967', roughness: 0.95 }),
+  );
+  const windowMaterial = material(
+    new THREE.MeshStandardMaterial({
+      color: '#a4c4bb',
+      emissive: '#5e8170',
+      emissiveIntensity: 0.12,
+      roughness: 0.6,
+    }),
   );
   const darkMaterial = material(new THREE.MeshStandardMaterial({ color: '#645c42', roughness: 1 }));
   const populationMaterials: Record<PopulationColor, THREE.MeshStandardMaterial> = {
@@ -45,7 +71,10 @@ export function createGameModels() {
       new THREE.MeshStandardMaterial({ color: populationShirtColor('blue'), roughness: 1 }),
     ),
   };
-  const houseGeometry = geometry(new THREE.BoxGeometry(0.62, 0.48, 0.58));
+  const buildingBox = geometry(new THREE.BoxGeometry(1, 1, 1));
+  const roundWall = geometry(new THREE.CylinderGeometry(1, 1, 1, 12));
+  const thatchRoof = geometry(new THREE.ConeGeometry(1, 1, 12));
+  const hipRoof = geometry(new THREE.ConeGeometry(1, 1, 4).rotateY(Math.PI / 4));
   const roofShape = new THREE.Shape();
   roofShape.moveTo(-0.4, 0);
   roofShape.lineTo(0, 0.37);
@@ -55,8 +84,6 @@ export function createGameModels() {
     new THREE.ExtrudeGeometry(roofShape, { depth: 0.78, bevelEnabled: false }),
   );
   roofGeometry.translate(0, 0, -0.39);
-  const doorGeometry = geometry(new THREE.BoxGeometry(0.13, 0.25, 0.02)),
-    chimneyGeometry = geometry(new THREE.BoxGeometry(0.1, 0.32, 0.12));
   const flagPoleGeometry = geometry(new THREE.BoxGeometry(0.035, 0.75, 0.035)),
     flagClothGeometry = geometry(new THREE.BoxGeometry(0.4, 0.23, 0.025));
   const castleBlockGeometry = geometry(new THREE.BoxGeometry(1, 1, 1)),
@@ -111,21 +138,115 @@ export function createGameModels() {
   ): THREE.Group {
     const group = new THREE.Group();
     group.name = 'normal-house';
-    const walls = new THREE.Mesh(houseGeometry, wallMaterial);
-    walls.position.y = 0.24;
-    const roof = new THREE.Mesh(
-      roofGeometry,
-      roofMaterials[Math.max(0, power - 1) % roofMaterials.length],
-    );
-    roof.position.y = 0.46;
-    const door = new THREE.Mesh(doorGeometry, darkMaterial);
-    door.position.set(0.08, 0.125, 0.3);
-    const chimney = new THREE.Mesh(chimneyGeometry, wallMaterial);
-    chimney.position.set(-0.2, 0.72, -0.15);
+    const tier = Math.max(1, Math.min(4, power));
+    group.userData.houseStyle = [
+      'thatched-hut',
+      'timber-cottage',
+      'stone-townhouse',
+      'balcony-manor',
+    ][tier - 1];
+    function part(
+      name: string,
+      shape: THREE.BufferGeometry,
+      paint: THREE.Material,
+      x: number,
+      y: number,
+      z: number,
+      sx: number,
+      sy: number,
+      sz: number,
+    ): THREE.Mesh {
+      const mesh = new THREE.Mesh(shape, paint);
+      mesh.name = name;
+      mesh.position.set(x, y, z);
+      mesh.scale.set(sx, sy, sz);
+      group.add(mesh);
+      return mesh;
+    }
+    function block(
+      name: string,
+      paint: THREE.Material,
+      x: number,
+      y: number,
+      z: number,
+      w: number,
+      h: number,
+      d: number,
+    ): THREE.Mesh {
+      return part(name, buildingBox, paint, x, y, z, w, h, d);
+    }
+    function window(name: string, x: number, y: number, z: number, w = 0.12, h = 0.14): void {
+      block(`${name}-frame`, wallMaterial, x, y, z, w + 0.035, h + 0.035, 0.025);
+      block(`${name}-glass`, windowMaterial, x, y, z + 0.016, w, h, 0.012);
+      block(`${name}-mullion`, timberMaterial, x, y, z + 0.025, 0.012, h, 0.012);
+    }
     const flag = createPopulationFlag(population);
-    flag.position.set(0.12, 0.68, 0.08);
-    flag.scale.setScalar(0.7);
-    group.add(walls, roof, door, chimney, flag);
+    if (tier === 1) {
+      part('round-wattle-walls', roundWall, wattleMaterial, 0, 0.15, 0, 0.28, 0.3, 0.28);
+      part('wattle-base-band', roundWall, timberMaterial, 0, 0.04, 0, 0.285, 0.04, 0.285);
+      part('wattle-lintel-band', roundWall, timberMaterial, 0, 0.27, 0, 0.285, 0.035, 0.285);
+      part('conical-thatch-roof', thatchRoof, thatchMaterial, 0, 0.44, 0, 0.39, 0.34, 0.39);
+      part('thatch-eaves', roundWall, thatchMaterial, 0, 0.285, 0, 0.39, 0.035, 0.39);
+      block('hut-door', timberMaterial, 0, 0.12, 0.283, 0.13, 0.24, 0.025);
+      block('hut-door-lintel', darkMaterial, 0, 0.25, 0.29, 0.18, 0.035, 0.035);
+      flag.position.set(0, 0.6, 0);
+      flag.scale.setScalar(0.55);
+    } else if (tier === 2) {
+      block('cottage-plaster', wallMaterial, 0, 0.21, 0, 0.6, 0.42, 0.5);
+      for (const x of [-0.305, 0.305])
+        for (const z of [-0.255, 0.255])
+          block('timber-corner-post', timberMaterial, x, 0.22, z, 0.035, 0.44, 0.035);
+      block('timber-ring-beam', timberMaterial, 0, 0.4, 0, 0.64, 0.04, 0.54);
+      for (const x of [-0.305, 0.305])
+        for (const angle of [-0.85, 0.85])
+          block('cottage-side-brace', timberMaterial, x, 0.21, 0, 0.025, 0.46, 0.025).rotation.x =
+            angle;
+      part('cottage-gabled-roof', roofGeometry, tileMaterial, 0, 0.42, 0, 1, 0.86, 0.83);
+      block('cottage-door', timberMaterial, -0.08, 0.13, 0.26, 0.14, 0.26, 0.025);
+      window('cottage-window', 0.17, 0.23, 0.26, 0.12, 0.13);
+      block('porch-step', stoneMaterial, 0, 0.03, 0.33, 0.4, 0.06, 0.24);
+      block('porch-canopy', timberMaterial, 0, 0.36, 0.33, 0.42, 0.04, 0.24).rotation.x = 0.15;
+      for (const x of [-0.17, 0.17])
+        block('porch-post', timberMaterial, x, 0.18, 0.41, 0.035, 0.32, 0.035);
+      block('cottage-chimney', stoneMaterial, -0.2, 0.65, -0.12, 0.1, 0.32, 0.12);
+      block('cottage-chimney-cap', tileMaterial, -0.2, 0.82, -0.12, 0.14, 0.035, 0.16);
+      flag.position.set(0, 0.73, -0.08);
+      flag.scale.setScalar(0.6);
+    } else if (tier === 3) {
+      block('townhouse-stone-plinth', stoneMaterial, 0, 0.045, 0, 0.58, 0.09, 0.55);
+      block('townhouse-two-storey-walls', stoneMaterial, 0, 0.39, 0, 0.5, 0.78, 0.48);
+      block('townhouse-storey-band', wallMaterial, 0, 0.44, 0, 0.55, 0.045, 0.52);
+      part('townhouse-steep-slate-roof', roofGeometry, slateMaterial, 0, 0.78, 0, 0.83, 1.1, 0.82);
+      block('townhouse-door', timberMaterial, 0, 0.14, 0.25, 0.14, 0.28, 0.025);
+      for (const x of [-0.16, 0.16]) window('townhouse-lower-window', x, 0.25, 0.25, 0.08, 0.13);
+      for (const x of [-0.14, 0.14]) window('townhouse-upper-window', x, 0.6, 0.25, 0.1, 0.16);
+      block('dormer-cheeks', wallMaterial, 0, 0.91, 0.25, 0.16, 0.16, 0.12);
+      part('dormer-gable', roofGeometry, slateMaterial, 0, 0.99, 0.25, 0.28, 0.32, 0.23);
+      window('dormer-window', 0, 0.91, 0.317, 0.085, 0.1);
+      block('townhouse-chimney', stoneMaterial, -0.19, 1.05, -0.13, 0.09, 0.32, 0.11);
+      block('townhouse-chimney-cap', slateMaterial, -0.19, 1.22, -0.13, 0.13, 0.035, 0.15);
+      flag.position.set(0, 1.18, -0.08);
+      flag.scale.setScalar(0.55);
+    } else {
+      block('manor-main-wing', wallMaterial, -0.12, 0.36, -0.02, 0.52, 0.72, 0.6);
+      block('manor-side-wing', stoneMaterial, 0.26, 0.17, 0.1, 0.3, 0.34, 0.46);
+      block('manor-stone-course', stoneMaterial, -0.12, 0.37, -0.02, 0.56, 0.045, 0.64);
+      part('manor-hipped-roof', hipRoof, slateMaterial, -0.1, 0.88, -0.02, 0.48, 0.32, 0.56);
+      part('manor-wing-hipped-roof', hipRoof, tileMaterial, 0.26, 0.49, 0.1, 0.26, 0.3, 0.39);
+      block('manor-entry', timberMaterial, -0.12, 0.14, 0.29, 0.15, 0.28, 0.025);
+      window('manor-upper-door', -0.12, 0.56, 0.29, 0.16, 0.23);
+      window('manor-wing-window', 0.27, 0.2, 0.34, 0.16, 0.14);
+      block('balcony-slab', stoneMaterial, -0.1, 0.39, 0.32, 0.48, 0.06, 0.18);
+      for (const x of [-0.29, 0.09])
+        part('balcony-column', roundWall, wallMaterial, x, 0.18, 0.37, 0.028, 0.35, 0.028);
+      block('balcony-front-rail', timberMaterial, -0.1, 0.52, 0.4, 0.49, 0.025, 0.025);
+      for (const x of [-0.33, -0.18, -0.02, 0.13])
+        block('balcony-baluster', wallMaterial, x, 0.46, 0.4, 0.018, 0.12, 0.018);
+      block('manor-chimney', stoneMaterial, -0.27, 0.98, -0.17, 0.1, 0.28, 0.12);
+      flag.position.set(-0.1, 1.03, -0.02);
+      flag.scale.setScalar(0.65);
+    }
+    group.add(flag);
     place(group, tile, surface);
     const footprint = [-0.4, 0.4].flatMap((dx) =>
       [-0.4, 0.4].map((dz) => surface.sample(tile.x + 0.5 + dx, tile.z + 0.5 + dz)),
@@ -133,7 +254,7 @@ export function createGameModels() {
     const floor = Math.max(surface.elevation(tile.x, tile.z) * surface.step, ...footprint) + 0.01,
       foundationDepth = floor - Math.min(...footprint) + 0.04;
     const foundation = new THREE.Mesh(
-      new THREE.BoxGeometry(0.64, foundationDepth, 0.6),
+      new THREE.BoxGeometry(0.84, foundationDepth, 0.84),
       wallMaterial,
     );
     foundation.userData.ownedGeometry = true;

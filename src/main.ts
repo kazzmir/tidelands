@@ -34,7 +34,7 @@ import { Armageddon, armageddonLand } from './armageddon';
 import { nearestPoleCollector } from './pole-recovery';
 import { leaderVitals, createLeaderVitalsView } from './leader-vitals';
 import { withinTerrainReach } from './terrain-reach';
-import { createGameModels, animateWalkingModel } from './game-models';
+import { createGameModels, animateWalkingModel, buildingPoleHeight } from './game-models';
 import { createDeveloperView, developerModels } from './developer-view';
 import { clampCameraCenter } from './camera-bounds';
 import { bindMinimapNavigation } from './minimap-navigation';
@@ -1019,7 +1019,7 @@ function startGame(): void {
         if (owner.home) {
           if (object.parent !== scene) scene.add(object);
           object.position.copy(position(owner.home));
-          object.position.y += owner.power === 5 ? 2.15 : 0.55 + owner.power * 0.05;
+          object.position.y += buildingPoleHeight(owner.power);
         } else {
           if (object.parent !== owner.mesh) owner.mesh.add(object);
           object.position.set(owner.knight ? 0 : 0.17, 0, owner.knight ? -0.13 : 0.02);
@@ -1037,8 +1037,7 @@ function startGame(): void {
                 Math.abs(resident.home.x - tile.x) <= 1 &&
                 Math.abs(resident.home.z - tile.z) <= 1)),
         );
-        if (building)
-          object.position.y += building.power === 5 ? 2.15 : 0.55 + building.power * 0.05;
+        if (building) object.position.y += buildingPoleHeight(building.power);
         object.position.y = Math.max(SEA, object.position.y) + 0.02;
         object.visible = true;
       } else object.visible = false;
