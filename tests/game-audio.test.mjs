@@ -16,6 +16,9 @@ test('castle and all seven spells have distinct, finite, short synthesized wavef
  const plans=sounds.map(gameSoundPlan);assert.equal(new Set(plans.map(p=>JSON.stringify(p))).size,8);
  for(const plan of plans){assert.ok(plan.length>0&&plan.length<=6);for(const layer of plan){assert.ok(['sine','triangle','square','sawtooth','noise'].includes(layer.wave));for(const value of [layer.frequency,layer.duration,layer.gain])assert.ok(Number.isFinite(value)&&value>0);assert.ok(layer.gain<=.5);assert.ok(layer.start>=0&&layer.start+layer.duration<=2);}}
 });
+test('earthquake includes staggered audible midrange impacts and harmonics, rather than only sub-bass',()=>{
+ const plan=gameSoundPlan('earthquake');assert.ok(plan.filter(layer=>layer.wave==='noise'&&layer.frequency>=650).length>=3);assert.ok(plan.some(layer=>layer.start>=.3&&layer.wave==='noise'));assert.ok(plan.some(layer=>layer.wave==='sawtooth'&&layer.frequency>=160));assert.ok(plan.some(layer=>layer.wave==='sine'&&layer.frequency<=60));
+});
 test('castle cues track construction/upgrade transitions, never redraws, and allow rebuilding after destruction',()=>{
  const tracker=new CastleSoundTracker();assert.equal(tracker.update([]),false);assert.equal(tracker.update(['red:1:2']),true);assert.equal(tracker.update(['red:1:2']),false);assert.equal(tracker.update(['red:1:2','blue:3:4']),true);assert.equal(tracker.update(['blue:3:4']),false);assert.equal(tracker.update(['red:1:2','blue:3:4']),true);tracker.reset();assert.equal(tracker.update(['red:1:2']),true);
 });

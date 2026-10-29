@@ -50,7 +50,15 @@ export function gameSoundPlan(sound: GameSound): readonly SoundLayer[] {
         tone('sine', 1320, 0.22, 0.35, 0.1),
       ];
     case 'earthquake':
-      return [tone('noise', 180, 0, 1.2, 0.5, 65), tone('sine', 55, 0, 1.1, 0.4, 24)];
+      // Midrange debris/impacts survive small speakers; bass alone was effectively inaudible.
+      return [
+        tone('noise', 1600, 0, 0.28, 0.45, 420),
+        tone('noise', 1000, 0.16, 0.38, 0.32, 260),
+        tone('noise', 650, 0.38, 0.55, 0.24, 180),
+        tone('sawtooth', 180, 0, 0.95, 0.18, 90),
+        tone('noise', 220, 0, 1.2, 0.36, 65),
+        tone('sine', 55, 0, 1.1, 0.25, 28),
+      ];
     case 'swamp':
       return [
         tone('noise', 650, 0, 0.7, 0.12, 200),
