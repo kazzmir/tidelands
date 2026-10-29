@@ -154,7 +154,7 @@ The **Test scenario dropdown beside New world** immediately loads the chosen sce
 
 ## Minimap
 
-The upper-left **WORLD** minimap shows the entire archipelago: teal water and elevation-colored land, red/blue house squares, and larger castle squares. Unhoused living characters appear as team-colored dots only where there is room; leaders and knights get priority and crowded dots are suppressed. A white outline indicates the camera's ground footprint. **Click/tap the minimap to move the camera** without changing zoom or orbit, spending power, or casting the selected spell. It works while paused.
+The upper-left **WORLD** minimap shows the entire archipelago: teal water and elevation-colored land, red/blue house squares, and larger castle squares. Unhoused living characters appear as team-colored dots only where there is room; leaders and knights get priority and crowded dots are suppressed. A white outline indicates the camera's ground footprint. **Click/tap or hold and drag on the minimap to move the camera** without changing zoom or orbit, spending power, or casting the selected spell. It works while paused. Dragging continues outside the minimap, clamps to map edges, and stops on release/cancellation or window focus loss.
 
 Terrain is cached at coarse resolution to keep small islands visible, and only cells affected by terrain edits are rescanned. Building/character markers and the camera outline refresh approximately seven times per second. The minimap scales down on mobile and short windows to avoid covering the tools.
 
@@ -260,6 +260,7 @@ Rock persists through dry terrain edits. Lowering it into water destroys the roc
 - `src/encounter-scenario.ts` — shared-island setup and occupied-step avoidance for encounter testing.
 - `tests/encounter-scenario.test.mjs` — connected camps, movement reservations, and combat-enabled scenario guards.
 - `src/minimap.ts` — incremental elevation raster, team markers, crowd suppression, and map navigation coordinates.
+- `src/minimap-navigation.ts` — captured mouse/touch minimap dragging and release/cancellation handling.
 - `tests/minimap.test.mjs` — terrain cache correctness, team glyphs, crowded characters, and coordinate bounds.
 - `src/game-models.ts` — shared normal house/castle, settler, knight/equipment, and leader models, used by normal play and the startup preview.
 - `src/attract-simulation.ts`, `src/attract-view.ts` — isolated, bounded AI-vs-AI startup preview using the normal game's shared models.

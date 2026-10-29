@@ -36,6 +36,7 @@ import { leaderVitals, createLeaderVitalsView } from './leader-vitals';
 import { withinTerrainReach } from './terrain-reach';
 import { createGameModels } from './game-models';
 import { clampCameraCenter } from './camera-bounds';
+import { bindMinimapNavigation } from './minimap-navigation';
 import { createWaterTextures, animateWaterTextures } from './water-texture';
 import {
   convertLeaderToKnight,
@@ -2501,10 +2502,8 @@ function startGame(): void {
     button.title = `${paused ? 'Resume' : 'Pause'} simulation (Space)`;
   }
   function bindSimulationControls(): void {
-    minimapCanvas.addEventListener('pointerdown', (event) => {
-      if (event.button !== 0) return;
-      event.preventDefault();
-      event.stopPropagation();
+    bindMinimapNavigation(minimapCanvas, (event) => {
+      if (!gameStarted || newGameMenu.open) return;
       const bounds = minimapCanvas.getBoundingClientRect();
       const point = minimapWorldPoint(
         (event.clientX - bounds.left) / bounds.width,
