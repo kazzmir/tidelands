@@ -60,7 +60,7 @@ Gathering, playback, speed, and camera controls sit in a compact, right-aligned 
 - **Hold Shift:** select and highlight the whole surface instead of a point. **Shift+left-click** raises all four corners; **Shift+right-click** lowers all four. The tile keeps its shape, and neighboring tiles follow the shared points. If any corner would exceed heights 0–14, the entire edit is rejected.
 - **1 / 2:** select the action for touch taps; mouse clicks always use the button mapping above.
 - **3 (Inspect):** hover to see elevation, terrain, and inhabitants; touch taps inspect without editing.
-- **Arrow keys / drag:** pan; **hold middle button and drag:** orbit; **scroll:** zoom. Hold arrows for continuous, camera-relative movement, including while paused.
+- **Arrow keys / drag:** pan; **hold middle button and drag:** orbit; **scroll:** zoom. Hold arrows for continuous, camera-relative movement, including while paused. Panning stays parallel to the ground, and the camera center cannot pass the selected map's edges (the viewport can still show ocean beyond them).
 - **Touch:** drag to pan; use two fingers to zoom/orbit.
 - **L / leader-pole button:** jump to your pole's current position, including when housed or dropped in water, without changing zoom/orbit.
 - **E / minimap:** view the enemy island; **Home / Reset View:** return to the human starting island.
@@ -236,6 +236,7 @@ Rock persists through dry terrain edits. Lowering it into water destroys the roc
 - `src/main.ts` — a single `startGame()` entry point owns game state; named functions create the scene/icons/water, bind terrain/spell/tool/simulation/keyboard input, and start rendering. Terrain, scenery, simulation, and interactions run inside functions rather than module-level initialization.
 - `src/terrain-reach.ts` — circular 10-tile manual-edit influence from living own characters.
 - `tests/terrain-reach.test.mjs` — radius boundaries, surface centers, ownership, movement, homes, and drowning rescue.
+- `src/camera-bounds.ts` — map-size-aware camera-center limits that preserve zoom and orbit.
 - `src/terrain-surface.ts` — shared-corner triangle mesh, bounded camera-region geometry, and matching surface-height sampling.
 - `src/world-generation.ts` — high-point seeding and clustered terrain growth using the shared height-invariant propagation.
 - `tests/world-generation.test.mjs` — world dimensions, clustered-land connectivity, exact peak-derived heights (no artificial connectors), full-map slope limits, reproducibility, and bounded rendering.

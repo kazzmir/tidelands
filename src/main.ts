@@ -35,6 +35,7 @@ import { nearestPoleCollector } from './pole-recovery';
 import { leaderVitals, createLeaderVitalsView } from './leader-vitals';
 import { withinTerrainReach } from './terrain-reach';
 import { createGameModels } from './game-models';
+import { clampCameraCenter } from './camera-bounds';
 import { createWaterTextures, animateWaterTextures } from './water-texture';
 import {
   convertLeaderToKnight,
@@ -170,6 +171,7 @@ function createWorldView() {
   const camera = new THREE.OrthographicCamera(-25, 25, 20, -20, 0.1, 180);
   const controls = new OrbitControls(camera, canvas);
   controls.enableDamping = true;
+  controls.screenSpacePanning = false;
   controls.dampingFactor = 0.08;
   controls.enableRotate = true;
   controls.minPolarAngle = Math.PI / 6;
@@ -217,6 +219,10 @@ function startGame(): void {
   );
   let worldSize: WorldSize = 'large';
   let SIZE = worldDimension(worldSize);
+  function keepCameraInBounds(): void {
+    if (clampCameraCenter(camera.position, controls.target, SIZE)) camera.updateMatrixWorld();
+  }
+  controls.addEventListener('change', keepCameraInBounds);
   let gameStarted = false;
   const newGameMenu = element<HTMLDialogElement>('#new-game-menu');
   let startingGame = false;
@@ -2780,6 +2786,7 @@ function startGame(): void {
         .multiplyScalar((24 * Math.min(elapsed, 0.05)) / camera.zoom);
       camera.position.add(panOffset);
       controls.target.add(panOffset);
+      keepCameraInBounds();
     }
     // Real-time easing keeps feedback responsive even when the simulation is paused.
     hoverStrength = THREE.MathUtils.lerp(
@@ -3124,6 +3131,7 @@ function startGame(): void {
     updateRallyButton();
     updateEnemyStatus();
     controls.update();
+    keepCameraInBounds();
     const viewChanged = updateVisibleTerrain();
     updateMinimap();
     sun.position.copy(controls.target).add(new THREE.Vector3(-18, 32, 12));
