@@ -3,7 +3,7 @@ import {readFile} from 'node:fs/promises';
 import test from 'node:test';
 import {transformWithOxc,parseSync} from 'vite';
 const {code}=await transformWithOxc(await readFile(new URL('../src/game-audio.ts',import.meta.url),'utf8'),'game-audio.ts',{target:'es2022'});
-const {createGameAudio,gameSoundPlan,CastleSoundTracker}=await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
+const {createGameAudio,gameSoundPlan,gameSoundOptions,CastleSoundTracker}=await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
 const sounds=['castle','pole','knight','earthquake','swamp','volcano','flood','armageddon'];
 function parameter(value=1){return{value,events:[],setValueAtTime(v,t){this.events.push(['set',v,t]);this.value=v;},linearRampToValueAtTime(v,t){this.events.push(['linear',v,t]);this.value=v;},exponentialRampToValueAtTime(v,t){this.events.push(['exp',v,t]);this.value=v;},cancelScheduledValues(t){this.events.push(['cancel',t]);}};}
 function context(){
@@ -32,6 +32,16 @@ test('unavailable/denied Web Audio fails silently without affecting game actions
  for(const createContext of [()=>null,()=>{throw Error('denied');}]){const audio=createGameAudio({createContext});assert.doesNotThrow(()=>audio.unlock());assert.equal(audio.play('knight'),false);audio.dispose();}
  const broken=context();broken.createBuffer=()=>{throw Error('allocation denied');};const partial=createGameAudio({createContext:()=>broken});partial.unlock();assert.equal(broken.closed,1);assert.equal(partial.play('castle'),false);partial.dispose();
  const ctx=context();ctx.state='suspended';ctx.resume=()=>Promise.reject(Error('blocked'));const audio=createGameAudio({createContext:()=>ctx});audio.unlock();assert.equal(audio.play('castle'),false);await new Promise(resolve=>setImmediate(resolve));audio.dispose();
+});
+test('developer sound picker covers castle construction and every spell recipe',()=>{
+ const options=gameSoundOptions();assert.deepEqual(new Set(options.map(s=>s.id)),new Set(sounds));assert.ok(options.every(s=>s.label.length>0));assert.equal(new Set(options.map(s=>s.label)).size,8);
+});
+test('explicit developer previews bypass only the live-world gate, obey mute/visibility policy, and replace previous previews',()=>{
+ const ctx=context();let preview=false;const audio=createGameAudio({createContext:()=>ctx,isAudible:()=>false,isPreviewAudible:()=>preview});audio.unlock();assert.equal(audio.preview('castle'),false);preview=true;assert.equal(audio.play('castle'),false);assert.equal(audio.preview('castle'),true);assert.equal(audio.activeCount,1);assert.equal(audio.preview('castle'),true);assert.equal(audio.activeCount,1);audio.setMuted(true);assert.equal(audio.preview('pole'),false);audio.setMuted(false);preview=false;assert.equal(audio.preview('pole'),false);ctx.flush();audio.dispose();
+ const standard=createGameAudio({createContext:()=>context()});standard.unlock();assert.equal(standard.preview('castle'),false);standard.dispose();
+});
+test('developer audition buttons call audio directly without casting spells and stop playback on exit',async()=>{
+ const source=await readFile(new URL('../src/main.ts',import.meta.url),'utf8'),html=await readFile(new URL('../index.html',import.meta.url),'utf8');const binding=source.slice(source.indexOf('function bindDeveloperMode()'),source.indexOf('function updatePreviewControls()'));assert.match(binding,/gameSoundOptions\(\)/);assert.match(binding,/button.dataset.developerSound = sound.id/);assert.match(binding,/gameAudio.preview\(sound.id\)/);assert.doesNotMatch(binding,/castSpell\(|\.spend\(/);assert.match(source,/function stopDeveloperMode\(\): void \{\s*if \(!developerView\) return;\s*gameAudio.stopAll\(\)/);assert.match(html,/id="developer-sounds" role="group"/);assert.match(html,/id="developer-sound-status" role="status"/);
 });
 test('live integration plays only successful casts, tracks castle identities, and silences previews/hidden tabs',async()=>{
  const source=await readFile(new URL('../src/main.ts',import.meta.url),'utf8'),functions=new Map();function visit(node){if(!node||typeof node!=='object')return;if(node.type==='FunctionDeclaration'&&node.id)functions.set(node.id.name,source.slice(node.start,node.end));for(const value of Object.values(node))if(Array.isArray(value))value.forEach(visit);else if(value&&typeof value==='object')visit(value);}visit(parseSync('main.ts',source).program);

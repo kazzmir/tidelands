@@ -1,6 +1,18 @@
 import type { Spell } from './spells';
 
 export type GameSound = Spell | 'castle';
+export function gameSoundOptions(): readonly { id: GameSound; label: string }[] {
+  return [
+    { id: 'castle', label: 'Castle built' },
+    { id: 'pole', label: 'Move pole' },
+    { id: 'knight', label: 'Knight' },
+    { id: 'earthquake', label: 'Earthquake' },
+    { id: 'swamp', label: 'Swamp' },
+    { id: 'volcano', label: 'Volcano' },
+    { id: 'flood', label: 'Flood' },
+    { id: 'armageddon', label: 'Armageddon' },
+  ];
+}
 interface SoundLayer {
   wave: OscillatorType | 'noise';
   frequency: number;
@@ -77,7 +89,11 @@ export class CastleSoundTracker {
 }
 
 export function createGameAudio(
-  options: { createContext?: () => AudioContext | null; isAudible?: () => boolean } = {},
+  options: {
+    createContext?: () => AudioContext | null;
+    isAudible?: () => boolean;
+    isPreviewAudible?: () => boolean;
+  } = {},
 ) {
   let context: AudioContext | null = null,
     master: GainNode | null = null,
@@ -128,7 +144,7 @@ export function createGameAudio(
     active.clear();
     lastPlayed.clear();
   }
-  function play(sound: GameSound): boolean {
+  function play(sound: GameSound, preview = false): boolean {
     const ctx = context;
     if (
       disposed ||
@@ -137,7 +153,7 @@ export function createGameAudio(
       !master ||
       !noise ||
       ctx.state !== 'running' ||
-      options.isAudible?.() === false
+      (preview ? options.isPreviewAudible?.() !== true : options.isAudible?.() === false)
     )
       return false;
     const now = ctx.currentTime;
@@ -235,7 +251,12 @@ export function createGameAudio(
   }
   return {
     unlock,
-    play,
+    play: (sound: GameSound) => play(sound),
+    preview(sound: GameSound): boolean {
+      if (options.isPreviewAudible?.() !== true) return false;
+      stopAll();
+      return play(sound, true);
+    },
     stopAll,
     setMuted,
     dispose,

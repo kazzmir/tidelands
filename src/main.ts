@@ -38,7 +38,7 @@ import { createGameModels, animateWalkingModel, buildingPoleHeight } from './gam
 import { createDeveloperView, developerModels } from './developer-view';
 import { clampCameraCenter } from './camera-bounds';
 import { bindMinimapNavigation } from './minimap-navigation';
-import { createGameAudio, CastleSoundTracker } from './game-audio';
+import { createGameAudio, CastleSoundTracker, gameSoundOptions } from './game-audio';
 import { createWaterTextures, animateWaterTextures } from './water-texture';
 import {
   convertLeaderToKnight,
@@ -236,6 +236,7 @@ function startGame(): void {
   let developerView: ReturnType<typeof createDeveloperView> | null = null;
   const gameAudio = createGameAudio({
     isAudible: () => gameStarted && !newGameMenu.open && !developerView && !document.hidden,
+    isPreviewAudible: () => gameStarted && !newGameMenu.open && !!developerView && !document.hidden,
   });
   const castleSoundTracker = new CastleSoundTracker();
   let encounterTest = false;
@@ -2641,6 +2642,7 @@ function startGame(): void {
   }
   function stopDeveloperMode(): void {
     if (!developerView) return;
+    gameAudio.stopAll();
     developerView.dispose();
     developerView = null;
     document.body.classList.remove('developer-mode');
@@ -2653,6 +2655,25 @@ function startGame(): void {
     lastPointer = null;
   }
   function bindDeveloperMode(): void {
+    const sounds = element('#developer-sounds');
+    for (const sound of gameSoundOptions()) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = sound.label;
+      button.dataset.developerSound = sound.id;
+      button.setAttribute('aria-label', `Play ${sound.label} sound`);
+      button.addEventListener('click', () => {
+        if (!developerView) return;
+        gameAudio.unlock();
+        const played = gameAudio.preview(sound.id);
+        element('#developer-sound-status').textContent = played
+          ? `Playing: ${sound.label}`
+          : gameAudio.muted
+            ? 'Sounds muted. Unmute with the footer speaker.'
+            : 'Audio unavailable. Try again after enabling sound.';
+      });
+      sounds.append(button);
+    }
     const picker = element('#developer-models');
     for (const model of developerModels()) {
       const button = document.createElement('button');
@@ -2685,6 +2706,7 @@ function startGame(): void {
       document.body.classList.add('developer-mode');
       element('#developer-panel').hidden = false;
       element('#developer-caption').hidden = false;
+      element('#developer-sound-status').textContent = 'Play a sound without changing the game.';
       element('#developer-toggle').setAttribute('aria-pressed', 'true');
       updateDeveloperControls();
     });

@@ -145,13 +145,13 @@ All spells update homes, castles, farming, trees, and settler positions just lik
 
 New castles play a short construction fanfare. Each successful spell has its own synthesized cue: pole chimes, a knight flourish, earthquake rumble, swamp bubbles, a volcanic burst, a flood whoosh, and an Armageddon chord. Enemy spell casts use the same cues. The sounds use Web Audio oscillators and filtered noise; there are no audio downloads.
 
-The **speaker icon in the footer** mutes/unmutes effects and remembers the setting. Audio unlocks only after a real click/tap/key gesture. Invalid or unaffordable casts, scene redraws, startup AI previews and developer model previews are silent. Pausing, opening settings, entering the model viewer or hiding the tab stops existing effects; no delayed sound backlog is replayed. Missing or blocked Web Audio never prevents playing.
+The **speaker icon in the footer** mutes/unmutes effects and remembers the setting. Audio unlocks only after a real click/tap/key gesture. Invalid or unaffordable casts, scene redraws, startup AI previews and developer model animations are silent. Explicit developer sound buttons can audition the effects. Pausing, opening settings, entering the model viewer or hiding the tab stops existing effects; no delayed sound backlog is replayed. Missing or blocked Web Audio never prevents playing.
 
 ## Developer model viewer
 
 The **code (`</>`) icon in the bottom-right footer, beside the wave icon and “Inspired by Populous…” credit,** toggles developer mode after starting a game. The left-side picker shows the **walking character**, **houses at levels 1–4**, **level-5 castle**, **walking knight with full equipment**, and **two characters fighting** with the normal strike poses, red glow and yellow lightning.
 
-These are the real game models, using shared production walking/combat animations. Drag the preview to orbit and scroll/pinch to zoom. **Pause animation / Play animation** controls playback; reduced-motion preferences start it paused. The live world, economies and camera are frozen and untouched while inspecting models. Press **Escape** or the code icon to return with the original pause state and touch controls restored.
+These are the real game models, using shared production walking/combat animations. Drag the preview to orbit and scroll/pinch to zoom. **Pause animation / Play animation** controls playback; reduced-motion preferences start it paused. The **Sound effects** section has buttons to audition the castle and all seven spell sounds without casting spells or spending power. It respects the footer mute setting, replaces the previous audition, and stops playing when you exit developer mode. The live world, economies and camera are frozen and untouched while inspecting models. Press **Escape** or the code icon to return with the original pause state and touch controls restored.
 
 ## Test scenarios
 
