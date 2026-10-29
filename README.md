@@ -65,7 +65,7 @@ Gathering, playback, speed, and camera controls sit in a compact, right-aligned 
 - **1 / 2:** select the action for touch taps; mouse clicks always use the button mapping above.
 - **3 (Inspect):** hover to see elevation, terrain, and inhabitants; touch taps inspect without editing.
 - **Arrow keys / drag:** pan; **hold middle button and drag:** orbit; **scroll:** zoom. Hold arrows for continuous, camera-relative movement, including while paused. Panning stays parallel to the ground, and the camera center cannot pass the selected map's edges (the viewport can still show ocean beyond them).
-- **Touch:** drag to pan; use two fingers to zoom/orbit.
+- **Touch:** tap to use the selected terrain tool (Raise by default); **hold still for at least 0.5 seconds, then release to lower land once**, without switching your selected tool. Inspect and spell/anchor targeting keep their normal behavior. Drag to pan; use two fingers to zoom/orbit. Dragging, multi-touch, cancellation and focus loss never complete a pending terrain press.
 - **L / leader-pole button:** jump to your pole's current position, including when housed or dropped in water, without changing zoom/orbit.
 - **E / minimap:** view the enemy island; **Home / Reset View:** return to the human starting island.
 - **Space / pause button:** pause/resume. Pausing dims the game area behind large centered **PAUSED** text; playback controls remain visible and usable. Camera movement, terrain editing, and spell casting still work while paused.

@@ -42,6 +42,7 @@ import { createGameModels, animateWalkingModel, buildingPoleHeight } from './gam
 import { createDeveloperView, developerModels } from './developer-view';
 import { clampCameraCenter } from './camera-bounds';
 import { bindMinimapNavigation } from './minimap-navigation';
+import { TerrainPressTracker } from './terrain-press';
 import { createGameAudio, CastleSoundTracker, gameSoundOptions } from './game-audio';
 import { chooseMusicTrack, allMusicTracks, type MusicTrack } from './ambient-music';
 import { createWaterTextures, animateWaterTextures } from './water-texture';
@@ -1969,7 +1970,7 @@ function startGame(): void {
   const pointer = new THREE.Vector2();
   let hovered: Tile | null = null;
   let tool: Tool = 'raise';
-  let pointerDown: { x: number; y: number } | null = null;
+  const terrainPress = new TerrainPressTracker();
   let toastTimer: ReturnType<typeof setTimeout>;
   function toast(message: string): void {
     const node = element('#toast');
@@ -2128,11 +2129,13 @@ function startGame(): void {
   }
   function bindTerrainInput(): void {
     canvas.addEventListener('pointermove', (event) => {
+      terrainPress.move(event);
       if (watchView || gameWinner !== null || developerView) return;
       setShift(event.shiftKey);
       updateHover(event);
     });
     canvas.addEventListener('pointerleave', () => {
+      terrainPress.cancel();
       hoverTarget = 0;
       surfaceTarget = 0;
       hovered = null;
@@ -2141,13 +2144,14 @@ function startGame(): void {
       element('#tile-info').hidden = true;
     });
     canvas.addEventListener('pointerdown', (event) => {
-      if (watchView || developerView) return;
-      pointerDown = { x: event.clientX, y: event.clientY };
+      if (watchView || developerView || !gameStarted || newGameMenu.open || gameWinner !== null)
+        return;
+      terrainPress.begin(event, performance.now());
     });
     canvas.addEventListener('pointerup', (event) => {
-      const down = pointerDown;
-      pointerDown = null;
+      const down = terrainPress.finish(event, performance.now());
       if (watchView || gameWinner !== null || developerView || !down) return;
+      if (!gameStarted || newGameMenu.open) return;
       if (
         (event.button !== 0 && event.button !== 2) ||
         Math.hypot(event.clientX - down.x, event.clientY - down.y) > 5
@@ -2167,10 +2171,19 @@ function startGame(): void {
         return;
       }
       if (!hovered || !hoveredCorner) return;
-      // Mouse buttons directly choose elevation; touch keeps the selected toolbar tool.
-      const action = event.pointerType === 'touch' ? tool : event.button === 2 ? 'lower' : 'raise';
+      // A stationary long touch temporarily lowers; taps keep the selected tool.
+      const action =
+        event.pointerType === 'touch'
+          ? tool === 'inspect'
+            ? 'inspect'
+            : down.longPress
+              ? 'lower'
+              : tool
+          : event.button === 2
+            ? 'lower'
+            : 'raise';
       if (action === 'inspect') return;
-      selectTool(action);
+      if (event.pointerType !== 'touch' || !down.longPress) selectTool(action);
       const delta = action === 'raise' ? 1 : -1;
       const selection = shiftHeld ? hovered : hoveredCorner;
       if (!withinTerrainReach(selection, shiftHeld, settlers, populationColor, combatPosition)) {
@@ -2197,6 +2210,12 @@ function startGame(): void {
       refreshTerrainAfterEdit();
       updateHover(event);
     });
+    canvas.addEventListener('pointercancel', (event) =>
+      terrainPress.cancelPointer(event.pointerId),
+    );
+    canvas.addEventListener('lostpointercapture', (event) =>
+      terrainPress.cancelPointer(event.pointerId),
+    );
     canvas.addEventListener('contextmenu', (event) => event.preventDefault());
   }
   function refreshTerrainAfterEdit(): void {
@@ -2626,19 +2645,14 @@ function startGame(): void {
   }
   function selectTool(next: Tool): void {
     tool = next;
+    const editHint = window.matchMedia('(pointer: coarse)').matches
+      ? `${next === 'lower' ? 'Tap to lower' : 'Tap to raise'} · Hold to lower · Drag to pan`
+      : shiftHeld
+        ? 'All four corners · Left raises · Right lowers'
+        : 'Left raises · Right lowers · Shift selects surface';
     const hints: Record<Tool, [string, string]> = {
-      raise: [
-        shiftHeld ? 'Raise a surface' : 'Raise a corner',
-        shiftHeld
-          ? 'All four corners · Left raises · Right lowers'
-          : 'Left raises · Right lowers · Shift selects surface',
-      ],
-      lower: [
-        shiftHeld ? 'Lower a surface' : 'Lower a corner',
-        shiftHeld
-          ? 'All four corners · Left raises · Right lowers'
-          : 'Left raises · Right lowers · Shift selects surface',
-      ],
+      raise: [shiftHeld ? 'Raise a surface' : 'Raise a corner', editHint],
+      lower: [shiftHeld ? 'Lower a surface' : 'Lower a corner', editHint],
       inspect: ['Explore your world', 'Hover a tile to discover what lives there'],
     };
     element('#tool-hint').innerHTML =
@@ -2849,7 +2863,7 @@ function startGame(): void {
     element('#developer-toggle').setAttribute('aria-pressed', 'false');
     controls.enabled = gameStarted && !newGameMenu.open;
     panKeys.clear();
-    pointerDown = null;
+    terrainPress.cancel();
     lastPointer = null;
   }
   function bindDeveloperMode(): void {
@@ -2914,7 +2928,7 @@ function startGame(): void {
       }
       if (watchView || !gameStarted || newGameMenu.open) return;
       panKeys.clear();
-      pointerDown = null;
+      terrainPress.cancel();
       lastPointer = null;
       controls.enabled = false;
       developerMusicPreview = false;
@@ -2968,7 +2982,7 @@ function startGame(): void {
     seed += 17;
     gameStarted = true;
     panKeys.clear();
-    pointerDown = null;
+    terrainPress.cancel();
     lastPointer = null;
     controls.enabled = false;
     canvas.style.cursor = 'default';
@@ -3097,6 +3111,7 @@ function startGame(): void {
     updatePreviewControls();
     panKeys.clear();
     controls.enabled = false;
+    terrainPress.cancel();
     if (watchControls) watchControls.enabled = false;
     newGameMenu.showModal();
   }
@@ -3130,7 +3145,10 @@ function startGame(): void {
     element('#menu-game-mode').addEventListener('change', updateStartButton);
     document.addEventListener('visibilitychange', () => {
       if (attractView) clock.getDelta();
-      if (document.hidden) gameAudio.stopAll();
+      if (document.hidden) {
+        gameAudio.stopAll();
+        terrainPress.cancel();
+      }
       gameAudio.syncMusic();
     });
     newGameMenu.addEventListener('cancel', (event) => {
@@ -3288,6 +3306,7 @@ function startGame(): void {
       if (event.key === 'Shift') setShift(event.shiftKey);
     });
     window.addEventListener('blur', () => {
+      terrainPress.cancel();
       panKeys.clear();
       lastPointer = null;
       setShift(false);
