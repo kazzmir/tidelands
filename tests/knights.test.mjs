@@ -44,7 +44,7 @@ test('knights target living enemies, never their own population',()=>{
 test('melee applies 1.5x starting knight damage and simultaneous enemy retaliation',()=>{
  const knight=actor(),enemy=actor('blue',1);convertLeaderToKnight(knight,()=>true);
  assert.deepEqual(advanceKnightCombat([knight,enemy],1,tileOf),[]);
- assert.equal(knight.characterPower,14);assert.equal(enemy.characterPower,8.5);
+ assert.equal(knight.characterPower,13);assert.equal(enemy.characterPower,7);
  const friend=actor('red',0);const before=knight.characterPower;
  advanceKnightCombat([knight,friend],10,tileOf);
  assert.equal(knight.characterPower,before);assert.equal(friend.characterPower,10);
@@ -53,8 +53,8 @@ test('melee applies 1.5x starting knight damage and simultaneous enemy retaliati
 test('two opposing knights fight once per pair, independent of array order',()=>{
  const a=actor(),b=actor('blue',1);convertLeaderToKnight(a,()=>true);convertLeaderToKnight(b,()=>true);
  advanceKnightCombat([a,b],1,tileOf);
- assert.equal(a.characterPower,13.5);assert.equal(b.characterPower,13.5);
- for(let i=0;i<10;i++)advanceKnightCombat([a,b],1,tileOf);
+ assert.equal(a.characterPower,12);assert.equal(b.characterPower,12);
+ advanceKnightCombat([a,b],5,tileOf);
  assert.equal(a.characterPower,0);assert.equal(b.characterPower,0);
 });
 
@@ -62,10 +62,13 @@ test('conversion multiplies combat power by 1.5 even for wounded or accumulated 
  for(const hp of [2,10,20,240]){
   const leader=actor('red',0,hp),before=combatStrength(leader);
   convertLeaderToKnight(leader,()=>true);
-  assert.equal(combatStrength(leader),before*1.5);
+  assert.ok(Math.abs(combatStrength(leader)-before*1.5)<1e-10);
  }
 });
 
+test('fractional or wounded character power has no fixed damage floor',()=>{
+ for(const hp of [.1,2,10,100]){const character=actor('red',0,hp);assert.equal(combatStrength(character),hp/5);character.knight=true;assert.equal(combatStrength(character),hp/5);}
+});
 test('death and pole pickup do not transfer knighthood to a successor',()=>{
  const state=new Leadership(),knight=actor(),successor=actor();
  state.appoint(knight);convertLeaderToKnight(knight,()=>true);

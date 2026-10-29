@@ -1,6 +1,6 @@
 # AI simulation, tournaments, and difficulty
 
-The game has a rendering-free fixed-step simulator, five parameterized policies, and a startup menu with **Easy / Normal / Hard** AI and world-size choices. The current live game and default tournaments start each population with **500 power**. The checked-in historical calibration used **10,000 power**; its scores have not been revalidated for the new funding. Policies share production rules/controllers; they do not get extra starting money, residents, HP, income, or damage.
+The game has a rendering-free fixed-step simulator, five parameterized policies, and a startup menu with **Easy / Normal / Hard** AI and world-size choices. The current live game and default tournaments start each population with **500 power**. The checked-in historical calibration used **10,000 power**; its scores have not been revalidated for the new funding or the current **attack power / 5 HP/s** combat rate (historical reports used /10). Policies share production rules/controllers; they do not get extra starting money, residents, HP, income, or damage.
 
 ## Startup attract mode
 

@@ -1,6 +1,6 @@
 # AI calibration results
 
-> **Historical funding:** These recorded games used **10,000 starting power per side**. The live game and new tournament defaults now use **500**. The policy choices are retained, but the win rates below have **not** been revalidated for the new funding. Raw historical reports are unchanged.
+> **Historical funding:** These recorded games used **10,000 starting power per side**. The live game and new tournament defaults now use **500**. The policy choices are retained, but the win rates below have **not** been revalidated for the new funding. Raw historical reports are unchanged. They also used combat damage of **attack power / 10 HP/s**; current combat uses **attack power / 5 HP/s**, so these scores are not recalibrated for the faster combat either.
 
 ## Selected playable modes
 

@@ -17,17 +17,21 @@ function actor(population,x,power=10,extra={}){return {population,x,z:0,characte
 test('nearby ordinary opponents engage and exchange simultaneous proportional damage',()=>{
  const a=actor('red',0,20),b=actor('blue',1),system=new CombatSystem();system.match([a,b],x=>x);
  assert.equal(system.opponent(a),b);assert.equal(system.opponent(b),a);
- system.advance(2);assert.equal(a.characterPower,18);assert.equal(b.characterPower,6);
- system.match([a,b],x=>x);system.advance(1);assert.equal(a.characterPower,17);assert.equal(b.characterPower,4);
+ system.advance(2);assert.equal(a.characterPower,16);assert.equal(b.characterPower,2);
+ system.match([a,b],x=>x);system.advance(.25);assert.equal(a.characterPower,15.5);assert.equal(b.characterPower,1);
 });
 test('low-power units also deal proportionally less damage, without a fixed damage floor',()=>{
  const a=actor('red',0,5),b=actor('blue',1),system=new CombatSystem();system.match([a,b],x=>x);system.advance(1);
- assert.equal(a.characterPower,4);assert.equal(b.characterPower,9.5);
+ assert.equal(a.characterPower,3);assert.equal(b.characterPower,9);
+});
+test('fractional attack power deals exactly power/5 without a minimum floor',()=>{
+ const a=actor('red',0,.5),b=actor('blue',1,.25),system=new CombatSystem();system.match([a,b],x=>x);system.advance(1);assert.ok(Math.abs(a.characterPower-.45)<1e-12);assert.ok(Math.abs(b.characterPower-.15)<1e-12);
 });
 test('equal opponents finish together; zero time and repeated death ticks cause no damage',()=>{
  const a=actor('red',0),b=actor('blue',1),system=new CombatSystem();system.match([a,b],x=>x);
  assert.deepEqual(system.advance(0),[]);assert.equal(a.characterPower,10);
- assert.deepEqual(system.advance(10),[a,b]);assert.equal(a.characterPower,0);assert.equal(b.characterPower,0);
+ system.advance(4);assert.equal(a.characterPower,2);assert.equal(b.characterPower,2);
+ assert.deepEqual(system.advance(1),[a,b]);assert.equal(a.characterPower,0);assert.equal(b.characterPower,0);
  assert.deepEqual(system.advance(10),[]);assert.equal(system.opponent(a),null);
 });
 test('large time steps stop retaliation at death rather than letting a defeated unit keep attacking',()=>{
@@ -43,14 +47,14 @@ test('engagements remain mutual and stable rather than changing targets or stack
  const a=actor('red',0),b=actor('blue',1),c=actor('blue',1.1),system=new CombatSystem();system.match([a,b,c],x=>x);
  assert.equal(system.pairs.length,1);assert.equal(system.opponent(a),b);assert.equal(system.opponent(c),null);
  c.x=.2;system.match([c,b,a],x=>x);assert.equal(system.opponent(a),b);
- system.advance(1);assert.equal(a.characterPower,9);assert.equal(b.characterPower,9);assert.equal(c.characterPower,10);
+ system.advance(1);assert.equal(a.characterPower,8);assert.equal(b.characterPower,8);assert.equal(c.characterPower,10);
  b.x=4;system.match([a,b,c],x=>x);assert.equal(system.opponent(a),c);
  system.reset();assert.equal(system.pairs.length,0);assert.equal(system.opponents.size,0);
 });
 test('damage does not depend on population array order',()=>{
  for(const reverse of [false,true]){
   const a=actor('red',0,20),b=actor('blue',1),system=new CombatSystem();system.match(reverse?[b,a]:[a,b],x=>x);system.advance(2);
-  assert.equal(a.characterPower,18);assert.equal(b.characterPower,6);
+  assert.equal(a.characterPower,16);assert.equal(b.characterPower,2);
  }
 });
 test('spatial buckets find opponents across boundaries and snapshot each position only once',()=>{
@@ -60,6 +64,6 @@ test('spatial buckets find opponents across boundaries and snapshot each positio
 });
 test('additional gathered power increases attack strength once',()=>{
  const a=actor('red',0,15,{knight:true}),b=actor('blue',1),system=new CombatSystem();system.match([a,b],x=>x);
- a.characterPower+=10;system.advance(1);assert.equal(b.characterPower,7.5);
- system.match([a,b],x=>x);system.advance(1);assert.equal(b.characterPower,5);
+ a.characterPower+=10;system.advance(1);assert.equal(b.characterPower,5);
+ system.match([a,b],x=>x);system.advance(.5);assert.equal(b.characterPower,2.5);
 });

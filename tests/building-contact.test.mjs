@@ -47,7 +47,7 @@ test('castle release preserves the resident and exact character power, removes r
  assert.equal(defender.home,null);assert.equal(defender.power,0);assert.equal(defender.characterPower,37.5);assert.equal(home.house,false);
  assert.ok([...tiles.values()].every(t=>!t.reserved&&!t.castleGap));assert.ok(Math.abs(Math.hypot(defender.point.x-attacker.point.x,defender.point.z-attacker.point.z)-.75)<1e-10);
  const bystander=actor('blue',7.4,5.5),combat=new CombatSystem();assert.ok(combat.engage(attacker,defender));combat.match([attacker,bystander,defender],a=>a.point);
- assert.equal(combat.opponent(attacker),defender);combat.advance(1);assert.equal(attacker.characterPower,6.25);assert.equal(defender.characterPower,36.5);assert.equal(bystander.characterPower,10);
+ assert.equal(combat.opponent(attacker),defender);combat.advance(1);assert.equal(attacker.characterPower,2.5);assert.equal(defender.characterPower,35.5);assert.equal(bystander.characterPower,10);
 });
 test('housed residents cannot be attacked by the old remote garrison combat path',()=>{
  const defender=resident(),attacker=actor('red',6.5,5.5);attacker.knight=true;

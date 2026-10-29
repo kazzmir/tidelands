@@ -151,8 +151,8 @@ export class CombatSystem<C extends CombatCharacter> {
       // make equal fights asymptotically endless. Newly gathered power still counts.
       pair.powerA += Math.max(0, a.characterPower - pair.healthA);
       pair.powerB += Math.max(0, b.characterPower - pair.healthB);
-      const rateA = pair.powerA / 10,
-        rateB = pair.powerB / 10;
+      const rateA = pair.powerA / 5,
+        rateB = pair.powerB / 5;
       const duration = Math.min(seconds, a.characterPower / rateB, b.characterPower / rateA);
       a.characterPower = Math.max(0, a.characterPower - rateB * duration);
       b.characterPower = Math.max(0, b.characterPower - rateA * duration);

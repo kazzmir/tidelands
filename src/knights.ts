@@ -61,9 +61,9 @@ export function inCombatRange(a: GridPoint, b: GridPoint, range = 1): boolean {
   return Math.abs(a.x - b.x) + Math.abs(a.z - b.z) <= range;
 }
 
-/** Preserve base damage when wounded so equal combatants cannot fight asymptotically forever. */
+/** Proportional HP damage; the production CombatSystem snapshots engagement power. */
 export function combatStrength(character: CombatCharacter): number {
-  return Math.max(character.knight ? 1.5 : 1, character.characterPower / 10);
+  return Math.max(0, character.characterPower) / 5;
 }
 
 /** Snapshot simultaneous melee damage, including retaliation, without array-order advantages. */
@@ -85,7 +85,7 @@ export function advanceKnightCombat<C extends CombatCharacter>(
     const pair = `${Math.min(i, j)}:${Math.max(i, j)}`;
     if (pairs.has(pair)) continue;
     pairs.add(pair);
-    // A normal starting character deals 1 HP/s; a newly converted knight deals 1.5 HP/s.
+    // A normal starting character deals 2 HP/s; a newly converted knight deals 3 HP/s.
     damage.set(enemy, (damage.get(enemy) ?? 0) + combatStrength(knight) * seconds);
     damage.set(knight, (damage.get(knight) ?? 0) + combatStrength(enemy) * seconds);
   }
