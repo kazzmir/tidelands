@@ -21,12 +21,20 @@
           <span class="new-game-eyebrow">TIDELANDS · A NEW BEGINNING</span>
           <h1 id="new-game-title">Shape a new world.</h1>
           <p id="new-game-description">Choose a game mode, AI difficulty and the size of your archipelago.</p>
-          <label for="menu-game-mode">Game mode</label>
-          <select id="menu-game-mode" name="gameMode" required><option value="play" selected>Play against AI</option><option value="watch">Watch AI vs AI · read-only</option></select>
-          <label for="menu-ai-difficulty">AI difficulty</label>
-          <select id="menu-ai-difficulty" name="difficulty" required autofocus><option value="easy">Easy</option><option value="normal" selected>Normal</option><option value="hard">Hard</option></select>
-          <label for="menu-world-size">World size</label>
-          <select id="menu-world-size" name="worldSize" required><option value="small">Small · 150 × 150 tiles</option><option value="medium">Normal · 200 × 200 tiles</option><option value="large" selected>Large · 300 × 300 tiles</option></select>
+          <fieldset id="menu-game-mode" class="new-game-options"><legend>Game mode</legend><div class="new-game-options-grid mode-options">
+            <label class="new-game-option"><input type="radio" name="gameMode" value="play" checked required autofocus><span data-icon="mouse"></span><strong>Play against AI</strong><small>Shape your world</small></label>
+            <label class="new-game-option"><input type="radio" name="gameMode" value="watch"><span data-icon="watch"></span><strong>Watch AI vs AI</strong><small>Spectate the battle</small></label>
+          </div></fieldset>
+          <fieldset id="menu-ai-difficulty" class="new-game-options"><legend>AI difficulty</legend><div class="new-game-options-grid">
+            <label class="new-game-option"><input type="radio" name="difficulty" value="easy" required><span data-icon="seedling"></span><strong>Easy</strong><small>Patient</small></label>
+            <label class="new-game-option"><input type="radio" name="difficulty" value="normal" checked><span data-icon="knight"></span><strong>Normal</strong><small>Balanced</small></label>
+            <label class="new-game-option"><input type="radio" name="difficulty" value="hard"><span data-icon="power"></span><strong>Hard</strong><small>Sorcerer</small></label>
+          </div></fieldset>
+          <fieldset id="menu-world-size" class="new-game-options"><legend>World size</legend><div class="new-game-options-grid">
+            <label class="new-game-option"><input type="radio" name="worldSize" value="small" required><span data-icon="island-small"></span><strong>Small</strong><small>150 × 150 tiles</small></label>
+            <label class="new-game-option"><input type="radio" name="worldSize" value="medium"><span data-icon="island-medium"></span><strong>Normal</strong><small>200 × 200 tiles</small></label>
+            <label class="new-game-option"><input type="radio" name="worldSize" value="large" checked><span data-icon="island-large"></span><strong>Large</strong><small>300 × 300 tiles</small></label>
+          </div></fieldset>
           <p class="new-game-rules">Both populations start with <strong>24 settlers</strong> and <strong>500 power</strong>. Smaller worlds are quicker to explore.</p>
           <div id="new-game-preview" class="new-game-preview" hidden><span id="preview-status">AI vs AI · live preview</span><button id="toggle-preview" type="button" aria-pressed="false">Pause preview</button></div>
           <p id="new-game-error" role="alert" hidden></p>

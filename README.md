@@ -21,7 +21,7 @@ Tests use Vite's Oxc transformer and parser rather than the legacy TypeScript co
 
 ## Start a game
 
-The page opens with a **New game** menu. Choose **Play against AI** or **Watch AI vs AI**, then **Easy / Normal / Hard AI** and **Small (150×150)**, **Normal (200×200)**, or **Large (300×300)**, then press **Start new game**. A live **red AI vs blue AI** match plays behind the menu; your own world is not generated until you confirm. Both populations start with **24 settlers and 500 power**.
+The page opens with a **New game** menu with labelled, keyboard-accessible icon cards instead of dropdowns. Choose **Play against AI** or **Watch AI vs AI**, then **Easy / Normal / Hard AI** and **Small (150×150)**, **Normal (200×200)**, or **Large (300×300)**, then press **Start new game**. A live **red AI vs blue AI** match plays behind the menu; your own world is not generated until you confirm. Both populations start with **24 settlers and 500 power**.
 
 The background preview uses the real simulation/AI controllers and the **same house, castle, character, and knight models as normal play**. It runs independently at up to 6× simulation speed, and restarts after **two minutes of visible, unpaused preview time** (not two accelerated game-minutes). An early elimination waits until that deadline before restarting. **Pause preview / Play preview** controls it; reduced-motion preferences start it paused. Starting your game stops and disposes the preview, without carrying over its population, terrain, power, or RNG.
 
@@ -153,7 +153,7 @@ The **music-note icon in the footer** controls music separately from the **speak
 
 ## Watch mode
 
-Choose **Watch AI vs AI · read-only** in the new-game menu and press **Start watching**. Two independent real AIs play on the selected **150×150 / 200×200 / 300×300** generated map, each with 24 settlers, 500 power and the selected difficulty's policy. They use normal income, building/birth rules, paid spells, knight musters, shore bridging and combat; the user controls neither side.
+Choose the **Watch AI vs AI** icon card in the new-game menu and press **Start watching**. Two independent real AIs play on the selected **150×150 / 200×200 / 300×300** generated map, each with 24 settlers, 500 power and the selected difficulty's policy. They use normal income, building/birth rules, paid spells, knight musters, shore bridging and combat; the user controls neither side.
 
 You control the camera: **drag to pan**, **middle/right-drag to rotate**, **scroll to zoom**, or use the **arrow keys**. The minimap remains visible with both teams, terrain and the camera footprint; **click or drag it to navigate**. The camera never automatically follows units or fights. A spectator overlay shows both populations and budgets, elapsed time and the winner. Editing, spells, orders and gameplay hotkeys are blocked; gameplay controls and developer mode are hidden. Camera navigation remains available after a match ends. **1× / 2× / 4× simulation speed** buttons and music/effect mute controls remain available. Each new watch match starts at 1×; speed affects both AIs equally, not the camera or music. **New world** opens setup to start another match or return to Play; cancelling preserves the watched match, and opening setup/hidden tabs do not advance or catch up the simulation.
 

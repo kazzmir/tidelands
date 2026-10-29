@@ -25,7 +25,7 @@ test('150-tile worlds keep both seeded starting islands and enough dry terrain f
  }
 });
 test('menu displays the requested Small, Normal and Large sizes',async()=>{
- const html=await readFile(new URL('../index.html',import.meta.url),'utf8');for(const label of ['Small · 150 × 150 tiles','Normal · 200 × 200 tiles','Large · 300 × 300 tiles'])assert.ok(html.includes(label));
+ const html=await readFile(new URL('../index.html',import.meta.url),'utf8');for(const [label,size] of [['Small',150],['Normal',200],['Large',300]])assert.ok(html.includes(`<strong>${label}</strong><small>${size} × ${size} tiles</small>`));
 });
 test('startup presents an accessible settings dialog without generating or simulating the player world first',async()=>{
  const html=await readFile(new URL('../index.html',import.meta.url),'utf8'),source=await readFile(new URL('../src/main.ts',import.meta.url),'utf8');

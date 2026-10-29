@@ -120,6 +120,15 @@ function element<T extends HTMLElement>(selector: string): T {
 }
 function createIconRenderer(): (name: string) => string {
   const icons: Record<string, string> = {
+    watch:
+      '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
+    seedling:
+      '<path d="M12 21V11M12 14C5 14 3 10 3 5c6 0 9 3 9 9Zm0-3c0-6 3-9 9-9 0 6-3 9-9 9ZM6 21h12"/>',
+    'island-small': '<path d="m5 13 7-7 7 7-7 4-7-4Zm0 4 7 4 7-4"/>',
+    'island-medium':
+      '<path d="m2 8 5-5 5 5-5 3-5-3Zm10 6 5-5 5 5-5 3-5-3ZM2 12l5 3 3-2m2 5 5 3 5-3"/>',
+    'island-large':
+      '<path d="m8 6 4-4 4 4-4 2-4-2ZM1 13l5-5 5 5-5 3-5-3Zm12 0 5-5 5 5-5 3-5-3Zm-5 6 4-4 4 4-4 3-4-3"/>',
     music:
       '<path d="M9 18V5l12-3v13M9 8l12-3"/><ellipse cx="6" cy="18" rx="3" ry="2"/><ellipse cx="18" cy="15" rx="3" ry="2"/>',
     'music-off':
@@ -3032,11 +3041,19 @@ function startGame(): void {
       gameAudio.finishMusic(simulation.outcome === 'draw' ? 'draw' : 'victory');
     }
   }
+  function menuChoice(group: string): string {
+    return element(group).querySelector<HTMLInputElement>('input:checked')?.value ?? '';
+  }
+  function setMenuChoice(group: string, value: string): void {
+    element(group)
+      .querySelectorAll<HTMLInputElement>('input[type="radio"]')
+      .forEach((input) => {
+        input.checked = input.value === value;
+      });
+  }
   function updateStartButton(): void {
     element('#start-new-game').textContent =
-      element<HTMLSelectElement>('#menu-game-mode').value === 'watch'
-        ? 'Start watching'
-        : 'Start new game';
+      menuChoice('#menu-game-mode') === 'watch' ? 'Start watching' : 'Start new game';
   }
   function updatePreviewControls(): void {
     element('#new-game-preview').hidden = !attractView;
@@ -3071,9 +3088,9 @@ function startGame(): void {
     stopDeveloperMode();
     if (startingGame || newGameMenu.open) return;
     gameAudio.stopAll();
-    element<HTMLSelectElement>('#menu-ai-difficulty').value = proposedDifficulty;
-    element<HTMLSelectElement>('#menu-world-size').value = worldSize;
-    element<HTMLSelectElement>('#menu-game-mode').value = watchView ? 'watch' : 'play';
+    setMenuChoice('#menu-ai-difficulty', proposedDifficulty);
+    setMenuChoice('#menu-world-size', worldSize);
+    setMenuChoice('#menu-game-mode', watchView ? 'watch' : 'play');
     updateStartButton();
     element<HTMLButtonElement>('#cancel-new-game').hidden = !gameStarted;
     element('#new-game-error').hidden = true;
@@ -3130,8 +3147,8 @@ function startGame(): void {
       event.preventDefault();
       if (startingGame) return;
       const settings = newGameSettings(
-        element<HTMLSelectElement>('#menu-ai-difficulty').value,
-        element<HTMLSelectElement>('#menu-world-size').value,
+        menuChoice('#menu-ai-difficulty'),
+        menuChoice('#menu-world-size'),
       );
       if (!settings) return;
       const button = element<HTMLButtonElement>('#start-new-game');
@@ -3143,8 +3160,7 @@ function startGame(): void {
         await new Promise<void>((resolve) =>
           requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
         );
-        if (element<HTMLSelectElement>('#menu-game-mode').value === 'watch')
-          startWatchMode(settings);
+        if (menuChoice('#menu-game-mode') === 'watch') startWatchMode(settings);
         else applyNewGame(settings);
         newGameMenu.close();
         controls.enabled = !watchView;
