@@ -14,9 +14,13 @@ async function loadGraph(path,cache=new Map()){
 }
 const graph=new Map(),{SimulationGame}=await import(await loadGraph('../src/simulation/game.ts',graph)),{aiProfiles,profileById,difficultyProfile}=await import(await loadGraph('../src/ai-profiles.ts',graph)),{scheduleTournament,playJob,tournamentReport,standings}=await import(await loadGraph('../src/simulation/tournament.ts',graph));
 const {walkDistance}=await import(await loadGraph('../src/simulation/walk.ts',graph));
+const {CHARACTER_SPEED}=await import(await loadGraph('../src/game-settings.ts',graph));
 test('fixed-step walking carries unused distance and preserves exactly five-percent faster Armageddon followers',()=>{
  function walk(step,speed){const actor={tile:{x:0,z:0},target:null,progress:0,x:.5,z:.5};for(let t=0;t<100;t+=step)walkDistance(actor,step*speed,()=>({x:actor.tile.x+1,z:0}),()=>true);return actor.x-.5;}
- assert.ok(Math.abs(walk(1,.65)-65)<1e-9);assert.ok(Math.abs(walk(.5,.65)-65)<1e-9);assert.ok(Math.abs(walk(1,.65*1.05)/walk(1,.65)-1.05)<1e-9);
+ assert.ok(Math.abs(CHARACTER_SPEED/.65-1.1)<1e-12);assert.ok(Math.abs(walk(1,CHARACTER_SPEED)-71.5)<1e-9);assert.ok(Math.abs(walk(.5,CHARACTER_SPEED)-71.5)<1e-9);assert.ok(Math.abs(walk(1,CHARACTER_SPEED*1.05)/walk(1,CHARACTER_SPEED)-1.05)<1e-9);
+});
+test('live and headless movement share the ten-percent faster character speed, not terrain height or sheep speed',async()=>{
+ const main=await readFile(new URL('../src/main.ts',import.meta.url),'utf8'),sim=await readFile(new URL('../src/simulation/game.ts',import.meta.url),'utf8');assert.match(main,/settler.progress \+ dt \* CHARACTER_SPEED \* armageddon.movementMultiplier\(settler\)/);assert.match(sim,/seconds \* CHARACTER_SPEED,/);assert.match(sim,/seconds \* CHARACTER_SPEED \* this.finale.movementMultiplier\(c\)/);assert.match(main,/const STEP = 0.65/);
 });
 function options(overrides={}){return{seed:42,red:profileById('balanced'),blue:profileById('patient'),scenario:'plains',size:40,seconds:90,step:1,...overrides};}
 function settings(overrides={}){return{games:100,seed:100,size:40,seconds:1,step:1,scenarios:['plains','tidal','islands','highlands'],profiles:aiProfiles(),...overrides};}

@@ -9,6 +9,7 @@ import { birthLocation } from './birth-location';
 import { createAttractView, type AttractView } from './attract-view';
 import {
   STARTING_POWER,
+  CHARACTER_SPEED,
   worldDimension,
   newGameSettings,
   type WorldSize,
@@ -3301,7 +3302,7 @@ function startGame(): void {
       }
       settler.progress = Math.min(
         1,
-        settler.progress + dt * 0.65 * armageddon.movementMultiplier(settler),
+        settler.progress + dt * CHARACTER_SPEED * armageddon.movementMultiplier(settler),
       );
       const from = position(settler.tile);
       const to = position(settler.target);

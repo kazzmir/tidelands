@@ -1,6 +1,8 @@
 import type { Difficulty } from './ai-profiles';
 
 export const STARTING_POWER = 500;
+/** Walking tile progress per simulation second, shared by settlers and knights. */
+export const CHARACTER_SPEED = 0.715;
 export type WorldSize = 'small' | 'medium' | 'large';
 export interface NewGameSettings {
   difficulty: Difficulty;

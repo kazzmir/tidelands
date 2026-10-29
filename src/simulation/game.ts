@@ -1,5 +1,5 @@
 import type { AIProfile } from '../ai-profiles';
-import { STARTING_POWER } from '../game-settings';
+import { STARTING_POWER, CHARACTER_SPEED } from '../game-settings';
 import { walkDistance } from './walk';
 import { birthLocation } from '../birth-location';
 import { EnemyTerraformer } from '../enemy-ai';
@@ -605,7 +605,7 @@ export class SimulationGame {
       }
       walkDistance(
         c,
-        seconds * 0.65,
+        seconds * CHARACTER_SPEED,
         () => {
           const options =
             dropped && c === collector
@@ -764,7 +764,7 @@ export class SimulationGame {
       if (!target || target.characterPower <= 0) continue;
       walkDistance(
         c,
-        seconds * 0.65 * this.finale.movementMultiplier(c),
+        seconds * CHARACTER_SPEED * this.finale.movementMultiplier(c),
         () => {
           const options = this.pursue(c, target);
           return options.length ? options[Math.floor(side.random() * options.length)] : null;

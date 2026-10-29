@@ -6,6 +6,7 @@ async function load(path){const {code}=await transformWithOxc(await readFile(new
 const {Armageddon,armageddonLand}=await load('../src/armageddon.ts');
 const {TerrainSurface}=await load('../src/terrain-surface.ts');
 const {Leadership}=await load('../src/leadership.ts');
+const {CHARACTER_SPEED}=await load('../src/game-settings.ts');
 function actor(population,power=10,phase='alive'){return{population,characterPower:power,knight:false,home:null,survival:{phase,elapsed:0},tile:{x:2,z:2}};}
 
 test('Armageddon validates both populations and charges exactly once without granting HP',()=>{
@@ -24,7 +25,7 @@ test('existing leaders are preserved; missing leaders are selected from living c
 test('followers move exactly 5% faster and leaders retain normal speed',()=>{
  const red=actor('red'),blue=actor('blue'),follower=actor('blue'),spell=new Armageddon();spell.start([red,blue,follower],new Map([['red',red],['blue',blue]]),()=>true);
  assert.equal(spell.movementMultiplier(red),1);assert.equal(spell.movementMultiplier(blue),1);assert.equal(spell.movementMultiplier(follower),1.05);
- assert.ok(Math.abs(.65*spell.movementMultiplier(follower)-.6825)<1e-12);spell.reset();assert.equal(spell.movementMultiplier(follower),1);
+ assert.ok(Math.abs(CHARACTER_SPEED*spell.movementMultiplier(follower)-.75075)<1e-12);spell.reset();assert.equal(spell.movementMultiplier(follower),1);
 });
 test('both populations merge full remaining follower HP into their own leaders',()=>{
  for(const color of ['red','blue']){

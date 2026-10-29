@@ -4,6 +4,7 @@ import { createGameModels, animateWalkingModel, type CharacterModel } from './ga
 import { createCombatEffects, type FightingVisual } from './combat-effects';
 import { TerrainSurface } from './terrain-surface';
 import type { HousePower } from './settlement';
+import { CHARACTER_SPEED } from './game-settings';
 
 export type DeveloperModel =
   | 'character'
@@ -145,7 +146,7 @@ export function createDeveloperView(
     else
       for (const actor of actors) {
         animateWalkingModel(actor, time, actor.phase);
-        actor.mesh.position.y = Math.abs(Math.sin(time * 0.65 * Math.PI * 4)) * 0.035;
+        actor.mesh.position.y = Math.abs(Math.sin(time * CHARACTER_SPEED * Math.PI * 4)) * 0.035;
       }
     const h = Math.max(1, height),
       sidebar = width < 700 ? 154 : 248,
