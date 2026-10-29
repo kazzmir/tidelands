@@ -25,6 +25,9 @@ test('live and headless movement share the ten-percent faster character speed, n
 function options(overrides={}){return{seed:42,red:profileById('balanced'),blue:profileById('patient'),scenario:'plains',size:40,seconds:90,step:1,...overrides};}
 function settings(overrides={}){return{games:100,seed:100,size:40,seconds:1,step:1,scenarios:['plains','tidal','islands','highlands'],profiles:aiProfiles(),...overrides};}
 
+test('generated simulations accept the current 150-tile Small map with both full populations',()=>{
+ const game=new SimulationGame(options({size:150,scenario:'generated',seconds:1}));assert.equal(game.surface.size,150);assert.equal(game.metrics('red').population,24);assert.equal(game.metrics('blue').population,24);
+});
 test('every difficulty uses distinct real policies with identical initial population, HP and resources',()=>{
  const ids=['easy','normal','hard'].map(d=>difficultyProfile(d).id);assert.equal(new Set(ids).size,3);
  for(const profile of aiProfiles()){const game=new SimulationGame(options({red:profile,blue:profile}));for(const color of ['red','blue']){const metrics=game.metrics(color);assert.equal(metrics.population,24);assert.equal(metrics.hp,240);assert.equal(metrics.currency,500);}assert.ok(profile.terrainInterval>=4);}

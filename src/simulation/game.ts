@@ -148,8 +148,10 @@ export class SimulationGame {
       throw new Error('Invalid simulation options');
     if (!['plains', 'tidal', 'islands', 'highlands', 'generated'].includes(options.scenario))
       throw new Error('Unknown scenario');
-    if (options.scenario === 'generated' && options.size < 160)
-      throw new Error('Generated archipelago requires size >= 160 (500 recommended)');
+    if (options.scenario === 'generated' && options.size < 150)
+      throw new Error(
+        'Generated archipelago requires size >= 150 (current presets: 150, 200, 300)',
+      );
     const n = options.size,
       random = seededRandom(options.seed);
     const anchors =

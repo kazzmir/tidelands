@@ -10,7 +10,7 @@ export interface NewGameSettings {
 }
 
 export function worldDimension(size: WorldSize): number {
-  const dimensions: Record<WorldSize, number> = { small: 200, medium: 350, large: 500 };
+  const dimensions: Record<WorldSize, number> = { small: 150, medium: 200, large: 300 };
   return dimensions[size];
 }
 export function newGameSettings(difficulty: string, worldSize: string): NewGameSettings | null {

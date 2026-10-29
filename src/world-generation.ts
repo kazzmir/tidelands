@@ -17,13 +17,13 @@ export interface WorldLayout {
 
 /** Room for a large starting island and its invariant-required foothills at the western edge. */
 export function playerStartAnchor(size: number): GridPoint {
-  return { x: Math.min(48, Math.floor(size / 2)), z: Math.floor(size / 2) };
+  return { x: Math.min(48, Math.floor(size * 0.24)), z: Math.floor(size / 2) };
 }
 
 /** Choose the opposite inset corner for maximum separation while retaining full island margins. */
 export function enemyStartAnchor(size: number): GridPoint {
   const player = playerStartAnchor(size);
-  const margin = Math.min(48, Math.floor(size / 2));
+  const margin = player.x;
   const far = Math.min(size - 1, size - margin);
   return { x: player.x <= size / 2 ? far : margin, z: player.z <= size / 2 ? far : margin };
 }

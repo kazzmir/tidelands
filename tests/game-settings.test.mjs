@@ -5,10 +5,10 @@ import {transformWithOxc,parseSync} from 'vite';
 async function url(path,deps={}){let {code}=await transformWithOxc(await readFile(new URL(path,import.meta.url),'utf8'),'test.ts',{target:'es2022'});for(const[name,value]of Object.entries(deps))code=code.replaceAll(`'${name}'`,JSON.stringify(value)).replaceAll(`"${name}"`,JSON.stringify(value));return `data:text/javascript;base64,${Buffer.from(code).toString('base64')}`;}
 const {STARTING_POWER,worldDimension,newGameSettings}=await import(await url('../src/game-settings.ts'));
 const terrain=await url('../src/terrain-surface.ts'),{TerrainSurface}=await import(terrain);
-const {generateWorldHeights,playerStartAnchor,enemyStartAnchor}=await import(await url('../src/world-generation.ts',{'./terrain-surface':terrain}));
+const {generateWorldHeights,generateWorldLayout,playerStartAnchor,enemyStartAnchor}=await import(await url('../src/world-generation.ts',{'./terrain-surface':terrain}));
 
 test('new game settings offer three distinct safe dimensions and 500 starting power',()=>{
- assert.equal(STARTING_POWER,500);assert.deepEqual(['small','medium','large'].map(worldDimension),[200,350,500]);
+ assert.equal(STARTING_POWER,500);assert.deepEqual(['small','medium','large'].map(worldDimension),[150,200,300]);
  for(const difficulty of ['easy','normal','hard'])for(const worldSize of ['small','medium','large'])assert.deepEqual(newGameSettings(difficulty,worldSize),{difficulty,worldSize});
  for(const [difficulty,size]of [['unknown','small'],['normal','huge'],['','large'],['hard','__proto__']])assert.equal(newGameSettings(difficulty,size),null);
 });
@@ -18,6 +18,14 @@ test('every selectable world generates correctly sized terrain and separate dry 
   assert.equal(levels.length,(size+1)**2);assert.ok(Math.hypot(human.x-enemy.x,human.z-enemy.z)>50);
   for(const point of [human,enemy])assert.ok(surface.sample(point.x+.5,point.z+.5)>.08);
  }
+});
+test('150-tile worlds keep both seeded starting islands and enough dry terrain for 24 settlers per side',()=>{
+ for(let seed=1;seed<=12;seed++){
+  const size=150,layout=generateWorldLayout(size,seed),surface=new TerrainSurface(size,generateWorldHeights(size,seed),.65);assert.ok(layout.clusters.some(c=>c.starting==='player'));assert.ok(layout.clusters.some(c=>c.starting==='enemy'));for(const start of [playerStartAnchor(size),enemyStartAnchor(size)]){let dry=0;for(let z=start.z-14;z<=start.z+14;z++)for(let x=start.x-14;x<=start.x+14;x++)if(surface.sample(x+.5,z+.5)>.08)dry++;assert.ok(dry>=24);}
+ }
+});
+test('menu displays the requested Small, Normal and Large sizes',async()=>{
+ const html=await readFile(new URL('../index.html',import.meta.url),'utf8');for(const label of ['Small · 150 × 150 tiles','Normal · 200 × 200 tiles','Large · 300 × 300 tiles'])assert.ok(html.includes(label));
 });
 test('startup presents an accessible settings dialog without generating or simulating the player world first',async()=>{
  const html=await readFile(new URL('../index.html',import.meta.url),'utf8'),source=await readFile(new URL('../src/main.ts',import.meta.url),'utf8');

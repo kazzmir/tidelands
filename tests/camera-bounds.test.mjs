@@ -6,7 +6,7 @@ const {code}=await transformWithOxc(await readFile(new URL('../src/camera-bounds
 const {clampCameraCenter}=await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
 
 test('camera centers remain within every map edge and corner for all world sizes',()=>{
- for(const size of [200,350,500])for(const x of [-size,0,size])for(const z of [-size,0,size]){
+ for(const size of [150,200,300])for(const x of [-size,0,size])for(const z of [-size,0,size]){
   const target={x,y:7,z},camera={x:x+34,y:41,z:z+34};const changed=clampCameraCenter(camera,target,size);
   assert.equal(target.x,Math.max(-size/2,Math.min(size/2,x)));assert.equal(target.z,Math.max(-size/2,Math.min(size/2,z)));
   assert.equal(camera.x-target.x,34);assert.equal(camera.z-target.z,34);assert.equal(camera.y,41);assert.equal(target.y,7);assert.equal(changed,x!==0||z!==0);
