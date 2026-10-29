@@ -2,9 +2,18 @@ import * as THREE from 'three';
 import { AttractSimulation } from './attract-simulation';
 import { createWaterTextures, animateWaterTextures } from './water-texture';
 import { createGameModels, buildingPoleHeight, type CharacterModel } from './game-models';
+import { createCombatEffects } from './combat-effects';
+import type { SimulationGame } from './simulation/game';
 
-export interface AttractView {
-  readonly simulation: AttractSimulation;
+export interface SceneSimulation {
+  readonly game: SimulationGame;
+  readonly round: number;
+  paused: boolean;
+  advance(seconds: number): number;
+  dispose(): void;
+}
+export interface AttractView<S extends SceneSimulation = AttractSimulation> {
+  readonly simulation: S;
   render(seconds: number, width: number, height: number): void;
   dispose(): void;
 }
@@ -12,14 +21,39 @@ export interface AttractView {
 /** The real headless match, presented with exactly the same model factory as normal play. */
 export function createAttractView(
   renderer: THREE.WebGLRenderer,
+  reducedMotion?: boolean,
+): AttractView;
+export function createAttractView<S extends SceneSimulation>(
+  renderer: THREE.WebGLRenderer,
+  reducedMotion: boolean,
+  driver: S,
+  watch: boolean,
+): AttractView<S>;
+export function createAttractView(
+  renderer: THREE.WebGLRenderer,
   reducedMotion = false,
-): AttractView {
-  const simulation = new AttractSimulation(reducedMotion),
-    models = createGameModels();
+  driver?: SceneSimulation,
+  watch = false,
+): AttractView<SceneSimulation> {
+  const simulation = driver ?? new AttractSimulation(reducedMotion),
+    models = createGameModels(),
+    effects = watch ? createCombatEffects() : null;
   const scene = new THREE.Scene();
   scene.background = new THREE.Color('#8bb9aa');
   scene.fog = new THREE.Fog('#8bb9aa', 100, 230);
-  const camera = new THREE.OrthographicCamera(-40, 40, 28, -28, 0.1, 300);
+  const camera = new THREE.OrthographicCamera(
+    -40,
+    40,
+    28,
+    -28,
+    0.1,
+    Math.max(300, simulation.game.options.size * 4),
+  );
+  const cameraFocus = new THREE.Vector3(),
+    focusTarget = new THREE.Vector3();
+  let focusElapsed = 1,
+    watchViewHeight = 40,
+    firstFocus = true;
   camera.position.set(65, 70, 65);
   camera.lookAt(0, 1.5, 0);
   scene.add(new THREE.HemisphereLight('#fff6d7', '#567b65', 2.1));
@@ -59,7 +93,7 @@ export function createAttractView(
   teams[1].name = 'attract-blue-settlers';
   buildings.name = 'attract-homes';
   scene.add(...teams, buildings);
-  const characters = new Map<number, CharacterModel>(),
+  const characters = new Map<number, CharacterModel & { phase: number }>(),
     homes = new Map<number, { mesh: THREE.Group; key: string }>();
   const poles = [models.leader(), models.leader()];
   scene.add(...poles);
@@ -74,7 +108,12 @@ export function createAttractView(
   scene.add(terrain);
   const textures = createWaterTextures(192, renderer.capabilities.getMaxAnisotropy(), 128);
   const water = new THREE.Mesh(
-    geometry(new THREE.PlaneGeometry(192, 192)),
+    geometry(
+      new THREE.PlaneGeometry(
+        Math.max(192, simulation.game.options.size * 2),
+        Math.max(192, simulation.game.options.size * 2),
+      ),
+    ),
     material(
       new THREE.MeshStandardMaterial({
         map: textures.map,
@@ -121,6 +160,7 @@ export function createAttractView(
     previousWidth = 0,
     previousHeight = 0;
   function resetModels(): void {
+    effects?.clear();
     for (const pole of poles) {
       scene.add(pole);
       pole.visible = false;
@@ -222,7 +262,7 @@ export function createAttractView(
       }
       let actor = characters.get(person.id);
       if (!actor && !person.home && characters.size < 512) {
-        actor = models.character(person.population);
+        actor = { ...models.character(person.population), phase: person.id };
         actor.mesh.position.set(
           person.x - half,
           game.surface.sample(person.x, person.z),
@@ -252,6 +292,7 @@ export function createAttractView(
           : 0;
       actor.head.material.color.set(person.sick ? '#a3b86b' : '#e3bb8b');
     }
+    if ([...characters.keys()].some((id) => !seen.has(id))) effects?.clear();
     for (const [id, actor] of characters)
       if (!seen.has(id)) {
         models.disposeInstance(actor.mesh);
@@ -328,8 +369,58 @@ export function createAttractView(
     }
     updatePeople(dt);
     animateWaterTextures(textures, simulation.game.elapsed);
-    const aspect = Math.max(0.1, width / Math.max(1, height)),
-      viewHeight = aspect < 1 ? 72 : 56;
+    const aspect = Math.max(0.1, width / Math.max(1, height));
+    if (watch) {
+      const pairs = simulation.game.combatPairs;
+      effects?.update(
+        pairs.flatMap((pair) => {
+          const a = characters.get(pair.a.id),
+            b = characters.get(pair.b.id);
+          return a && b ? [{ a, b }] : [];
+        }),
+        simulation.game.elapsed,
+      );
+      focusElapsed += dt;
+      if (focusElapsed >= 0.5 || firstFocus) {
+        focusElapsed = 0;
+        const game = simulation.game,
+          half = game.options.size / 2,
+          pair = pairs[0];
+        if (pair) {
+          focusTarget.set((pair.a.x + pair.b.x) / 2 - half, 1.5, (pair.a.z + pair.b.z) / 2 - half);
+          watchViewHeight = 18;
+        } else {
+          const color = Math.floor(visualTime / 12) % 2 ? 'blue' : 'red';
+          const own = game.people.filter(
+            (c) => c.population === color && c.characterPower > 0 && c.survival.phase === 'alive',
+          );
+          const knight = own.find((c) => c.knight && !c.home),
+            leader = game.sides.find((s) => s.color === color)?.leader.leader;
+          const actor = knight ?? leader ?? own[0];
+          if (actor) {
+            focusTarget.set(actor.x - half, 1.5, actor.z - half);
+            watchViewHeight = 40;
+          }
+        }
+        if (firstFocus) {
+          cameraFocus.copy(focusTarget);
+          firstFocus = false;
+        }
+      }
+      cameraFocus.lerp(focusTarget, 1 - Math.exp(-2 * dt));
+      camera.position.copy(cameraFocus).add(new THREE.Vector3(65, 70, 65));
+      camera.lookAt(cameraFocus);
+      sun.position.copy(cameraFocus).add(new THREE.Vector3(-30, 60, 25));
+      sun.target.position.copy(cameraFocus);
+      sun.target.updateMatrixWorld();
+    }
+    const viewHeight = watch
+      ? aspect < 1
+        ? watchViewHeight * 1.4
+        : watchViewHeight
+      : aspect < 1
+        ? 72
+        : 56;
     camera.left = (-viewHeight * aspect) / 2;
     camera.right = (viewHeight * aspect) / 2;
     camera.top = viewHeight / 2;
@@ -342,6 +433,7 @@ export function createAttractView(
     disposed = true;
     resetModels();
     models.dispose();
+    effects?.dispose();
     simulation.dispose();
     trunks.dispose();
     crowns.dispose();

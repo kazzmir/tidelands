@@ -10,6 +10,10 @@ The Three.js preview uses `createGameModels()` from `src/game-models.ts`, the **
 
 Starting play disposes preview geometry/materials/textures, releases its simulation and caches, and restores normal canvas layout. Reopening setup during an existing player game still freezes that game rather than launching a demo over it. Preview camera/presentation limits and accelerated timing have no effect on live-game rules or tournament results.
 
+## Read-only watch mode
+
+The new-game menu also offers **Watch AI vs AI**. Both sides use the selected difficulty profile on the selected generated world (150/200/300), with 24 citizens and 500 power each. `WatchSimulation` advances the shared `SimulationGame` at 0.25-second steps, bounded to two steps per frame, without human commands or a player simulation running underneath. It has no demo restart, forced Armageddon, or score-based timeout: actual elimination ends the match, which remains visible until a new game is confirmed. A shared model presentation automatically follows colonies, knights and real combat pairs; watcher input cannot alter terrain, units, orders, spells, camera or speed. Settings/hidden tabs freeze it without catch-up, and switching modes fully disposes spectator resources.
+
 ## Playable presets
 
 - **Easy — Patient:** slower terrain work/spells, a later muster, and one active knight.

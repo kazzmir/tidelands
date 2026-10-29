@@ -21,7 +21,7 @@ Tests use Vite's Oxc transformer and parser rather than the legacy TypeScript co
 
 ## Start a game
 
-The page opens with a **New game** menu. Choose **Easy / Normal / Hard AI** and **Small (150×150)**, **Normal (200×200)**, or **Large (300×300)**, then press **Start new game**. A live **red AI vs blue AI** match plays behind the menu; your own world is not generated until you confirm. Both populations start with **24 settlers and 500 power**.
+The page opens with a **New game** menu. Choose **Play against AI** or **Watch AI vs AI**, then **Easy / Normal / Hard AI** and **Small (150×150)**, **Normal (200×200)**, or **Large (300×300)**, then press **Start new game**. A live **red AI vs blue AI** match plays behind the menu; your own world is not generated until you confirm. Both populations start with **24 settlers and 500 power**.
 
 The background preview uses the real simulation/AI controllers and the **same house, castle, character, and knight models as normal play**. It runs independently at up to 6× simulation speed, and restarts after **two minutes of visible, unpaused preview time** (not two accelerated game-minutes). An early elimination waits until that deadline before restarting. **Pause preview / Play preview** controls it; reduced-motion preferences start it paused. Starting your game stops and disposes the preview, without carrying over its population, terrain, power, or RNG.
 
@@ -150,6 +150,14 @@ Each new world independently chooses one of two original looping songs: **Quiet 
 When the result screen appears, the background track is replaced by a one-shot ending song: **A New Dawn** is a bright victory fanfare; **Fading Shores** is a slower, descending defeat theme. They honor music mute, pause/resume when hidden, and never replay every frame or loop after finishing. A draw fades to silence instead of choosing a misleading win/loss theme. Starting a new world clears the ending and selects normal background music again. Developer mode includes **Play victory song** and **Play defeat song** auditions.
 
 The **music-note icon in the footer** controls music separately from the **speaker icon** for sound effects; both preferences are remembered. Existing sound-mute preferences default the new music to muted, so it doesn't unexpectedly override earlier silence. Audio unlocks only after a real click/tap/key gesture. Invalid or unaffordable casts, scene redraws, startup AI previews and developer model animations never trigger sound effects. Explicit developer sound buttons can audition the effects. Pausing, opening settings, entering the model viewer or hiding the tab stops existing effects; no delayed sound backlog is replayed. Missing or blocked Web Audio never prevents playing.
+
+## Watch mode
+
+Choose **Watch AI vs AI · read-only** in the new-game menu and press **Start watching**. Two independent real AIs play on the selected **150×150 / 200×200 / 300×300** generated map, each with 24 settlers, 500 power and the selected difficulty's policy. They use normal income, building/birth rules, paid spells, knight musters, shore bridging and combat; the user controls neither side.
+
+The camera automatically alternates between colonies/knights and focuses actual fights. A spectator overlay shows both populations and budgets, elapsed time and the winner. Editing, spells, orders, minimap navigation, camera manipulation and game hotkeys are blocked; game controls and developer mode are hidden. Music/effect mute controls remain available. **New world** opens setup to start another match or return to Play; cancelling preserves the watched match, and opening setup/hidden tabs do not advance or catch up the simulation.
+
+Unlike the short startup background demo, watch mode runs a **single selected-size match**, with no two-minute reset, forced paid Armageddon or time-limit winner. Elimination holds the final result until a new game is confirmed. Rendering and fixed-step work remain bounded, the player simulation never advances behind the spectator scene, and leaving watch mode disposes its scene and simulation without destroying the shared renderer.
 
 ## Developer model viewer
 
@@ -294,6 +302,7 @@ Rock persists through dry terrain edits. Lowering it into water destroys the roc
 - `src/developer-view.ts` — isolated, orbitable developer model gallery with production walking and combat animations.
 - `src/game-audio.ts` — lazy, bounded Web Audio sound synthesis, independent music/effect preferences and castle construction transition tracking.
 - `src/ambient-music.ts` — original background/ending scores, stereo synthesis, and one-source loop/one-shot playback with pause/resume and cleanup.
+- `src/watch-simulation.ts` — selected-size read-only AI-vs-AI matches, independent budgets, action audio and elimination outcomes.
 - `src/attract-simulation.ts`, `src/attract-view.ts` — isolated, bounded AI-vs-AI startup preview using the normal game's shared models.
 - `tests/attract-mode.test.mjs` — preview rules, pause, frame budgets, looping, determinism, rendering cleanup, and live-game isolation.
 - `src/game-settings.ts` — validated new-game choices, size presets, and shared 500-power start.

@@ -8,6 +8,7 @@ import { difficultyProfile, type Difficulty } from './ai-profiles';
 import { planTerrainSpell, safeForAllies } from './spell-plan';
 import { birthLocation } from './birth-location';
 import { createAttractView, type AttractView } from './attract-view';
+import { WatchSimulation } from './watch-simulation';
 import {
   STARTING_POWER,
   CHARACTER_SPEED,
@@ -226,6 +227,7 @@ function startGame(): void {
   const icon = createIconRenderer();
   initializeIcons(icon);
   const { canvas, world, renderer, scene, camera, controls, sun, resetCamera } = createWorldView();
+  const normalCanvasLabel = canvas.getAttribute('aria-label') ?? 'Interactive isometric island';
   const leaderVitalsView = createLeaderVitalsView(
     element('#leader-vitals'),
     world,
@@ -242,6 +244,8 @@ function startGame(): void {
   const newGameMenu = element<HTMLDialogElement>('#new-game-menu');
   let startingGame = false;
   let attractView: AttractView | null = null;
+  let watchView: AttractView<WatchSimulation> | null = null;
+  let watchResultAnnounced = false;
   let developerView: ReturnType<typeof createDeveloperView> | null = null;
   let developerMusicPreview = false;
   const gameAudio = createGameAudio({
@@ -1119,7 +1123,7 @@ function startGame(): void {
         : 'Place an anchor for your leader to walk toward';
   }
   function toggleLeaderAnchor(): void {
-    if (gameWinner !== null || armageddon.active) return;
+    if (watchView || gameWinner !== null || armageddon.active) return;
     if (leaderAnchor.active) {
       leaderAnchor.reset();
       anchorMarker.visible = false;
@@ -1189,7 +1193,7 @@ function startGame(): void {
     button.title = 'attack enemies';
   }
   function toggleAttackOrder(): void {
-    if (gameWinner !== null || armageddon.active) return;
+    if (watchView || gameWinner !== null || armageddon.active) return;
     cancelSpell();
     attackOrder.toggle();
     if (attackOrder.active) {
@@ -1334,7 +1338,7 @@ function startGame(): void {
     return rallySteps(settler.tile, neighbors(settler.tile), rallyDistance);
   }
   function toggleRally(): void {
-    if (gameWinner !== null || encounterTest || armageddon.active) return;
+    if (watchView || gameWinner !== null || encounterTest || armageddon.active) return;
     if (!leadership.leader && !leadership.droppedTile) {
       toast('There is no leader object to gather around.');
       return;
@@ -2083,7 +2087,7 @@ function startGame(): void {
   }
   function bindTerrainInput(): void {
     canvas.addEventListener('pointermove', (event) => {
-      if (gameWinner !== null || developerView) return;
+      if (watchView || gameWinner !== null || developerView) return;
       setShift(event.shiftKey);
       updateHover(event);
     });
@@ -2096,13 +2100,13 @@ function startGame(): void {
       element('#tile-info').hidden = true;
     });
     canvas.addEventListener('pointerdown', (event) => {
-      if (developerView) return;
+      if (watchView || developerView) return;
       pointerDown = { x: event.clientX, y: event.clientY };
     });
     canvas.addEventListener('pointerup', (event) => {
       const down = pointerDown;
       pointerDown = null;
-      if (gameWinner !== null || developerView || !down) return;
+      if (watchView || gameWinner !== null || developerView || !down) return;
       if (
         (event.button !== 0 && event.button !== 2) ||
         Math.hypot(event.clientX - down.x, event.clientY - down.y) > 5
@@ -2198,7 +2202,7 @@ function startGame(): void {
     if (lastPointer) updateHover(lastPointer);
   }
   function selectSpell(spell: Spell): void {
-    if (gameWinner !== null || armageddon.active) return;
+    if (watchView || gameWinner !== null || armageddon.active) return;
     leaderAnchor.cancelPlacement();
     updateAnchorButton();
     if (selectedSpell === spell) {
@@ -2341,7 +2345,7 @@ function startGame(): void {
     selectTool(tool);
   }
   function castSpell(spell: Spell, target?: Tile, caster: PopulationColor = populationColor): void {
-    if (gameWinner !== null || armageddon.active) return;
+    if (watchView || gameWinner !== null || armageddon.active) return;
     const playerCast = caster === populationColor;
     if (!playerCast && spell !== 'earthquake' && spell !== 'swamp' && spell !== 'volcano') return;
     const budget = playerCast ? powerMeter : enemyPowerMeter;
@@ -2612,7 +2616,7 @@ function startGame(): void {
   let speed = 1;
   let simulationTime = 0;
   function togglePause(): void {
-    if (gameWinner !== null || armageddon.finished) return;
+    if (watchView || gameWinner !== null || armageddon.finished) return;
     paused = !paused;
     if (paused) gameAudio.stopAll();
     element('#pause-overlay').hidden = !paused;
@@ -2624,7 +2628,7 @@ function startGame(): void {
   }
   function bindSimulationControls(): void {
     bindMinimapNavigation(minimapCanvas, (event) => {
-      if (!gameStarted || newGameMenu.open || developerView) return;
+      if (watchView || !gameStarted || newGameMenu.open || developerView) return;
       const bounds = minimapCanvas.getBoundingClientRect();
       const point = minimapWorldPoint(
         (event.clientX - bounds.left) / bounds.width,
@@ -2649,6 +2653,7 @@ function startGame(): void {
     element('#leader-view').addEventListener('click', focusLeaderPole);
     document.querySelectorAll<HTMLButtonElement>('[data-speed]').forEach((button) => {
       button.addEventListener('click', () => {
+        if (watchView) return;
         speed = Number(button.dataset.speed);
         document
           .querySelectorAll('[data-speed]')
@@ -2668,6 +2673,7 @@ function startGame(): void {
     });
   }
   function startTestScenario(selection: string): void {
+    if (watchView) return;
     if (selection === 'combat') startWorld(true);
     else if (selection === 'sandbox') {
       applyNewGame({ difficulty, worldSize: 'small' });
@@ -2863,7 +2869,7 @@ function startGame(): void {
         stopDeveloperMode();
         return;
       }
-      if (!gameStarted || newGameMenu.open) return;
+      if (watchView || !gameStarted || newGameMenu.open) return;
       panKeys.clear();
       pointerDown = null;
       lastPointer = null;
@@ -2889,6 +2895,82 @@ function startGame(): void {
       developerView.paused = !developerView.paused;
       updateDeveloperControls();
     });
+  }
+  function stopWatchMode(): void {
+    watchView?.dispose();
+    watchView = null;
+    watchResultAnnounced = false;
+    document.body.classList.remove('watch-mode');
+    element('#watch-hud').hidden = true;
+    canvas.setAttribute('aria-label', normalCanvasLabel);
+  }
+  function startWatchMode(settings: NewGameSettings): void {
+    stopDeveloperMode();
+    stopAttractMode();
+    stopWatchMode();
+    gameAudio.stopAll();
+    clearSettlers();
+    enemyBridgeIntents.clear();
+    difficulty = settings.difficulty;
+    worldSize = settings.worldSize;
+    SIZE = worldDimension(worldSize);
+    seed += 17;
+    gameStarted = true;
+    panKeys.clear();
+    pointerDown = null;
+    lastPointer = null;
+    controls.enabled = false;
+    canvas.style.cursor = 'default';
+    element<HTMLSelectElement>('#ai-difficulty').value = difficulty;
+    watchView = createAttractView(
+      renderer,
+      false,
+      new WatchSimulation(difficulty, worldSize, seed, (sound) => {
+        gameAudio.play(sound);
+      }),
+      true,
+    );
+    document.body.classList.add('watch-mode');
+    element('#watch-hud').hidden = false;
+    canvas.setAttribute(
+      'aria-label',
+      'Read-only AI-versus-AI match. Camera follows the action automatically.',
+    );
+    gameAudio.selectMusic(chooseMusicTrack());
+    resize();
+    updateWatchHud();
+  }
+  function updateWatchHud(): void {
+    if (!watchView) return;
+    const simulation = watchView.simulation,
+      game = simulation.game,
+      red = game.metrics('red'),
+      blue = game.metrics('blue');
+    element('#watch-stats').textContent =
+      `Red: ${red.population} people · ${Math.floor(game.sides[0]!.money.value).toLocaleString()} power | Blue: ${blue.population} people · ${Math.floor(game.sides[1]!.money.value).toLocaleString()} power`;
+    element('#watch-time').textContent = `${Math.floor(game.elapsed / 60)}:${Math.floor(
+      game.elapsed % 60,
+    )
+      .toString()
+      .padStart(2, '0')} · ${SIZE} × ${SIZE} · ${difficulty} AI on both sides`;
+    const resultText =
+      simulation.outcome === null
+        ? ''
+        : simulation.outcome === 'draw'
+          ? 'Draw — both populations eliminated.'
+          : `${simulation.outcome === 'red' ? 'Red' : 'Blue'} wins — opposing population eliminated.`;
+    if (element('#watch-result').textContent !== resultText)
+      element('#watch-result').textContent = resultText;
+    if (simulation.outcome !== null && !watchResultAnnounced) {
+      watchResultAnnounced = true;
+      gameAudio.finishMusic(simulation.outcome === 'draw' ? 'draw' : 'victory');
+    }
+  }
+  function updateStartButton(): void {
+    element('#start-new-game').textContent =
+      element<HTMLSelectElement>('#menu-game-mode').value === 'watch'
+        ? 'Start watching'
+        : 'Start new game';
   }
   function updatePreviewControls(): void {
     element('#new-game-preview').hidden = !attractView;
@@ -2925,6 +3007,8 @@ function startGame(): void {
     gameAudio.stopAll();
     element<HTMLSelectElement>('#menu-ai-difficulty').value = proposedDifficulty;
     element<HTMLSelectElement>('#menu-world-size').value = worldSize;
+    element<HTMLSelectElement>('#menu-game-mode').value = watchView ? 'watch' : 'play';
+    updateStartButton();
     element<HTMLButtonElement>('#cancel-new-game').hidden = !gameStarted;
     element('#new-game-error').hidden = true;
     updatePreviewControls();
@@ -2935,7 +3019,7 @@ function startGame(): void {
   function closeNewGameMenu(): void {
     if (!gameStarted || startingGame) return;
     newGameMenu.close();
-    controls.enabled = true;
+    controls.enabled = !watchView;
   }
   function applyNewGame(settings: NewGameSettings): void {
     difficulty = settings.difficulty;
@@ -2958,6 +3042,7 @@ function startGame(): void {
     startWorld(false);
   }
   function bindNewGameMenu(): void {
+    element('#menu-game-mode').addEventListener('change', updateStartButton);
     document.addEventListener('visibilitychange', () => {
       if (attractView) clock.getDelta();
       if (document.hidden) gameAudio.stopAll();
@@ -2990,9 +3075,11 @@ function startGame(): void {
         await new Promise<void>((resolve) =>
           requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
         );
-        applyNewGame(settings);
+        if (element<HTMLSelectElement>('#menu-game-mode').value === 'watch')
+          startWatchMode(settings);
+        else applyNewGame(settings);
         newGameMenu.close();
-        controls.enabled = true;
+        controls.enabled = !watchView;
       } catch (error) {
         console.error('Unable to start world', error);
         gameStarted = false;
@@ -3005,13 +3092,14 @@ function startGame(): void {
       } finally {
         startingGame = false;
         button.disabled = false;
-        button.textContent = 'Start new game';
+        updateStartButton();
       }
     });
   }
   function startWorld(test: boolean): void {
     stopAttractMode();
     stopDeveloperMode();
+    stopWatchMode();
     gameStarted = true;
     encounterTest = test;
     clearTimeout(shakeTimer);
@@ -3056,6 +3144,7 @@ function startGame(): void {
   const panOffset = new THREE.Vector3();
   function bindKeyboardControls(): void {
     window.addEventListener('keydown', (event) => {
+      if (watchView) return;
       if (developerView) {
         if (event.key === 'Escape') {
           event.preventDefault();
@@ -3134,6 +3223,13 @@ function startGame(): void {
         element('#developer-sound-status').textContent = 'Song preview finished.';
       }
       if (!document.hidden) developerView.render(elapsed, world.clientWidth, world.clientHeight);
+      return;
+    }
+    if (watchView) {
+      if (!newGameMenu.open && !document.hidden) {
+        watchView.render(elapsed, world.clientWidth, world.clientHeight);
+        updateWatchHud();
+      }
       return;
     }
     if (!gameStarted) {

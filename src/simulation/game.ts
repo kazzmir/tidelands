@@ -126,6 +126,9 @@ export class SimulationGame {
   private readonly bridgeIntents = new Map<Person, { enemy: Person; from: Tile }>();
   private readonly swamps = new Set<Tile>();
   private readonly rocks = new Set<Tile>();
+  get combatPairs() {
+    return this.combat.pairs.filter((pair) => this.combat.opponent(pair.a) === pair.b);
+  }
 
   constructor(readonly options: MatchOptions) {
     if (
