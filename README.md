@@ -19,6 +19,22 @@ npm run preview # Serve the production build
 
 Tests use Vite's Oxc transformer and parser rather than the legacy TypeScript compiler API removed in TypeScript 7. Type-checking uses the pinned TypeScript 7.0.2 compiler.
 
+## AI difficulty and simulation tournaments
+
+Choose **Easy / Normal / Hard** in the header. Changing difficulty starts a fresh world; New world retains the selection. These are different decision policies, **not** HP, currency, damage, or income cheats.
+
+```sh
+npm run ai:tournament # 1,000 seeded, side-swapped AI-vs-AI games; Node 22+
+npm run ai:tournament -- --games 5000 --workers 4 --out reports/long.json.gz
+npm run ai:replay -- --replay reports/ai-tournament.json --match 42
+```
+
+The headless simulator reuses production terrain/economy/population/combat/spell/knight modules. Five candidate policies compete across multiple map scenarios, with held-out seeds, seed-cluster uncertainty estimates, JSON/CSV/Markdown reports, exact replay, and crash/Ctrl+C checkpoints. The optional, paid Armageddon referee finale finishes otherwise open-ended sandbox matches; unresolved time limits remain draws. It does **not** enable automatic Armageddon in the live enemy.
+
+Completed calibration: **1,000 baseline games**, **100 half-step games**, and **four actual 500×500-world checks**. Easy uses **Patient**, Normal retains **Balanced**, and Hard uses **Sorcerer** (80% held-out score in the baseline's paid-finale protocol). Raw replayable reports and limitations are in **[benchmark results](benchmarks/README.md)**.
+
+See **[AI simulation guide](docs/ai-simulation.md)** for setup, policy tuning, larger/full-world batches, natural-only matches, step-resolution checks, resume/replay, and interpretation limits.
+
 ## World size and rendering
 
 Worlds contain **500 × 500 tiles**, initially at sea level. The generator chooses high points (levels **6–8**) in **roughly 20–26 irregularly scattered islands across the full map**, then raises surrounding points only as needed to satisfy the same **one-level neighboring-height invariant** used by editing. Nearby summit foothills naturally overlap into continuous, multi-mountain landmasses: small islets roughly **10–35 tiles across**, medium islands, and larger islands reaching **60–95 tiles across**. There are **no artificial bridges, island masks, or separately sculpted coastlines**: every raised point is required by a summit’s height constraint. Separated clusters retain water between them. The archipelago includes northern, southern, eastern, central, and corner islands—not just the player's western starting area. There are **no rows, columns, or fixed island grid**. Seeded rejection sampling scatters variable-radius islands with ocean gaps, varied proportions, uneven branching ridges, and different summit counts. Broad regions retain islands while allowing irregular open-water areas. The human-controlled red population starts on a dedicated island near the **far western edge**, around tile **(48, 250)** rather than the map center. Both population starts reserve **large, broad islands** (at least 1,800 dry corner points and 50 tiles in both directions), with enough margin for their full foothills. Other islands may be much smaller. Settlers spawn on dry, walkable tiles within 14 tiles of that anchor. The initial camera, **Reset View**, and each **New world** focus on this western start. A separate **blue enemy population** starts on the opposite **southeastern corner island**, around **(452, 452)**—about 452 tiles from the human start, the farthest inset corner while leaving room for the full island.
@@ -139,7 +155,7 @@ AI plans local **3×3 flat building platforms** (16 shared corners), favoring ex
 
 ### Enemy spell attacks
 
-After a **75-simulation-second opening grace period**, the enemy occasionally casts **Earthquake (500)**, **Swamp (1,500)**, or **Volcano (2,000)** against player settlements or groups of characters. Further attempts are spaced **75–120 simulation seconds** apart, with at most one attack per update and no catch-up bursts. Affordable spells are chosen with a preference for Earthquake; valuable, crowded targets receive higher priority.
+With the **Balanced policy** (timings vary by difficulty/profile), after a **75-simulation-second opening grace period**, the enemy occasionally casts **Earthquake (500)**, **Swamp (1,500)**, or **Volcano (2,000)** against player settlements or groups of characters. Further attempts are spaced **75–120 simulation seconds** apart, with at most one attack per update and no catch-up bursts. Affordable spells are chosen with a preference for Earthquake; valuable, crowded targets receive higher priority.
 
 Spells share the enemy's normal power budget with terrain editing and use exactly the same effects/costs as player spells—no free currency, resource bonuses, or extra per-point fees. Targets near the enemy's own population are avoided, and a final preview protects friendly homes and characters. Invalid/no-effect casts cost nothing. Enemy casting does not cancel the player's selected spell or change player currency, and successful attacks announce **Enemy casts …**. Hover the enemy population count to see spell count and power spent.
 
@@ -147,7 +163,7 @@ Enemy spells freeze while paused, stop if either population is eliminated, and a
 
 ### Enemy knight musters and raids
 
-After **120 simulation seconds**, the enemy can assemble a knight muster. It prefers nearby healthy roaming citizens, drafting housed citizens only as needed: the leader and at most **three donors** leave their homes, then the donors actually walk to the leader and merge their existing HP/power. No strength or characters are created for free. The leader must accumulate **at least 40 character power** before the normal **1,000-power Knight spell** applies its permanent **1.5×** multiplier. The cost is reserved against other enemy spending while gathering.
+With the **Balanced policy**, after **120 simulation seconds**, the enemy can assemble a knight muster. Other difficulty profiles tune the timing, strength, cap, and donor/reserve limits. It prefers nearby healthy roaming citizens, drafting housed citizens only as needed: the leader and at most **three donors** leave their homes, then the donors actually walk to the leader and merge their existing HP/power. No strength or characters are created for free. The leader must accumulate **at least 40 character power** before the normal **1,000-power Knight spell** applies its permanent **1.5×** multiplier. The cost is reserved against other enemy spending while gathering.
 
 A separate, unabsorbed successor comes to the strengthened knight and receives the white pole **in person**. Both keep their own HP, position, and equipment; the successor does not become a knight. The former leader retains silver armor, sword, blue flag/shield, and enlarged scale, then pursues the player using the normal knight combat and land-routing rules. Disconnected islands mean approaching the reachable shore, not teleporting or crossing water for free.
 
@@ -231,6 +247,10 @@ Rock persists through dry terrain edits. Lowering it into water destroys the roc
 - `tests/encounter-scenario.test.mjs` — connected camps, movement reservations, and combat-enabled scenario guards.
 - `src/minimap.ts` — incremental elevation raster, team markers, crowd suppression, and map navigation coordinates.
 - `tests/minimap.test.mjs` — terrain cache correctness, team glyphs, crowded characters, and coordinate bounds.
+- `src/ai-profiles.ts` — shared strategy parameters and Easy/Normal/Hard mapping.
+- `src/simulation/` — deterministic headless games, continuous movement, tournaments, validation, and reports.
+- `tools/run-ai.mjs`, `tools/ai-entry.mjs` — Node worker CLI, checkpoints, compressed reports, and replay.
+- `docs/ai-simulation.md` — reproducible AI evaluation protocol and policy tuning guide.
 - `src/enemy-knights.ts` — limited real-citizen musters, strength thresholds, paid conversions, succession, and knight caps.
 - `tests/enemy-knights.test.mjs` — HP conservation, costs, successive raids, reserves, caps, failed musters, succession, and reset.
 - `src/enemy-spells.ts` — cooldown-limited, paid attacks against player settlements/groups with friendly-fire avoidance.

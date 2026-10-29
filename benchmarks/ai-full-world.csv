@@ -1,0 +1,5 @@
+id,seed,scenario,fold,red,blue,winner,reason,elapsed,finale
+0,90010,generated,training,balanced,sorcerer,blue,armageddon,722,true
+1,90010,generated,training,sorcerer,balanced,blue,armageddon,261,true
+2,90011,generated,training,balanced,sorcerer,blue,armageddon,260,true
+3,90011,generated,training,sorcerer,balanced,red,armageddon,708,true

@@ -1,0 +1,118 @@
+# AI simulation, tournaments, and difficulty
+
+The game has a rendering-free fixed-step simulator, five parameterized policies, and an in-game **Easy / Normal / Hard** selector. Policies share production rules/controllers; they do not get extra starting money, residents, HP, income, or damage.
+
+## Playable presets
+
+- **Easy — Patient:** slower terrain work/spells, a later muster, and one active knight.
+- **Normal — Balanced:** the familiar existing balance of spell attacks, three-knight cap, and economical musters.
+- **Hard — Sorcerer:** earlier, more frequent attacks, accurate cluster targeting, and a strong Swamp preference; still pays every ordinary cost.
+
+The 1,000-game training field selected Patient/Sorcerer as the weak/strong extremes; Balanced is deliberately retained as the stable Normal baseline. See [recorded calibration results](../benchmarks/README.md), including held-out results, a 100-game resolution check, and the limited full-world smoke sample. These presets are calibrated to the documented benchmark objective, not claimed to be universally optimal.
+
+## Run a tournament
+
+Node **22.12+** and the existing npm dependencies are sufficient. No browser, WebGL, Python, or extra packages are required.
+
+```sh
+npm run ai:tournament -- --help
+
+# Default: 1,000 games, five policies, four controlled map types.
+npm run ai:tournament
+
+# The checked-in baseline: 50 seeds × 10 policy pairs × 2 sides.
+npm run ai:tournament -- --games 1000 --seed 73129 --seconds 240 --finale 180 \
+  --workers 4 --out reports/ai-baseline.json.gz
+
+# Longer games; larger batches need no source changes.
+npm run ai:tournament -- --games 5000 --seconds 900 --finale 180 \
+  --workers 4 --out reports/ai-long.json.gz
+
+# Natural elimination only, without a referee-triggered finale.
+npm run ai:tournament -- --games 1000 --seconds 900 --finale 0 \
+  --out reports/ai-natural.json.gz
+
+# Validate policies on the actual production-sized generated archipelago.
+npm run ai:tournament -- --profiles balanced,sorcerer --games 4 --seed 90010 \
+  --size 500 --scenarios generated --seconds 240 --finale 900 --workers 1 \
+  --out reports/ai-full-world.json.gz
+
+# Check sensitivity to fixed-step resolution.
+npm run ai:tournament -- --games 100 --seed 81000 --seconds 240 --finale 180 \
+  --step 0.5 --workers 4 --out reports/ai-half-step.json.gz
+```
+
+Default maps are **64×64**: plains, a tidal causeway, separated islands, and symmetric highland perturbations. They deliberately cover different combat/access conditions and are not presented as identical to the 500×500 world. `generated` uses the existing world generator and starting anchors (minimum size 160; use 500 for production parity). Initial populations use the same radius-14, dry walkable spawning distribution as normal play.
+
+With all five policies, `--games` must be a multiple of **20**, so every seed contains every pair on both sides. For N selected policies it must be a multiple of **N × (N−1)**. `--profiles patient,balanced,sorcerer` selects a subset. Unknown IDs, malformed options, partial rounds, invalid time steps, and invalid world sizes fail before work starts.
+
+## What a match means
+
+Both sides begin with **24 characters at 10 HP** and **10,000 power**. The simulator runs the ordinary game for `--seconds` simulation seconds. Policies terraform, build, reproduce, earn income, cast harmful spells, gather real donors, train paid knights, physically transfer leadership, and pursue opponents. Death, permanent sickness, two-second drowning, buildings releasing their existing defenders, isolated-island shore routing, and knight multipliers use the game's modules.
+
+The sandbox can continue indefinitely without a human choosing Armageddon. Therefore the tournament has an explicit, optional **referee finale**:
+
+1. At the regular horizon, if both populations survive and `--finale` is positive, a side that can afford **6,000 power** pays for the real Armageddon spell. First payer priority alternates by seed; if it cannot pay, the other side may pay. If neither can pay, no free spell is granted.
+2. Both populations evacuate, rally into their real leaders, and march/fight under the production Armageddon rules. Followers move exactly **5% faster**; only leaders fight; zero-height nearby land is raised under the same finale rules. Births, ordinary AI, and other spells stop.
+3. A leader's death determines the result, including simultaneous-death draws. Remaining followers do not override a defeated leader.
+4. If the extra finale time expires, the match is a **draw**. With `--finale 0`, every unresolved regular match is a draw.
+
+There is **no material-score adjudication** or invented victory for having more money, HP, or houses. Regular elimination and Armageddon leader deaths are recorded separately. A forced finale is a benchmark protocol, **not** a new ability for the interactive enemy to cast Armageddon automatically. The benchmark's horizon/finale affect which policy is favored; compare multiple horizons and natural-only runs before making stronger claims.
+
+## Reports, replay, and recovery
+
+`--out reports/run.json` writes JSON; `.json.gz` writes compressed JSON. The runner also writes:
+
+- `run.md`: training/holdout standings, scores, approximate confidence intervals, and policy recommendations;
+- `run.csv`: every match's seed, sides, map, result, reason, and duration;
+- `run.json[.gz].checkpoint.json`: completed matches, settings, and policy snapshots, written atomically during the batch and on shutdown.
+
+```sh
+# Verify the exact outcome/metrics of one recorded match.
+npm run ai:replay -- --replay reports/ai-baseline.json.gz --match 42
+
+# Continue after Ctrl+C or a worker failure. Completed matches are not rerun.
+npm run ai:tournament -- --resume reports/ai-baseline.json.gz.checkpoint.json \
+  --workers 4
+```
+
+Reports contain every profile's complete parameters, seed, map type, time step, horizon, finale window, raw results, runtime information, and a SHA-256 digest of the bundled engine. **Replays and resumes reject a different engine/profile version.** Check out the original source revision to reproduce old results. `--allow-version-change` is an explicit replay-only comparison escape hatch, not a way to mix engines in one tournament.
+
+Resume uses the checkpoint's original settings; new horizon/seed/policy flags are not mixed into an existing batch. Treat checkpoint/report files as immutable inputs rather than editing them by hand.
+
+Worker count/completion order does not change individual results or standings. Workers are independent; no live game state, shared RNG, or cross-game economy persists between matches. The renderer bundle never imports the tournament/Node runner.
+
+## Fair comparisons and interpretation
+
+- Each pair plays **both sides of the same seeded map**, controlling for geography, initial initiative, and spawn luck.
+- Separate seeded RNG streams control world generation and each side's actions; replay uses the complete original policy configuration.
+- With at least five seed blocks, the first **80%** are training and the final **20%** are held out. Recommendations are selected using training data **only**. The holdout results are not silently used to optimize policies.
+- Ranking is average match points: **win 1, draw 0.5, loss 0**. HP, income, training counts, costs, and currency are diagnostics, not hidden win criteria.
+- Approximate 95% intervals cluster results by seed, rather than incorrectly treating swapped sides and opponents on the same map as independent samples. Small batches or all-tied scores emit an explicit insufficient-evidence warning.
+- Every game audits `currency = 10000 + building income − terrain costs − spell costs − knight costs − finale costs`, and checks finite/nonnegative character state. Worker errors stop the batch and preserve a checkpoint; incomplete tournaments are never ranked as complete.
+
+Compact AI-vs-AI performance is **not proof of universal strength against humans**. Human terrain editing, orders, pole relocation, global Flood, and choosing when to cast Armageddon add options autonomous tournament policies do not use. Simulation movement/contact decisions are fixed-step, not the browser's animation loop. Fractional movement distance is carried across tile boundaries, preserving speed and the exact 1.05× finale follower multiplier even at coarse steps. Use `--step 0.5` or smaller to check ranking stability. Rendering, camera, sheep animation, and purely visual effects are intentionally absent.
+
+## Add or tune a policy
+
+Edit `src/ai-profiles.ts`. `aiProfiles()` is the registry; `difficultyProfile()` maps the three playable levels to policy IDs. The current candidates are **Patient, Balanced, Raider, Sorcerer, Steward**. Their parameters control:
+
+- terraform cadence (**never faster than the normal four-second limit**);
+- spell cooldowns, spell-choice weights, and target-selection noise;
+- knight opening delay, cooldown, target gathered strength, active cap, donor limit, and ordinary-population reserve.
+
+Terrain reach, paid slope cascades, spell prices/effects, HP, initial population/currency, combat damage, birth rates, and building income remain common rules. Add new candidates by returning additional distinct profiles; the scheduler automatically creates all pairings. For a genuinely different decision algorithm, implement it in shared controller code and use it from both `src/main.ts` and `src/simulation/game.ts`, rather than adding a benchmark-only combat approximation.
+
+The UI selector starts a fresh world when changed and retains the selected difficulty across New world. Test scenario still disables ordinary enemy AI. The live controller instances and headless teams receive the **same policy objects**. Difficulty is not changed automatically by a tournament: inspect the training recommendations, holdout intervals, and full-world/step-sensitivity results before editing the mapping.
+
+## Code map and tests
+
+- `src/simulation/game.ts`: headless game orchestration and optional paid finale.
+- `src/simulation/walk.ts`: continuous tile movement with fractional-distance carry.
+- `src/simulation/tournament.ts`: balanced schedule, validation, seed-cluster statistics, reports.
+- `tools/run-ai.mjs`: builds the typed headless modules with the already installed Vite into ignored `.cache/ai-tournament/`.
+- `tools/ai-entry.mjs`: CLI, worker pool, compressed/atomic reports, checkpoints and replay.
+- `src/spell-plan.ts`, `src/birth-location.ts`: spell planning/friendly safety and birth exits shared with the browser.
+- `tests/simulation.test.mjs`: determinism, parameter fairness, currency audits, real musters/finales, exact movement rates, paired scheduling, holdout separation, malformed reports, worker-count independence, replay and resume.
+
+Run `npm test` and `npm run build` before accepting a policy or engine change. Check the browser's difficulty control, resource invariants, existing gathering/building preservation, spell selection, and Armageddon after integration changes.

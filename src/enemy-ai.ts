@@ -163,12 +163,12 @@ export class EnemyTerraformer {
         corners.some((point) => surface.level(point.x, point.z) !== plan.height && !canEdit(point))
       )
         continue;
-      if (!this.preservesHomes(surface, plan, residents)) continue;
       const work = corners.reduce(
         (sum, p) => sum + Math.abs(surface.level(p.x, p.z) - plan.height),
         0,
       );
       if (!work) continue;
+      if (!this.preservesHomes(surface, plan, residents)) continue;
       const distance = Math.min(
         ...residents.map((resident) =>
           Math.hypot(resident.tile.x - center.x, resident.tile.z - center.z),

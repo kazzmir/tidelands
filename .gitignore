@@ -1,4 +1,7 @@
 node_modules/
 dist/
+.cache/
+reports/
+*.checkpoint.json
 *.local
 .DS_Store

@@ -3,6 +3,9 @@ import { generateWorldHeights, playerStartAnchor, enemyStartAnchor } from './wor
 import { EnemyTerraformer } from './enemy-ai';
 import { EnemySpellcaster } from './enemy-spells';
 import { EnemyKnightStrategy } from './enemy-knights';
+import { difficultyProfile, type Difficulty } from './ai-profiles';
+import { planTerrainSpell, safeForAllies } from './spell-plan';
+import { birthLocation } from './birth-location';
 import { createEncounterScenario, unoccupiedWalkSteps } from './encounter-scenario';
 import { CombatSystem, combatClosingOffset } from './combat';
 import { enemyBuildingContacts, buildingDefenderPoint, touchesBuilding } from './building-contact';
@@ -35,16 +38,7 @@ import { clearSubmergedRock, markVolcanicRock } from './rock';
 import { grazingNeighbors, planFlock, SheepSpawner, type GrazingSheep } from './sheep';
 import { elevationContours } from './terrain-contours';
 import { advanceSurvival, createSurvival, SINKING_SECONDS, type Survival } from './survival';
-import {
-  clearSubmergedSwamps,
-  earthquake,
-  flood,
-  volcano,
-  swampTargets,
-  SPELL_COSTS,
-  SPELL_NAMES,
-  type Spell,
-} from './spells';
+import { clearSubmergedSwamps, SPELL_COSTS, SPELL_NAMES, type Spell } from './spells';
 import { advanceSickness } from './sickness';
 import {
   BIRTH_THRESHOLD,
@@ -229,9 +223,15 @@ function startGame(): void {
   const SEA = 0.08;
   const powerMeter = new PowerMeter(5, 10_000);
   const enemyPowerMeter = new PowerMeter(5, 10_000);
-  const enemyAI = new EnemyTerraformer(enemyStart);
-  const enemySpellcaster = new EnemySpellcaster();
-  const enemyKnights = new EnemyKnightStrategy<Settler>();
+  let difficulty: Difficulty = 'normal';
+  let profile = difficultyProfile(difficulty);
+  let enemyAI = new EnemyTerraformer(enemyStart, profile.terrainInterval);
+  let enemySpellcaster = new EnemySpellcaster(
+    profile.spells.minimumDelay,
+    profile.spells.maximumDelay,
+    profile.spells,
+  );
+  let enemyKnights = new EnemyKnightStrategy<Settler>(profile.knights);
   let selectedSpell: Spell | null = null;
   let seed = 34;
   let randomState = seed;
@@ -1714,35 +1714,7 @@ function startGame(): void {
     updateSettlementStats();
   }
   function findBirthTile(home: Tile): Tile | null {
-    const queue = [home];
-    const visited = new Set(queue);
-    for (let head = 0; head < queue.length; head++) {
-      const tile = queue[head];
-      if (!tile.swamp && isWalkable(tile) && neighbors(tile).length > 0) return tile;
-      for (const [dx, dz] of [
-        [1, 0],
-        [-1, 0],
-        [0, 1],
-        [0, -1],
-      ]) {
-        const next = tileAt(tile.x + dx, tile.z + dz);
-        if (!next || visited.has(next)) continue;
-        visited.add(next);
-        const ownCastle =
-          home.reserved && Math.abs(next.x - home.x) <= 1 && Math.abs(next.z - home.z) <= 1;
-        if (
-          next.house ||
-          (next.reserved && !ownCastle) ||
-          hasTree(next) ||
-          position(next).y <= SEA ||
-          Math.abs(position(next).y - position(tile).y) > STEP + 1e-6 ||
-          surface.sample(tile.x + 0.5 + dx / 2, tile.z + 0.5 + dz / 2) <= SEA
-        )
-          continue;
-        queue.push(next);
-      }
-    }
-    return null;
+    return birthLocation(home, surface, tileAt, isWalkable, neighbors, hasTree);
   }
   function updatePowerDisplay(): void {
     element('#power').textContent = powerMeter.value.toLocaleString();
@@ -1765,7 +1737,7 @@ function startGame(): void {
         settler.population === enemyColor &&
         (settler.survival.phase === 'alive' || settler.survival.phase === 'drowning'),
     );
-    badge.title = `${enemyColor} enemy: ${living.length} settlers · ${living.filter((settler) => settler.home).length} housed · ${living.filter((settler) => settler.power === 5).length} castles · ${enemyPowerMeter.value.toLocaleString()} power · ${enemyAI.edits} paid terrain edits (one / ${enemyAI.interval}s) · ${enemyAI.spent} spent · ${enemySpellcaster.casts} spell${enemySpellcaster.casts === 1 ? '' : 's'} cast (${enemySpellcaster.spent.toLocaleString()} power) · ${living.filter((actor) => actor.knight).length} knights (${enemyKnights.created} trained; ${enemyKnights.phase}) · E to view${encounterTest ? ' · Encounter test: combat enabled; terraforming AI disabled' : ''}`;
+    badge.title = `${enemyColor} enemy: ${living.length} settlers · ${living.filter((settler) => settler.home).length} housed · ${living.filter((settler) => settler.power === 5).length} castles · ${enemyPowerMeter.value.toLocaleString()} power · ${enemyAI.edits} paid terrain edits (one / ${enemyAI.interval}s) · ${enemyAI.spent} spent · ${enemySpellcaster.casts} spell${enemySpellcaster.casts === 1 ? '' : 's'} cast (${enemySpellcaster.spent.toLocaleString()} power) · ${living.filter((actor) => actor.knight).length} knights (${enemyKnights.created} trained; ${enemyKnights.phase}) · ${difficulty} / ${profile.label} · E to view${encounterTest ? ' · Encounter test: combat enabled; terraforming AI disabled' : ''}`;
   }
   function updateSettlementStats(): void {
     const living = settlers.filter(
@@ -2502,28 +2474,8 @@ function startGame(): void {
     }
     controls.update();
     camera.updateMatrixWorld();
-    const preview = new TerrainSurface(SIZE, cornerLevels.slice(), STEP);
-    let changed = false;
-    let marsh: Tile[] = [];
-    if (spell === 'swamp' && target) {
-      marsh = swampTargets(surface, target, tileAt, random);
-      changed = marsh.length > 0;
-    } else if (spell === 'flood') {
-      changed = flood(preview);
-    } else if (target) {
-      const center = { x: target.x + 0.5, z: target.z + 0.5 };
-      if (spell === 'earthquake') {
-        changed = earthquake(preview, center, random);
-      } else {
-        const nearby: GridPoint[] = [];
-        for (let z = Math.max(0, target.z - 2); z <= Math.min(SIZE, target.z + 3); z++) {
-          for (let x = Math.max(0, target.x - 2); x <= Math.min(SIZE, target.x + 3); x++) {
-            if (Math.hypot(x - center.x, z - center.z) <= 3) nearby.push({ x, z });
-          }
-        }
-        changed = volcano(preview, nearby, random, center);
-      }
-    }
+    const plan = planTerrainSpell(surface, spell, target, tileAt, random);
+    const { preview, marsh, changed } = plan;
     if (!changed) {
       if (!playerCast) return;
       toast(
@@ -2544,24 +2496,18 @@ function startGame(): void {
           actor.characterPower > 0 &&
           (actor.survival.phase === 'alive' || actor.survival.phase === 'drowning'),
       );
-      const unsafe = friends.some((actor) => {
-        if (actor.home) {
-          const radius = actor.power === 5 ? 1 : 0;
-          for (let z = actor.home.z - radius; z <= actor.home.z + radius + 1; z++)
-            for (let x = actor.home.x - radius; x <= actor.home.x + radius + 1; x++)
-              if (surface.level(x, z) !== preview.level(x, z)) return true;
-        } else {
-          const point = combatPosition(actor);
-          if (Math.abs(surface.sample(point.x, point.z) - preview.sample(point.x, point.z)) > 1e-6)
-            return true;
-        }
-        const point = characterTile(actor);
-        const radius = actor.home && actor.power === 5 ? 1 : 0;
-        return marsh.some(
-          (tile) => Math.abs(tile.x - point.x) <= radius && Math.abs(tile.z - point.z) <= radius,
-        );
-      });
-      if (unsafe) return;
+      if (
+        !safeForAllies(
+          surface,
+          plan,
+          friends.map((actor) => ({
+            point: combatPosition(actor),
+            home: actor.home,
+            castle: actor.power === 5,
+          })),
+        )
+      )
+        return;
     }
     if (!budget.spend(cost)) return;
     if (playerCast) {
@@ -2779,6 +2725,23 @@ function startGame(): void {
     element('#reset-view').addEventListener('click', resetPlayerCamera);
     element('#test-scenario').addEventListener('click', () => startWorld(true));
     element('#new-world').addEventListener('click', () => startWorld(false));
+    element<HTMLSelectElement>('#ai-difficulty').addEventListener('change', (event) => {
+      const value = (event.currentTarget as HTMLSelectElement).value;
+      if (value !== 'easy' && value !== 'normal' && value !== 'hard') return;
+      difficulty = value;
+      profile = difficultyProfile(difficulty);
+      enemyAI = new EnemyTerraformer(enemyStart, profile.terrainInterval);
+      enemySpellcaster = new EnemySpellcaster(
+        profile.spells.minimumDelay,
+        profile.spells.maximumDelay,
+        profile.spells,
+      );
+      enemyKnights = new EnemyKnightStrategy<Settler>(profile.knights);
+      startWorld(false);
+      toast(
+        `${difficulty[0].toUpperCase() + difficulty.slice(1)} AI · ${profile.label}. New world started.`,
+      );
+    });
   }
   function startWorld(test: boolean): void {
     encounterTest = test;

@@ -1,4 +1,5 @@
 import { SPELL_COSTS } from './spells';
+import type { SpellPolicy } from './ai-profiles';
 import type { GridPoint } from './terrain-surface';
 
 export type EnemySpell = 'earthquake' | 'swamp' | 'volcano';
@@ -21,12 +22,20 @@ export class EnemySpellcaster {
   constructor(
     private readonly minimumDelay = 75,
     private readonly maximumDelay = 120,
+    private readonly policy: Pick<
+      SpellPolicy,
+      'earthquake' | 'swamp' | 'volcano' | 'targetNoise'
+    > = { earthquake: 50, swamp: 30, volcano: 20, targetNoise: 0.2 },
   ) {
     if (
       !Number.isFinite(minimumDelay) ||
       !Number.isFinite(maximumDelay) ||
       minimumDelay <= 0 ||
-      maximumDelay < minimumDelay
+      maximumDelay < minimumDelay ||
+      [policy.earthquake, policy.swamp, policy.volcano, policy.targetNoise].some(
+        (value) => !Number.isFinite(value) || value < 0,
+      ) ||
+      policy.earthquake + policy.swamp + policy.volcano <= 0
     )
       throw new Error('Invalid enemy spell cooldown');
     this.remaining = minimumDelay;
@@ -57,11 +66,13 @@ export class EnemySpellcaster {
     if (this.remaining > 1e-9) return null;
     this.remaining = this.minimumDelay + random() * (this.maximumDelay - this.minimumDelay);
     const options: { spell: EnemySpell; weight: number; radius: number }[] = [
-      { spell: 'earthquake', weight: 50, radius: 6 },
-      { spell: 'swamp', weight: 30, radius: 10 },
-      { spell: 'volcano', weight: 20, radius: 6 },
+      { spell: 'earthquake', weight: this.policy.earthquake, radius: 6 },
+      { spell: 'swamp', weight: this.policy.swamp, radius: 10 },
+      { spell: 'volcano', weight: this.policy.volcano, radius: 6 },
     ];
-    const choices = options.filter((choice) => budget.value >= SPELL_COSTS[choice.spell]);
+    const choices = options.filter(
+      (choice) => choice.weight > 0 && budget.value >= SPELL_COSTS[choice.spell],
+    );
     if (!choices.length) return null;
     let roll = random() * choices.reduce((sum, choice) => sum + choice.weight, 0);
     const chosen =
@@ -85,7 +96,7 @@ export class EnemySpellcaster {
             (distance <= chosen.radius ? other.weight * (1 - distance / (chosen.radius + 1)) : 0)
           );
         }, 0) *
-        (0.9 + random() * 0.2);
+        (1 - this.policy.targetNoise / 2 + random() * this.policy.targetNoise);
       if (score > best) {
         target = candidate;
         best = score;

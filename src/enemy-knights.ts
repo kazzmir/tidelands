@@ -1,4 +1,5 @@
 import { SPELL_COSTS } from './spells';
+import type { KnightPolicy } from './ai-profiles';
 import type { CombatCharacter } from './knights';
 import type { PopulationColor } from './population';
 import type { GridPoint } from './terrain-surface';
@@ -16,11 +17,35 @@ export class EnemyKnightStrategy<C extends CombatCharacter> {
   readonly recruits = new Set<C>();
   created = 0;
   dispatched = 0;
-  private remaining = 120;
+  private remaining: number;
   private elapsed = 0;
-  readonly targetPower = 40;
-  readonly knightCap = 3;
-  readonly normalReserve = 6;
+  readonly targetPower: number;
+  readonly knightCap: number;
+  readonly normalReserve: number;
+  private readonly policy: KnightPolicy;
+
+  constructor(policy: Partial<KnightPolicy> = {}) {
+    this.policy = {
+      initialDelay: 120,
+      cooldown: 150,
+      targetPower: 40,
+      knightCap: 3,
+      normalReserve: 6,
+      maxDonors: 3,
+      ...policy,
+    };
+    if (
+      Object.values(this.policy).some((value) => !Number.isFinite(value) || value <= 0) ||
+      ![this.policy.knightCap, this.policy.normalReserve, this.policy.maxDonors].every(
+        Number.isSafeInteger,
+      )
+    )
+      throw new Error('Invalid knight policy');
+    this.targetPower = this.policy.targetPower;
+    this.knightCap = this.policy.knightCap;
+    this.normalReserve = this.policy.normalReserve;
+    this.remaining = this.policy.initialDelay;
+  }
 
   get reservedPower(): number {
     return this.phase === 'gathering' ? SPELL_COSTS.knight : 0;
@@ -48,7 +73,7 @@ export class EnemyKnightStrategy<C extends CombatCharacter> {
   }
   reset(): void {
     this.cancel();
-    this.remaining = 120;
+    this.remaining = this.policy.initialDelay;
     this.created = 0;
     this.dispatched = 0;
   }
@@ -63,7 +88,7 @@ export class EnemyKnightStrategy<C extends CombatCharacter> {
     if (!this.isSuccessor(successor)) return false;
     this.dispatched++;
     this.cancel();
-    this.remaining = 150;
+    this.remaining = this.policy.cooldown;
     return true;
   }
 
@@ -164,7 +189,7 @@ export class EnemyKnightStrategy<C extends CombatCharacter> {
       return null;
     const recruits: C[] = [];
     let power = owner.characterPower;
-    const maximum = Math.min(3, normals.length - this.normalReserve - 1);
+    const maximum = Math.min(this.policy.maxDonors, normals.length - this.normalReserve - 1);
     const nearest = candidates.slice(0, maximum);
     const donors =
       power + nearest.reduce((sum, c) => sum + c.characterPower, 0) >= this.targetPower
